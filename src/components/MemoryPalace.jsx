@@ -29,8 +29,29 @@ const MemoryPalace = () => {
     const geometry = new THREE.SphereGeometry(500, 60, 40)
     geometry.scale(-1, 1, 1) // Flip inside out
     
+    // Load skybox texture
+    const textureLoader = new THREE.TextureLoader()
+    let skyboxTexture = null
+    
+    try {
+      skyboxTexture = textureLoader.load(
+        'https://page-images.websim.com/Create_a_360_degree_equirectangular_panoramic_image_in_21_9_aspect_ratio_showing__scene_____TECHNICA_694056a68c0178.jpg',
+        () => {
+          // Texture loaded successfully
+          console.log('Skybox texture loaded')
+        },
+        undefined,
+        (error) => {
+          console.error('Error loading skybox texture:', error)
+        }
+      )
+    } catch (error) {
+      console.error('Error creating skybox texture:', error)
+    }
+    
     const material = new THREE.MeshBasicMaterial({
-      color: 0x1a1a2e,
+      map: skyboxTexture,
+      color: skyboxTexture ? 0xffffff : 0x1a1a2e,
       side: THREE.BackSide
     })
     
@@ -135,6 +156,9 @@ const MemoryPalace = () => {
       
       geometry.dispose()
       material.dispose()
+      if (skyboxTexture) {
+        skyboxTexture.dispose()
+      }
       compassGeometry.dispose()
       compassMaterial.dispose()
       renderer.dispose()
