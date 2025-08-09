@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" class="dark-mode">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palais de Mémoire</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "@websim/use-query": "https://esm.websim.com/@websim/use-query",
+                "@websim/websim-socket": "https://esm.websim.com/@websim/websim-socket",
+                "three": "https://esm.sh/three@0.158.0",
+                "three/addons/": "https://esm.sh/three@0.158.0/examples/jsm/",
+                "./ParticleSystemManager.js": "./ParticleSystemManager.js"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="fullscreen-container">
+        <!-- Fullscreen Scene Display -->
+        <div class="scene-display">
+            <div class="scene-image-container">
+                <div id="room-image" class="scene-image">
+                    <div class="placeholder-text">Say "Create a room..." to begin.</div>
+                </div>
+                <div class="image-overlay" id="image-overlay"></div>
+            </div>
+            
+            <!-- Minimal Scene Info Overlay -->
+            <div class="scene-info-overlay">
+                <h1 id="room-title">Palais de Mémoire</h1>
+                <div class="scene-status" id="scene-status">
+                  <button id="info-btn" class="overlay-btn info-btn" title="Room Info">
+                    <i class="fas fa-info"></i>
+                </button>
+                    <span class="room-count" id="room-count">0 rooms</span>
+                    <span class="object-count" id="object-count">0 objects</span>
+                    <span class="autopilot-status" id="autopilot-status" style="display: none;">🤖 Autopilot Active</span>
+                </div>
+                
+                <!-- Settings Menu Button -->
+                <button id="settings-menu-btn" class="overlay-btn settings-menu-btn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                
+                <!-- Caption Toggle Button -->
+                <button id="caption-toggle-btn" class="overlay-btn caption-toggle-btn" title="Toggle Closed Captions">
+                    <i class="fas fa-closed-captioning"></i>
+                </button>
+                
+                
+            </div>
+        </div>
+
+        <!-- Primary Voice Input -->
+        <div class="voice-interface">
+            <div class="input-container">
+                <input type="text" id="text-input" class="text-input" placeholder="Type your message or tap to speak..." />
+                <button id="voice-input-btn" class="primary-voice-btn">
+                    <div class="voice-btn-content">
+                        <i class="fas fa-microphone"></i>
+                    </div>
+                    <div class="voice-pulse" id="voice-pulse"></div>
+                </button>
+                <button id="send-text-btn" class="send-text-btn" title="Send message">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Voice Status Display -->
+        <div class="voice-feedback" id="voice-feedback" style="display: none;">
+            <div class="feedback-content">
+                <div class="listening-indicator" id="listening-indicator">
+                    <div class="pulse-ring"></div>
+                    <span>Listening...</span>
+                </div>
+                <div class="response-text" id="response-text" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Settings Panel (Hidden by default) -->
+        <div class="settings-panel" id="settings-panel" style="display: none;">
+            <div class="settings-content">
+                <div class="settings-header">
+                    <h3>Settings</h3>
+                    <button id="close-settings-btn" class="close-btn">×</button>
+                </div>
+                
+                <div class="settings-section">
+                    <h4>Voice Settings</h4>
+                    <div class="input-group">
+                        <label for="voice-select">Voice:</label>
+                        <select id="voice-select">
+                            <option value="">Default Voice</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="speech-rate">Speech Rate:</label>
+                        <input type="range" id="speech-rate" min="0.5" max="2" step="0.1" value="0.9">
+                        <span id="rate-value">0.9</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="speech-pitch">Speech Pitch:</label>
+                        <input type="range" id="speech-pitch" min="0.5" max="2" step="0.1" value="1.0">
+                        <span id="pitch-value">1.0</span>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h4>AI Assistant Settings</h4>
+                    <div class="input-group">
+                        <label for="system-prompt">System Prompt:</label>
+                        <textarea id="system-prompt" rows="8" placeholder="System prompt for the AI assistant..."></textarea>
+                    </div>
+                    <div class="input-group">
+                        <label for="response-temperature">Response Creativity:</label>
+                        <input type="range" id="response-temperature" min="0" max="1" step="0.1" value="0.7">
+                        <span id="temperature-value">0.7</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="aesthetic-prompt">Visual Style Prompt:</label>
+                        <textarea id="aesthetic-prompt" rows="3" placeholder="Style instructions added to all room image generation..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="settings-actions">
+                    <button id="export-palace-btn" class="secondary-btn">Export Palace</button>
+                    <button id="import-palace-btn" class="secondary-btn">Import Palace</button>
+                    <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                    <button id="save-settings-btn" class="primary-btn">Save Settings</button>
+                    <button id="reset-settings-btn" class="secondary-btn">Reset to Defaults</button>
+                    <button id="delete-palace-btn" class="danger-btn">Delete Palace</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Room Creation/Edit Panel -->
+        <div class="room-panel" id="room-panel" style="display: none;">
+            <div class="panel-header">
+                <h3 id="panel-title">Create New Room</h3>
+                <button id="close-panel-btn">×</button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="input-group">
+                    <label for="scene-description">Describe the scene:</label>
+                    <div class="voice-input-container">
+                        <textarea id="scene-description" class="voice-enabled" placeholder="Describe the room, setting, or scene you want to remember (e.g., 'A cozy library with wooden shelves, a fireplace, and a reading chair')"></textarea>
+                        <button class="voice-input-btn" data-target="scene-description">🎤</button>
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label for="room-name">Room Name:</label>
+                    <div class="voice-input-container">
+                        <input type="text" id="room-name" class="voice-enabled" placeholder="Give this room a memorable name">
+                        <button class="voice-input-btn" data-target="room-name">🎤</button>
+                    </div>
+                </div>
+                
+                <div class="panel-actions">
+                    <button id="generate-room-btn" class="primary-btn voice-enabled">Generate Room 🎤</button>
+                    <button id="cancel-panel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Panel -->
+        <div class="connection-panel" id="connection-panel" style="display: none;">
+            <div class="panel-header">
+                <h3>Add Door Connection</h3>
+                <button id="close-connection-panel-btn">×</button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="input-group">
+                    <label for="door-description">Describe the door/entrance:</label>
+                    <div class="voice-input-container">
+                        <input type="text" id="door-description" class="voice-enabled" placeholder="e.g., 'Wooden door to the garden', 'Staircase leading upstairs'">
+                        <button class="voice-input-btn" data-target="door-description">🎤</button>
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label for="target-room">Connect to:</label>
+                    <select id="target-room">
+                        <option value="new">Create New Room</option>
+                    </select>
+                </div>
+                
+                <div class="new-room-inputs" id="new-room-inputs">
+                    <div class="input-group">
+                        <label for="new-room-description">New room description:</label>
+                        <div class="voice-input-container">
+                            <textarea id="new-room-description" class="voice-enabled" placeholder="Describe the connected room"></textarea>
+                            <button class="voice-input-btn" data-target="new-room-description">🎤</button>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="new-room-name">New room name:</label>
+                        <div class="voice-input-container">
+                            <input type="text" id="new-room-name" class="voice-enabled" placeholder="Name for the new room">
+                            <button class="voice-input-btn" data-target="new-room-name">🎤</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel-actions">
+                    <button id="create-connection-btn" class="primary-btn voice-enabled">Create Connection 🎤</button>
+                    <button id="cancel-connection-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Object Recording Panel -->
+        <div class="object-panel" id="object-panel" style="display: none;">
+            <div class="panel-header">
+                <h3>Record Memory Object</h3>
+                <button id="close-object-panel-btn">×</button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="input-group">
+                    <label for="object-name">Object/Area Name:</label>
+                    <div class="voice-input-container">
+                        <input type="text" id="object-name" class="voice-enabled" placeholder="e.g., 'Red Book', 'Fireplace', 'Window View'">
+                        <button class="voice-input-btn" data-target="object-name">🎤</button>
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <label for="object-info">Information to Remember:</label>
+                    <div class="voice-input-container">
+                        <textarea id="object-info" class="voice-enabled" placeholder="What do you want to remember about this object or area?"></textarea>
+                        <button class="voice-input-btn" data-target="object-info">🎤</button>
+                    </div>
+                </div>
+                
+                <div class="panel-actions">
+                    <button id="save-object-btn" class="primary-btn voice-enabled">Save Object 🎤</button>
+                    <button id="cancel-object-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Room Info Panel -->
+        <div class="room-info-panel" id="room-info-panel" style="display: none;">
+            <div class="info-content">
+                <div class="info-header">
+                    <h3>Room Information</h3>
+                    <button id="close-info-btn" class="close-btn">×</button>
+                </div>
+                
+                <div class="info-section">
+                    <h4 id="info-room-name">Room Name</h4>
+                    <p id="info-room-description">Room description will appear here...</p>
+                </div>
+                
+                <div class="info-section">
+                    <h4>Available Connections</h4>
+                    <div id="info-connections" class="connections-list">
+                        <p class="no-connections">No doors have been created yet.</p>
+                    </div>
+                </div>
+                
+                <div class="info-section">
+                    <h4>Memory Objects</h4>
+                    <div id="info-objects" class="objects-list">
+                        <p class="no-objects">No objects have been placed yet.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loading-overlay" style="display: none;">
+            <div class="loading-content">
+                <img src="loading-spinner.png" alt="Loading..." class="loading-spinner">
+                <p id="loading-text">Processing...</p>
+            </div>
+        </div>
+
+        <!-- Closed-caption overlay -->
+        <div id="caption-container" aria-live="polite" aria-atomic="true">
+            <p id="caption-text"></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script src="app.js" type="module"></script>
+</body>
+</html>
