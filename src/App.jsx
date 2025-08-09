@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faMicrophone } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
 import MobileInterface from './components/MobileInterface'
 import VoiceInterface from './components/VoiceInterface'
@@ -65,7 +67,7 @@ function App() {
           onClick={() => handleVoiceToggle(!voiceEnabled)}
           aria-label={voiceEnabled ? 'Disable voice' : 'Enable voice'}
         >
-          🎤
+          <FontAwesomeIcon icon={faMicrophone} />
         </button>
       </div>
     </div>
