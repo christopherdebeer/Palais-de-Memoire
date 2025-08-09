@@ -1,0 +1,104 @@
+{
+  "database": {
+    "schema": {
+      "rooms": {
+        "id": {
+          "type": "text",
+          "description": "The unique identifier for the room"
+        },
+        "name": {
+          "type": "text",
+          "description": "The name of the room"
+        },
+        "description": {
+          "type": "text",
+          "description": "The description of the room"
+        },
+        "image_url": {
+          "type": "text",
+          "description": "The URL of the room's generated image"
+        },
+        "room_counter": {
+          "type": "integer",
+          "description": "The counter value when this room was created"
+        }
+      },
+      "objects": {
+        "id": {
+          "type": "text",
+          "description": "The unique identifier for the memory object"
+        },
+        "room_id": {
+          "type": "text",
+          "description": "The ID of the room this object belongs to"
+        },
+        "name": {
+          "type": "text",
+          "description": "The name of the memory object"
+        },
+        "information": {
+          "type": "text",
+          "description": "The information to remember about this object"
+        },
+        "position_x": {
+          "type": "numeric",
+          "description": "The X position coordinate of the object in 3D space"
+        },
+        "position_y": {
+          "type": "numeric",
+          "description": "The Y position coordinate of the object in 3D space"
+        },
+        "position_z": {
+          "type": "numeric",
+          "description": "The Z position coordinate of the object in 3D space"
+        },
+        "object_counter": {
+          "type": "integer",
+          "description": "The counter value when this object was created"
+        }
+      },
+      "connections": {
+        "id": {
+          "type": "text",
+          "description": "The unique identifier for the connection"
+        },
+        "room_id": {
+          "type": "text",
+          "description": "The ID of the source room"
+        },
+        "target_room_id": {
+          "type": "text",
+          "description": "The ID of the target room"
+        },
+        "description": {
+          "type": "text",
+          "description": "The description of the door/connection"
+        },
+        "bidirectional": {
+          "type": "boolean",
+          "description": "Whether this connection is bidirectional"
+        }
+      },
+      "user_state": {
+        "id": {
+          "type": "text",
+          "description": "The user ID (primary key)"
+        },
+        "current_room_id": {
+          "type": "text",
+          "description": "The ID of the currently active room"
+        },
+        "room_counter": {
+          "type": "integer",
+          "description": "The current room counter for generating unique room IDs"
+        },
+        "object_counter": {
+          "type": "integer",
+          "description": "The current object counter for generating unique object IDs"
+        }
+      }
+    },
+    "instructions": "This database stores a complete memory palace system with rooms, objects positioned within rooms using 3D coordinates on the spherical skybox surface, and bidirectional connections between rooms. Each user has their own isolated memory palace that persists across sessions."
+  }
+}
+
