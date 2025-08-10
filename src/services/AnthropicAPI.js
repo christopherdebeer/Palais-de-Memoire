@@ -24,12 +24,21 @@ export class AnthropicAPI {
    */
   isConfigured() {
     const apiKey = settingsManager.get('anthropicApiKey')
-    const isConfigured = !!apiKey
-    console.log('[AnthropicAPI] Configuration check:', {
+    const isConfigured = !!apiKey && apiKey.length > 0
+    
+    const configDetails = {
       hasApiKey: !!apiKey,
       keyLength: apiKey ? apiKey.length : 0,
-      keyPrefix: apiKey ? apiKey.substring(0, 8) + '...' : 'none'
-    })
+      keyPrefix: apiKey ? apiKey.substring(0, 8) + '...' : 'none',
+      isValid: isConfigured
+    }
+    
+    console.log('[AnthropicAPI] Configuration check:', configDetails)
+    
+    if (!isConfigured) {
+      console.warn('[AnthropicAPI] API not configured - missing or empty API key')
+    }
+    
     return isConfigured
   }
 
@@ -44,8 +53,17 @@ export class AnthropicAPI {
     })
     
     if (!this.isConfigured()) {
-      const error = new Error('Anthropic API key not configured')
-      console.error('[AnthropicAPI] Configuration error:', error.message)
+      const fallbackReason = 'Anthropic API key not configured or empty'
+      const error = new Error(fallbackReason)
+      
+      console.error('[AnthropicAPI] Configuration error:', {
+        reason: fallbackReason,
+        userInput,
+        hasApiKey: !!settingsManager.get('anthropicApiKey'),
+        keyLength: settingsManager.get('anthropicApiKey')?.length || 0
+      })
+      
+      console.warn('[AnthropicAPI] Falling back due to:', fallbackReason)
       throw error
     }
 
@@ -113,11 +131,28 @@ export class AnthropicAPI {
       return parsedResponse
       
     } catch (error) {
-      console.error('[AnthropicAPI] Request failed:', {
+      const errorDetails = {
         error: error.message,
         stack: error.stack,
-        userInput
-      })
+        userInput,
+        errorType: error.name,
+        timestamp: new Date().toISOString(),
+        apiConfigured: this.isConfigured()
+      }
+      
+      console.error('[AnthropicAPI] Request failed:', errorDetails)
+      
+      // Log specific error context for debugging
+      if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        console.error('[AnthropicAPI] Authentication error - check API key validity')
+      } else if (error.message.includes('429') || error.message.includes('rate limit')) {
+        console.error('[AnthropicAPI] Rate limit exceeded - reduce request frequency')
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        console.error('[AnthropicAPI] Network error - check internet connection')
+      } else {
+        console.error('[AnthropicAPI] Unknown API error encountered')
+      }
+      
       throw error
     }
   }
@@ -284,13 +319,22 @@ Respond conversationally and then provide the structured command data.`
   async generateTestResponse(userInput) {
     // Mock response for testing without API key
     if (!this.isConfigured()) {
+      const fallbackReason = 'API key not configured'
+      console.log('[AnthropicAPI] generateTestResponse using fallback:', {
+        reason: fallbackReason,
+        userInput,
+        hasApiKey: !!settingsManager.get('anthropicApiKey')
+      })
+      
       return {
         text: `I understand you said: "${userInput}". However, I need an Anthropic API key to provide full responses. Please configure your API key in the settings panel.`,
         command: null,
-        parameters: {}
+        parameters: {},
+        fallbackReason
       }
     }
     
+    console.log('[AnthropicAPI] generateTestResponse using full API processing')
     return this.processInput(userInput)
   }
 }

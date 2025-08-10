@@ -54,20 +54,43 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         console.log('[VoiceInterface] Speech recognition result:', {
           transcript,
           confidence,
-          resultCount: event.results.length
+          resultCount: event.results.length,
+          transcriptEmpty: !transcript || transcript.trim().length === 0
         })
         
+        if (!transcript || transcript.trim().length === 0) {
+          console.warn('[VoiceInterface] Voice input captured but transcript is empty')
+          showCaption('No speech detected, please try again', 'recognition')
+          return
+        }
+        
+        console.log('[VoiceInterface] Processing captured voice input:', transcript)
         setTranscript(transcript)
         showCaption(`You said: "${transcript}"`, 'recognition')
         processCommand(transcript)
       }
 
       recognition.onerror = (event) => {
-        console.error('[VoiceInterface] Speech recognition error:', {
+        const errorDetails = {
           error: event.error,
           message: event.message,
-          timeStamp: event.timeStamp
-        })
+          timeStamp: event.timeStamp,
+          errorType: typeof event.error
+        }
+        
+        console.error('[VoiceInterface] Speech recognition error:', errorDetails)
+        
+        // Log specific error context for debugging
+        if (event.error === 'no-speech') {
+          console.warn('[VoiceInterface] No speech was detected during recognition')
+        } else if (event.error === 'audio-capture') {
+          console.error('[VoiceInterface] Audio capture failed - check microphone permissions')
+        } else if (event.error === 'not-allowed') {
+          console.error('[VoiceInterface] Speech recognition not allowed - check browser permissions')
+        } else {
+          console.error('[VoiceInterface] Unknown speech recognition error:', event.error)
+        }
+        
         setIsListening(false)
         setIsProcessing(false)
       }
@@ -170,7 +193,13 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
           console.log('[VoiceInterface] No structured command to execute')
         }
       } else {
-        console.log('[VoiceInterface] Using fallback processing (API not configured)')
+        const fallbackReason = 'API key not configured or invalid'
+        console.log('[VoiceInterface] Using fallback processing:', {
+          reason: fallbackReason,
+          apiConfigured,
+          hasAnthropicKey: !!settingsManager.get('anthropicApiKey')
+        })
+        console.warn('[VoiceInterface] LLM fallback triggered - reason:', fallbackReason)
         // Fallback to simple pattern matching when API not configured
         const lowerCommand = command.toLowerCase()
         let response = ''
@@ -187,6 +216,12 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
           response = `I understand you said: "${command}". Please configure your Anthropic API key in the settings panel for full AI-powered memory palace assistance.`
         }
         
+        console.log('[VoiceInterface] Fallback response generated:', {
+          command,
+          response: response.substring(0, 100) + '...',
+          fallbackReason
+        })
+        
         setResponse(response)
         speakResponse(response)
 
@@ -201,14 +236,27 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         }
       }
     } catch (error) {
-      console.error('[VoiceInterface] Error processing command:', {
+      const errorDetails = {
         error: error.message,
         stack: error.stack,
         command,
-        apiConfigured
-      })
+        apiConfigured,
+        errorType: error.name,
+        timestamp: new Date().toISOString()
+      }
       
-      const errorResponse = 'I encountered an error processing your request. Please check your API configuration and try again.'
+      console.error('[VoiceInterface] Error processing command:', errorDetails)
+      
+      // Log specific error context for debugging
+      if (error.message.includes('API key')) {
+        console.error('[VoiceInterface] API key error - check configuration')
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        console.error('[VoiceInterface] Network error - check internet connection')
+      } else {
+        console.error('[VoiceInterface] Unknown error type encountered')
+      }
+      
+      const errorResponse = `I encountered an error processing your request: ${error.message}. Please check your API configuration and try again.`
       setResponse(errorResponse)
       speakResponse(errorResponse)
     } finally {
