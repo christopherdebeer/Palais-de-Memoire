@@ -162,8 +162,30 @@ export class MemoryPalaceCore extends EventEmitter {
    * Initialize state management
    */
   async initializeStateManager() {
-    // TODO: Add custom persistence adapters based on config
-    const persistenceAdapter = null // Use default localStorage for now
+    let persistenceAdapter = null
+    
+    // Create persistence adapter based on config
+    if (this.config.persistence && this.config.persistence !== 'localStorage') {
+      try {
+        const { PersistenceFactory } = await import('../services/PersistenceInterface.js')
+        
+        if (this.config.persistence === 'indexedDB') {
+          // Import IndexedDB adapter
+          await import('../services/IndexedDBAdapter.js')
+        }
+        
+        persistenceAdapter = PersistenceFactory.createAdapter(this.config.persistence, {
+          dbName: 'MemoryPalaceDB',
+          storeName: 'palace_data'
+        })
+        
+        await persistenceAdapter.initialize()
+        console.log(`Using ${this.config.persistence} persistence adapter`)
+      } catch (error) {
+        console.warn(`Failed to initialize ${this.config.persistence} persistence, falling back to localStorage:`, error)
+        persistenceAdapter = null
+      }
+    }
     
     await this.stateManager.initialize(persistenceAdapter)
     console.log('State Manager initialized')

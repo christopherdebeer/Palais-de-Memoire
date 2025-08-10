@@ -36,13 +36,16 @@ export class StateManager extends EventEmitter {
   async loadState() {
     try {
       if (this.persistenceAdapter) {
-        // Load from remote/custom persistence
+        // Load from persistence adapter (IndexedDB, etc.)
         const data = await this.persistenceAdapter.load()
         Object.entries(data).forEach(([key, value]) => {
-          this.state.set(key, value)
+          // Handle deserialization of complex types (Maps, etc.)
+          const deserializedValue = this.persistenceAdapter.deserializeValue ? 
+            this.persistenceAdapter.deserializeValue(value) : value
+          this.state.set(key, deserializedValue)
         })
       } else {
-        // Load from localStorage
+        // Load from localStorage (fallback)
         Object.values(StateKeys).forEach(key => {
           const stored = localStorage.getItem(`palais_${key}`)
           if (stored) {
@@ -67,14 +70,21 @@ export class StateManager extends EventEmitter {
   async saveState(key = null) {
     try {
       if (this.persistenceAdapter) {
-        // Save to remote/custom persistence
+        // Save to persistence adapter (IndexedDB, etc.)
         const dataToSave = key 
           ? { [key]: this.state.get(key) }
           : Object.fromEntries(this.state)
         
+        // Handle serialization of complex types (Maps, etc.)
+        if (this.persistenceAdapter.serializeValue) {
+          for (const [k, v] of Object.entries(dataToSave)) {
+            dataToSave[k] = this.persistenceAdapter.serializeValue(v)
+          }
+        }
+        
         await this.persistenceAdapter.save(dataToSave)
       } else {
-        // Save to localStorage
+        // Save to localStorage (fallback)
         const keysToSave = key ? [key] : [...this.state.keys()]
         
         keysToSave.forEach(stateKey => {

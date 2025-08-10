@@ -3,9 +3,13 @@
  * Handles localStorage persistence, API token management, and settings validation
  */
 
+import { persistenceManager } from './PersistenceManager.js'
+
 export class SettingsManager {
   constructor() {
     this.storageKey = 'memoryPalace_settings'
+    this.persistenceStorageKey = 'SETTINGS'
+    this.usePersistenceManager = false
     this.defaultSettings = {
       // Voice Settings
       voice: '',
@@ -31,11 +35,39 @@ export class SettingsManager {
       // Performance Settings
       renderQuality: 'high', // 'low', 'medium', 'high'
       particleEffects: true,
-      audioFeedback: true
+      audioFeedback: true,
+      
+      // Persistence Settings
+      persistenceType: 'indexedDB', // 'localStorage', 'indexedDB'
+      autoBackup: true,
+      maxBackupAge: 30 // days
     }
     
     this.settings = this.loadSettings()
     this.listeners = new Set()
+    
+    // Initialize persistence manager integration
+    this.initializePersistence()
+  }
+  
+  /**
+   * Initialize integration with persistence manager
+   */
+  async initializePersistence() {
+    try {
+      if (persistenceManager && !persistenceManager.isInitialized) {
+        await persistenceManager.initialize({
+          preferredAdapter: this.settings.persistenceType || 'indexedDB'
+        })
+      }
+      
+      // Migrate settings to persistence manager if configured
+      if (this.settings.persistenceType !== 'localStorage' && persistenceManager.isInitialized) {
+        await this.migrateToPersistenceManager()
+      }
+    } catch (error) {
+      console.warn('Failed to initialize persistence integration:', error)
+    }
   }
 
   /**
@@ -54,6 +86,23 @@ export class SettingsManager {
     }
     return { ...this.defaultSettings }
   }
+  
+  /**
+   * Load settings from persistence manager
+   */
+  async loadSettingsFromPersistence() {
+    try {
+      if (persistenceManager?.isInitialized) {
+        const data = await persistenceManager.load(this.persistenceStorageKey)
+        if (data && data[this.persistenceStorageKey]) {
+          return { ...this.defaultSettings, ...data[this.persistenceStorageKey] }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load settings from persistence manager:', error)
+    }
+    return null
+  }
 
   /**
    * Save settings to localStorage
@@ -61,12 +110,31 @@ export class SettingsManager {
   saveSettings() {
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.settings))
+      
+      // Also save to persistence manager if configured
+      this.saveSettingsToPersistence()
+      
       this.notifyListeners('settings_saved', this.settings)
       return true
     } catch (error) {
       console.error('Failed to save settings to localStorage:', error)
       this.notifyListeners('settings_save_error', error)
       return false
+    }
+  }
+  
+  /**
+   * Save settings to persistence manager
+   */
+  async saveSettingsToPersistence() {
+    try {
+      if (this.usePersistenceManager && persistenceManager?.isInitialized) {
+        await persistenceManager.save({
+          [this.persistenceStorageKey]: this.settings
+        })
+      }
+    } catch (error) {
+      console.warn('Failed to save settings to persistence manager:', error)
     }
   }
 
@@ -124,6 +192,64 @@ export class SettingsManager {
     this.saveSettings()
     this.notifyListeners('settings_reset', this.settings)
   }
+  
+  /**
+   * Migrate settings from localStorage to persistence manager
+   */
+  async migrateToPersistenceManager() {
+    try {
+      // Check if settings exist in persistence manager
+      const persistedSettings = await this.loadSettingsFromPersistence()
+      
+      if (!persistedSettings && persistenceManager?.isInitialized) {
+        // Migrate current settings
+        await persistenceManager.save({
+          [this.persistenceStorageKey]: this.settings
+        })
+        
+        this.usePersistenceManager = true
+        console.log('Settings migrated to persistence manager')
+        this.notifyListeners('settings_migrated', { target: 'persistence_manager' })
+      } else if (persistedSettings) {
+        // Use persisted settings
+        this.settings = persistedSettings
+        this.usePersistenceManager = true
+        console.log('Loaded settings from persistence manager')
+      }
+    } catch (error) {
+      console.error('Failed to migrate settings to persistence manager:', error)
+    }
+  }
+  
+  /**
+   * Switch persistence method
+   */
+  async switchPersistence(persistenceType) {
+    try {
+      if (persistenceType === 'localStorage') {
+        this.usePersistenceManager = false
+        this.set('persistenceType', 'localStorage')
+      } else {
+        if (persistenceManager && !persistenceManager.isInitialized) {
+          await persistenceManager.initialize({ preferredAdapter: persistenceType })
+        }
+        
+        if (persistenceManager.isInitialized) {
+          await this.migrateToPersistenceManager()
+          this.set('persistenceType', persistenceType)
+        } else {
+          throw new Error(`Failed to initialize ${persistenceType} persistence`)
+        }
+      }
+      
+      this.notifyListeners('persistence_switched', { type: persistenceType })
+      return true
+    } catch (error) {
+      console.error('Failed to switch persistence:', error)
+      this.notifyListeners('persistence_switch_error', error)
+      return false
+    }
+  }
 
   /**
    * Get all settings
@@ -177,6 +303,59 @@ export class SettingsManager {
     return {
       'Content-Type': 'application/json',
       'Authorization': `Token ${this.settings.replicateApiKey}`
+    }
+  }
+  
+  /**
+   * Get persistence statistics
+   */
+  async getPersistenceStats() {
+    try {
+      if (this.usePersistenceManager && persistenceManager?.isInitialized) {
+        return await persistenceManager.getStats()
+      }
+      
+      // Fallback: localStorage statistics
+      let totalSize = 0
+      let itemCount = 0
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('palais_')) {
+          const value = localStorage.getItem(key)
+          totalSize += value ? value.length : 0
+          itemCount++
+        }
+      }
+      
+      return {
+        adapterInfo: {
+          name: 'localStorage',
+          type: 'local',
+          capacity: 'limited'
+        },
+        usage: {
+          totalItems: itemCount,
+          totalSize: totalSize
+        }
+      }
+    } catch (error) {
+      return { error: error.message }
+    }
+  }
+  
+  /**
+   * Compact persistence storage (if supported)
+   */
+  async compactStorage(options = {}) {
+    try {
+      if (this.usePersistenceManager && persistenceManager?.isInitialized) {
+        return await persistenceManager.compact(options)
+      }
+      
+      return { message: 'Compaction not available for localStorage' }
+    } catch (error) {
+      return { error: error.message }
     }
   }
 
