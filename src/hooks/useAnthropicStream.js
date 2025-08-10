@@ -55,7 +55,7 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
     const tools = getMemoryPalaceTools()
     
     return {
-      model: settingsManager.get('selectedModel') || 'claude-3-sonnet-20240229',
+      model: settingsManager.get('selectedModel') || 'claude-3-5-haiku-latest',
       max_tokens: 4000,
       temperature: settingsManager.get('responseTemperature') || 0.7,
       stream: true,
