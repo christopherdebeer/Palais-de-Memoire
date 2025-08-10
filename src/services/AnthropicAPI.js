@@ -15,7 +15,7 @@ import settingsManager from './SettingsManager.js'
 export class AnthropicAPI {
   constructor() {
     this.baseURL = 'https://api.anthropic.com/v1/messages'
-    this.model = 'claude-3-sonnet-20240229'
+    this.model = 'claude-3-5-haiku-20241022'
     this.maxTokens = 1000
   }
 
