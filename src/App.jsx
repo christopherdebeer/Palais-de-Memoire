@@ -32,21 +32,21 @@ function App() {
     setVoiceEnabled(enabled)
   }
 
-  if (isLoading) {
-    return (
-      <div className="app-loading">
-        <div className="loading-content">
-          <h1>Palais de Mémoire</h1>
-          <div className="loading-spinner"></div>
-          <p>Preparing your immersive memory palace...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'}`}>
+      {/* Always show the MemoryPalace (skybox) as initial state */}
       <MemoryPalace />
+      
+      {/* Show loading overlay while initializing */}
+      {isLoading && (
+        <div className="app-loading">
+          <div className="loading-content">
+            <h1>Palais de Mémoire</h1>
+            <div className="loading-spinner"></div>
+            <p>Preparing your immersive memory palace...</p>
+          </div>
+        </div>
+      )}
       
       {isMobile && (
         <MobileInterface 
