@@ -12,6 +12,16 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    host: true
+    host: true,
+    fs: {
+      // Exclude prototype folder to prevent websim dependency issues
+      deny: ['**/prototype/**']
+    }
+  },
+  // Exclude prototype folder from module resolution
+  resolve: {
+    alias: {
+      '/prototype': false
+    }
   }
 })

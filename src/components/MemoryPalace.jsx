@@ -33,27 +33,32 @@ const MemoryPalace = () => {
     const textureLoader = new THREE.TextureLoader()
     let skyboxTexture = null
     
+    // Create material with fallback color initially
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x1a1a2e, // Dark fallback color
+      side: THREE.BackSide
+    })
+    
     try {
       skyboxTexture = textureLoader.load(
         'https://page-images.websim.com/Create_a_360_degree_equirectangular_panoramic_image_in_21_9_aspect_ratio_showing__scene_____TECHNICA_694056a68c0178.jpg',
-        () => {
-          // Texture loaded successfully
-          console.log('Skybox texture loaded')
+        (texture) => {
+          // Texture loaded successfully - update material
+          console.log('Skybox texture loaded successfully')
+          material.map = texture
+          material.color.setHex(0xffffff) // Set to white to show texture properly
+          material.needsUpdate = true
         },
         undefined,
         (error) => {
           console.error('Error loading skybox texture:', error)
+          // Keep the fallback dark color
         }
       )
     } catch (error) {
       console.error('Error creating skybox texture:', error)
+      // Keep the fallback dark color
     }
-    
-    const material = new THREE.MeshBasicMaterial({
-      map: skyboxTexture,
-      color: skyboxTexture ? 0xffffff : 0x1a1a2e,
-      side: THREE.BackSide
-    })
     
     const sphere = new THREE.Mesh(geometry, material)
     scene.add(sphere)
