@@ -245,13 +245,7 @@ const MemoryPalace = forwardRef(({
       console.log('Procedural skybox created as fallback')
     }
 
-    try {
-      tryLoadSkybox()
-    } catch (error) {
-      console.error('Error initializing skybox:', error)
-      createProceduralSkybox()
-    }
-    
+    // Create meshes first so they exist when texture callbacks execute
     const sphere = new THREE.Mesh(geometry, material)
     scene.add(sphere)
     
@@ -260,6 +254,14 @@ const MemoryPalace = forwardRef(({
     wireframeSphere.visible = wireframeEnabled // Set initial visibility
     wireframeSphereRef.current = wireframeSphere
     scene.add(wireframeSphere)
+
+    // Now load textures - callbacks can safely reference wireframeSphere
+    try {
+      tryLoadSkybox()
+    } catch (error) {
+      console.error('Error initializing skybox:', error)
+      createProceduralSkybox()
+    }
 
     // Add ambient lighting
     const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
