@@ -17,6 +17,7 @@ export class SettingsManager {
       speechPitch: 1.0,
       
       // AI/LLM Settings
+      selectedModel: 'claude-3-sonnet-20240229',
       systemPrompt: `You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands. Process commands for creating rooms, adding objects, and navigating between memory spaces. Be conversational and supportive.`,
       responseTemperature: 0.7,
       
@@ -292,7 +293,8 @@ export class SettingsManager {
     return {
       'Content-Type': 'application/json',
       'x-api-key': this.settings.anthropicApiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
     }
   }
 

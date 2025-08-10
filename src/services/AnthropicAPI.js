@@ -1,6 +1,13 @@
 /**
- * Anthropic API Service for Claude LLM Integration
- * Handles conversation, command processing, and structured responses
+ * Legacy Anthropic API Service for Claude LLM Integration
+ * 
+ * DEPRECATED: Use useAnthropicStream hook for new implementations
+ * This service is kept for backward compatibility only.
+ * 
+ * New features should use:
+ * - Official @anthropic-ai/sdk
+ * - Streaming support via useAnthropicStream hook
+ * - Proper browser headers and tool calls
  */
 
 import settingsManager from './SettingsManager.js'
