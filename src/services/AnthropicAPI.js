@@ -16,46 +16,101 @@ export class AnthropicAPI {
    * Check if API is configured
    */
   isConfigured() {
-    return !!settingsManager.get('anthropicApiKey')
+    const apiKey = settingsManager.get('anthropicApiKey')
+    const isConfigured = !!apiKey
+    console.log('[AnthropicAPI] Configuration check:', {
+      hasApiKey: !!apiKey,
+      keyLength: apiKey ? apiKey.length : 0,
+      keyPrefix: apiKey ? apiKey.substring(0, 8) + '...' : 'none'
+    })
+    return isConfigured
   }
 
   /**
    * Process user input and return structured response
    */
   async processInput(userInput, context = {}) {
+    console.log('[AnthropicAPI] Processing input:', {
+      userInput,
+      context,
+      isConfigured: this.isConfigured()
+    })
+    
     if (!this.isConfigured()) {
-      throw new Error('Anthropic API key not configured')
+      const error = new Error('Anthropic API key not configured')
+      console.error('[AnthropicAPI] Configuration error:', error.message)
+      throw error
     }
 
     const systemPrompt = this.buildSystemPrompt(context)
+    console.log('[AnthropicAPI] Built system prompt length:', systemPrompt.length)
+    
+    const requestBody = {
+      model: this.model,
+      max_tokens: this.maxTokens,
+      temperature: settingsManager.get('responseTemperature'),
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: userInput
+        }
+      ]
+    }
+    
+    console.log('[AnthropicAPI] API request:', {
+      url: this.baseURL,
+      model: requestBody.model,
+      max_tokens: requestBody.max_tokens,
+      temperature: requestBody.temperature,
+      userInput: requestBody.messages[0].content
+    })
     
     try {
+      const startTime = performance.now()
+      
       const response = await fetch(this.baseURL, {
         method: 'POST',
         headers: settingsManager.getAnthropicHeaders(),
-        body: JSON.stringify({
-          model: this.model,
-          max_tokens: this.maxTokens,
-          temperature: settingsManager.get('responseTemperature'),
-          system: systemPrompt,
-          messages: [
-            {
-              role: 'user',
-              content: userInput
-            }
-          ]
-        })
+        body: JSON.stringify(requestBody)
+      })
+      
+      const endTime = performance.now()
+      console.log('[AnthropicAPI] API response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        responseTime: `${(endTime - startTime).toFixed(2)}ms`
       })
 
       if (!response.ok) {
-        throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`)
+        const errorText = await response.text()
+        console.error('[AnthropicAPI] API error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
+        throw new Error(`Anthropic API error: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
       const data = await response.json()
-      return this.parseResponse(data.content[0].text)
+      console.log('[AnthropicAPI] API response data:', {
+        usage: data.usage,
+        contentLength: data.content ? data.content.length : 0,
+        content: data.content ? data.content[0]?.text?.substring(0, 200) + '...' : 'none'
+      })
+      
+      const parsedResponse = this.parseResponse(data.content[0].text)
+      console.log('[AnthropicAPI] Parsed response:', parsedResponse)
+      
+      return parsedResponse
       
     } catch (error) {
-      console.error('Anthropic API request failed:', error)
+      console.error('[AnthropicAPI] Request failed:', {
+        error: error.message,
+        stack: error.stack,
+        userInput
+      })
       throw error
     }
   }
@@ -123,6 +178,11 @@ Respond conversationally and then provide the structured command data.`
    * Parse API response and extract commands
    */
   parseResponse(responseText) {
+    console.log('[AnthropicAPI] Parsing response:', {
+      textLength: responseText.length,
+      preview: responseText.substring(0, 200) + '...'
+    })
+    
     const response = {
       text: responseText,
       command: null,
@@ -132,6 +192,8 @@ Respond conversationally and then provide the structured command data.`
     // Extract structured command data
     const lines = responseText.split('\n')
     let currentCommand = null
+
+    console.log('[AnthropicAPI] Processing lines:', lines.length)
 
     for (const line of lines) {
       const trimmed = line.trim()
@@ -143,48 +205,68 @@ Respond conversationally and then provide the structured command data.`
         else if (trimmed.includes('EDIT_ROOM')) currentCommand = 'EDIT_ROOM'
         else if (trimmed.includes('ADD_OBJECT')) currentCommand = 'ADD_OBJECT'
         else if (trimmed.includes('GO_TO_ROOM')) currentCommand = 'GO_TO_ROOM'
+        
+        console.log('[AnthropicAPI] Found command indicator:', currentCommand)
       }
 
       // Extract parameters
       if (trimmed.startsWith('ROOM_NAME:')) {
         response.parameters.roomName = trimmed.replace('ROOM_NAME:', '').trim()
         response.command = currentCommand || 'CREATE_ROOM'
+        console.log('[AnthropicAPI] Extracted ROOM_NAME:', response.parameters.roomName)
       }
       else if (trimmed.startsWith('ROOM_DESCRIPTION:')) {
         response.parameters.roomDescription = trimmed.replace('ROOM_DESCRIPTION:', '').trim()
         response.command = currentCommand || 'CREATE_ROOM'
+        console.log('[AnthropicAPI] Extracted ROOM_DESCRIPTION:', response.parameters.roomDescription)
       }
       else if (trimmed.startsWith('OBJECT_NAME:')) {
         response.parameters.objectName = trimmed.replace('OBJECT_NAME:', '').trim()
         response.command = currentCommand || 'ADD_OBJECT'
+        console.log('[AnthropicAPI] Extracted OBJECT_NAME:', response.parameters.objectName)
       }
       else if (trimmed.startsWith('OBJECT_INFO:')) {
         response.parameters.objectInfo = trimmed.replace('OBJECT_INFO:', '').trim()
         response.command = currentCommand || 'ADD_OBJECT'
+        console.log('[AnthropicAPI] Extracted OBJECT_INFO:', response.parameters.objectInfo)
       }
       else if (trimmed.startsWith('TARGET_ROOM:')) {
         response.parameters.targetRoom = trimmed.replace('TARGET_ROOM:', '').trim()
         response.command = currentCommand || 'GO_TO_ROOM'
+        console.log('[AnthropicAPI] Extracted TARGET_ROOM:', response.parameters.targetRoom)
       }
     }
 
     // Detect commands from natural language if no structured output
     if (!response.command) {
+      console.log('[AnthropicAPI] No structured command found, trying natural language detection')
       const lowercaseText = responseText.toLowerCase()
       
       if (lowercaseText.includes('create') && (lowercaseText.includes('room') || lowercaseText.includes('space'))) {
         response.command = 'CREATE_ROOM'
+        console.log('[AnthropicAPI] Detected CREATE_ROOM from natural language')
       }
       else if (lowercaseText.includes('go to') || lowercaseText.includes('navigate') || lowercaseText.includes('enter')) {
         response.command = 'GO_TO_ROOM'
+        console.log('[AnthropicAPI] Detected GO_TO_ROOM from natural language')
       }
       else if (lowercaseText.includes('add') && lowercaseText.includes('object')) {
         response.command = 'ADD_OBJECT'
+        console.log('[AnthropicAPI] Detected ADD_OBJECT from natural language')
       }
       else if (lowercaseText.includes('list') && lowercaseText.includes('room')) {
         response.command = 'LIST_ROOMS'
+        console.log('[AnthropicAPI] Detected LIST_ROOMS from natural language')
       }
     }
+    
+    console.log('[AnthropicAPI] Final parsed response:', {
+      hasText: !!response.text,
+      textLength: response.text.length,
+      command: response.command,
+      parameterCount: Object.keys(response.parameters).length,
+      parameters: response.parameters
+    })
 
     return response
   }

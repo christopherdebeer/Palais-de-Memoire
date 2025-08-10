@@ -21,8 +21,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
   const captionTimeoutRef = useRef(null)
 
   useEffect(() => {
+    console.log('[VoiceInterface] Initializing voice interface...')
+    
     // Check for Web Speech API support
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      console.log('[VoiceInterface] Web Speech API supported')
       setIsSupported(true)
       
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -32,32 +35,58 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       recognition.continuous = false
       recognition.interimResults = false
       recognition.lang = 'en-US'
+      
+      console.log('[VoiceInterface] Speech recognition configured:', {
+        continuous: recognition.continuous,
+        interimResults: recognition.interimResults,
+        lang: recognition.lang
+      })
 
       recognition.onstart = () => {
+        console.log('[VoiceInterface] Speech recognition started')
         setIsListening(true)
         setTranscript('')
       }
 
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript
+        const confidence = event.results[0][0].confidence
+        console.log('[VoiceInterface] Speech recognition result:', {
+          transcript,
+          confidence,
+          resultCount: event.results.length
+        })
+        
         setTranscript(transcript)
         showCaption(`You said: "${transcript}"`, 'recognition')
         processCommand(transcript)
       }
 
       recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error)
+        console.error('[VoiceInterface] Speech recognition error:', {
+          error: event.error,
+          message: event.message,
+          timeStamp: event.timeStamp
+        })
         setIsListening(false)
         setIsProcessing(false)
       }
 
       recognition.onend = () => {
+        console.log('[VoiceInterface] Speech recognition ended')
         setIsListening(false)
       }
+    } else {
+      console.warn('[VoiceInterface] Web Speech API not supported in this browser')
     }
 
     // Check API configuration - only need Anthropic API for voice processing
-    setApiConfigured(anthropicAPI.isConfigured())
+    const isConfigured = anthropicAPI.isConfigured()
+    console.log('[VoiceInterface] API configuration check:', {
+      isConfigured,
+      anthropicKey: settingsManager.get('anthropicApiKey') ? '[SET]' : '[NOT SET]'
+    })
+    setApiConfigured(isConfigured)
 
     // Load caption preferences
     const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
@@ -67,7 +96,9 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
 
     // Listen for settings changes
     const handleSettingsChange = () => {
-      setApiConfigured(anthropicAPI.isConfigured())
+      const newConfigured = anthropicAPI.isConfigured()
+      console.log('[VoiceInterface] Settings changed, API configured:', newConfigured)
+      setApiConfigured(newConfigured)
     }
 
     settingsManager.addEventListener(handleSettingsChange)
@@ -87,32 +118,59 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
   }, [])
 
   const processCommand = async (command) => {
+    console.log('[VoiceInterface] Processing command:', {
+      command,
+      apiConfigured,
+      isProcessing
+    })
+    
     setIsProcessing(true)
     
     try {
       if (apiConfigured) {
+        console.log('[VoiceInterface] Using Anthropic API for command processing')
+        
         // Use Anthropic API for intelligent command processing
         const context = {
           currentRoom: null, // TODO: Get from parent component
           rooms: [], // TODO: Get from parent component
           objects: [] // TODO: Get from parent component
         }
+        
+        console.log('[VoiceInterface] Calling anthropicAPI.processInput with:', {
+          command,
+          context
+        })
 
         const result = await anthropicAPI.processInput(command, context)
+        
+        console.log('[VoiceInterface] Anthropic API response:', {
+          text: result.text,
+          command: result.command,
+          parameters: result.parameters
+        })
         
         setResponse(result.text)
         speakResponse(result.text)
 
         // Handle structured commands
         if (result.command && onCommand) {
+          console.log('[VoiceInterface] Executing structured command:', {
+            type: result.command,
+            parameters: result.parameters
+          })
+          
           onCommand({
             type: result.command,
             parameters: result.parameters,
             originalInput: command,
             aiResponse: result.text
           })
+        } else {
+          console.log('[VoiceInterface] No structured command to execute')
         }
       } else {
+        console.log('[VoiceInterface] Using fallback processing (API not configured)')
         // Fallback to simple pattern matching when API not configured
         const lowerCommand = command.toLowerCase()
         let response = ''
@@ -143,16 +201,29 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         }
       }
     } catch (error) {
-      console.error('Error processing command:', error)
+      console.error('[VoiceInterface] Error processing command:', {
+        error: error.message,
+        stack: error.stack,
+        command,
+        apiConfigured
+      })
+      
       const errorResponse = 'I encountered an error processing your request. Please check your API configuration and try again.'
       setResponse(errorResponse)
       speakResponse(errorResponse)
     } finally {
+      console.log('[VoiceInterface] Command processing complete')
       setIsProcessing(false)
     }
   }
 
   const speakResponse = (text) => {
+    console.log('[VoiceInterface] Speaking response:', {
+      text,
+      speechSynthesisSupported: 'speechSynthesis' in window,
+      audioFeedbackEnabled: settingsManager.get('audioFeedback')
+    })
+    
     if ('speechSynthesis' in window && settingsManager.get('audioFeedback')) {
       // Cancel any existing speech
       window.speechSynthesis.cancel()
@@ -164,33 +235,68 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       utterance.rate = settingsManager.get('speechRate') || 1.0
       utterance.pitch = settingsManager.get('speechPitch') || 1.0
       utterance.volume = 0.8
+      
+      console.log('[VoiceInterface] TTS settings:', {
+        rate: utterance.rate,
+        pitch: utterance.pitch,
+        volume: utterance.volume
+      })
 
       // Use configured voice if available
       const voices = window.speechSynthesis.getVoices()
       const selectedVoice = settingsManager.get('voice')
+      console.log('[VoiceInterface] Voice selection:', {
+        availableVoices: voices.length,
+        selectedVoice,
+        voiceFound: selectedVoice && voices.some(v => v.name === selectedVoice)
+      })
+      
       if (selectedVoice && voices.length > 0) {
         const voice = voices.find(v => v.name === selectedVoice)
         if (voice) {
           utterance.voice = voice
+          console.log('[VoiceInterface] Using voice:', voice.name)
         }
       }
+      
+      utterance.onstart = () => console.log('[VoiceInterface] TTS started')
+      utterance.onend = () => console.log('[VoiceInterface] TTS ended')
+      utterance.onerror = (event) => console.error('[VoiceInterface] TTS error:', event)
 
       synthRef.current = utterance
       window.speechSynthesis.speak(utterance)
+    } else {
+      console.log('[VoiceInterface] TTS skipped - not supported or audio feedback disabled')
     }
   }
 
   const startListening = () => {
-    if (recognitionRef.current && enabled && isSupported) {
+    console.log('[VoiceInterface] Attempting to start listening:', {
+      hasRecognition: !!recognitionRef.current,
+      enabled,
+      isSupported,
+      isListening,
+      isProcessing
+    })
+    
+    if (recognitionRef.current && enabled && isSupported && !isListening) {
       try {
+        console.log('[VoiceInterface] Starting speech recognition...')
         recognitionRef.current.start()
       } catch (error) {
-        console.error('Error starting speech recognition:', error)
+        console.error('[VoiceInterface] Error starting speech recognition:', {
+          error: error.message,
+          name: error.name,
+          stack: error.stack
+        })
       }
+    } else {
+      console.warn('[VoiceInterface] Cannot start listening - requirements not met')
     }
   }
 
   const stopListening = () => {
+    console.log('[VoiceInterface] Stopping speech recognition')
     if (recognitionRef.current) {
       recognitionRef.current.stop()
     }
@@ -223,7 +329,16 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
   }
 
   const showCaption = (text, mode) => {
-    if (!captionsEnabled) return
+    console.log('[VoiceInterface] Showing caption:', {
+      text,
+      mode,
+      captionsEnabled
+    })
+    
+    if (!captionsEnabled) {
+      console.log('[VoiceInterface] Captions disabled - not showing')
+      return
+    }
     
     if (captionTimeoutRef.current) {
       clearTimeout(captionTimeoutRef.current)
@@ -234,6 +349,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
     
     // Auto-hide after 4 seconds
     captionTimeoutRef.current = setTimeout(() => {
+      console.log('[VoiceInterface] Auto-hiding caption')
       setCaptionText('')
       setCaptionMode(null)
     }, 4000)
