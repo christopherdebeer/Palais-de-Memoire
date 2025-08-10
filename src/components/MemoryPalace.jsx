@@ -42,6 +42,17 @@ const MemoryPalace = () => {
       side: THREE.BackSide
     })
     
+    // Create wireframe material as fallback
+    const wireframeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff00, // Green wireframe
+      wireframe: true,
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0.3
+    })
+    
+    let isTextureLoaded = false
+    
     try {
       skyboxTexture = textureLoader.load(
         'https://page-images.websim.com/Create_a_360_degree_equirectangular_panoramic_image_in_21_9_aspect_ratio_showing__scene_____TECHNICA_694056a68c0178.jpg',
@@ -51,20 +62,30 @@ const MemoryPalace = () => {
           material.map = texture
           material.color.setHex(0xffffff) // Set to white to show texture properly
           material.needsUpdate = true
+          isTextureLoaded = true
+          
+          // Hide wireframe when texture loads
+          wireframeSphere.visible = false
         },
         undefined,
         (error) => {
           console.error('Error loading skybox texture:', error)
-          // Keep the fallback dark color
+          console.log('Keeping wireframe mode visible as fallback')
+          // Keep wireframe visible as fallback
         }
       )
     } catch (error) {
       console.error('Error creating skybox texture:', error)
-      // Keep the fallback dark color
+      console.log('Keeping wireframe mode visible as fallback')
+      // Keep wireframe visible as fallback
     }
     
     const sphere = new THREE.Mesh(geometry, material)
     scene.add(sphere)
+    
+    // Add wireframe version for fallback/debug visualization
+    const wireframeSphere = new THREE.Mesh(geometry, wireframeMaterial)
+    scene.add(wireframeSphere)
 
     // Add ambient lighting
     const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
@@ -74,6 +95,17 @@ const MemoryPalace = () => {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
     directionalLight.position.set(1, 1, 1)
     scene.add(directionalLight)
+
+    // Add axes helper for direction indicators
+    const axesHelper = new THREE.AxesHelper(100) // Size 100 units
+    scene.add(axesHelper)
+
+    // Add grid helper on the ground for spatial reference
+    const gridHelper = new THREE.GridHelper(200, 20, 0x444444, 0x444444)
+    gridHelper.position.y = -480
+    gridHelper.material.transparent = true
+    gridHelper.material.opacity = 0.5
+    scene.add(gridHelper)
 
     // Create ground compass indicator
     const compassGeometry = new THREE.CircleGeometry(50, 32)
@@ -169,11 +201,13 @@ const MemoryPalace = () => {
       
       geometry.dispose()
       material.dispose()
+      wireframeMaterial.dispose()
       if (skyboxTexture) {
         skyboxTexture.dispose()
       }
       compassGeometry.dispose()
       compassMaterial.dispose()
+      gridHelper.dispose()
       renderer.dispose()
       
       // Clear refs
