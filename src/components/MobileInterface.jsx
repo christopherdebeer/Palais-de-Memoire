@@ -1,4 +1,6 @@
 import React, { useState } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faMicrophone, faBars, faTimes } from '@fortawesome/free-solid-svg-icons'
 
 const MobileInterface = ({ voiceEnabled, onVoiceToggle }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -23,7 +25,7 @@ const MobileInterface = ({ voiceEnabled, onVoiceToggle }) => {
           onClick={() => onVoiceToggle(!voiceEnabled)}
           aria-label="Toggle voice control"
         >
-          🎤
+          <FontAwesomeIcon icon={faMicrophone} />
         </button>
         
         <button 
@@ -31,7 +33,7 @@ const MobileInterface = ({ voiceEnabled, onVoiceToggle }) => {
           onClick={handleMenuToggle}
           aria-label="Open menu"
         >
-          ☰
+          <FontAwesomeIcon icon={faBars} />
         </button>
       </div>
 
@@ -45,7 +47,7 @@ const MobileInterface = ({ voiceEnabled, onVoiceToggle }) => {
               onClick={() => setIsMenuOpen(false)}
               aria-label="Close menu"
             >
-              ✕
+              <FontAwesomeIcon icon={faTimes} />
             </button>
           </div>
           

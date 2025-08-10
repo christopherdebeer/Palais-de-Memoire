@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faMicrophone, faCircle } from '@fortawesome/free-solid-svg-icons'
 
 const VoiceInterface = ({ enabled, isMobile }) => {
   const [isListening, setIsListening] = useState(false)
@@ -111,7 +113,10 @@ const VoiceInterface = ({ enabled, isMobile }) => {
         onTouchEnd={stopListening}
         aria-label="Hold to speak"
       >
-        {isListening ? '🔴' : '🎤'}
+        <FontAwesomeIcon 
+          icon={isListening ? faCircle : faMicrophone}
+          style={{ color: isListening ? '#FF3B30' : 'inherit' }}
+        />
         <span className="voice-control-text">
           {isListening ? 'Listening...' : 'Hold to speak'}
         </span>
@@ -134,9 +139,13 @@ const VoiceInterface = ({ enabled, isMobile }) => {
       {/* Voice Status */}
       <div className="voice-status-info">
         {isSupported ? (
-          <span className="status-supported">🟢 Voice control ready</span>
+          <span className="status-supported">
+            <FontAwesomeIcon icon={faCircle} style={{ color: '#30D158' }} /> Voice control ready
+          </span>
         ) : (
-          <span className="status-unsupported">🔴 Voice control not supported in this browser</span>
+          <span className="status-unsupported">
+            <FontAwesomeIcon icon={faCircle} style={{ color: '#FF3B30' }} /> Voice control not supported in this browser
+          </span>
         )}
       </div>
     </div>
