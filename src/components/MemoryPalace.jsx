@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect } from 'react'
 import * as THREE from 'three'
 
 const MemoryPalace = () => {
@@ -6,10 +6,11 @@ const MemoryPalace = () => {
   const sceneRef = useRef(null)
   const rendererRef = useRef(null)
   const cameraRef = useRef(null)
-  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    if (!mountRef.current || isInitialized) return
+    if (!mountRef.current || sceneRef.current) return
+
+    console.log('Initializing Memory Palace scene...')
 
     // Initialize Three.js scene
     const scene = new THREE.Scene()
@@ -23,6 +24,8 @@ const MemoryPalace = () => {
 
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    
+    console.log('Appending canvas to DOM...')
     mountRef.current.appendChild(renderer.domElement)
 
     // Create skybox sphere (inverted for interior view)
@@ -147,16 +150,21 @@ const MemoryPalace = () => {
     }
 
     animate()
-    setIsInitialized(true)
+    console.log('Memory Palace scene initialized successfully')
 
     // Cleanup
     return () => {
+      console.log('Cleaning up Memory Palace scene...')
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('deviceorientation', handleDeviceOrientation)
       
       if (mountRef.current && renderer.domElement) {
-        mountRef.current.removeChild(renderer.domElement)
+        try {
+          mountRef.current.removeChild(renderer.domElement)
+        } catch (error) {
+          console.warn('Error removing canvas:', error)
+        }
       }
       
       geometry.dispose()
@@ -167,8 +175,13 @@ const MemoryPalace = () => {
       compassGeometry.dispose()
       compassMaterial.dispose()
       renderer.dispose()
+      
+      // Clear refs
+      sceneRef.current = null
+      rendererRef.current = null
+      cameraRef.current = null
     }
-  }, [isInitialized])
+  }, [])
 
   return <div ref={mountRef} className="memory-palace-canvas" />
 }
