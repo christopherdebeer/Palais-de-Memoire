@@ -175,7 +175,15 @@ Use these tools to help users build and navigate their memory palace.`
 
   // Stream a single message
   const streamMessage = useCallback(async (messages, context = {}) => {
-    if (!anthropic) throw new Error('Anthropic API key not configured')
+    if (!anthropic) {
+      const fallbackReason = 'Anthropic API key not configured in useAnthropicStream'
+      console.error('[useAnthropicStream] Stream fallback triggered:', {
+        reason: fallbackReason,
+        hasApiKey: !!settingsManager.get('anthropicApiKey'),
+        timestamp: new Date().toISOString()
+      })
+      throw new Error(fallbackReason)
+    }
 
     const body = buildRequestBody(messages, context)
     console.log('[useAnthropicStream] Request body:', body)
@@ -218,6 +226,10 @@ Use these tools to help users build and navigate their memory palace.`
             break
 
           case 'error':
+            console.error('[useAnthropicStream] Stream event error:', {
+              error: event.error,
+              timestamp: new Date().toISOString()
+            })
             throw new Error(`Stream error: ${event.error.message}`)
         }
 
@@ -238,15 +250,46 @@ Use these tools to help users build and navigate their memory palace.`
       return { message: finalMessage, stopReason }
 
     } catch (error) {
-      console.error('[useAnthropicStream] Streaming error:', error)
+      const streamErrorDetails = {
+        error: error.message,
+        stack: error.stack,
+        messageCount: messages.length,
+        hasContext: Object.keys(context).length > 0,
+        timestamp: new Date().toISOString()
+      }
+      
+      console.error('[useAnthropicStream] Streaming error:', streamErrorDetails)
+      
+      // Log specific streaming error context
+      if (error.message.includes('abort')) {
+        console.warn('[useAnthropicStream] Stream was aborted by user')
+      } else if (error.message.includes('API key')) {
+        console.error('[useAnthropicStream] API key error in streaming')
+      } else {
+        console.error('[useAnthropicStream] Unknown streaming error type')
+      }
+      
       throw error
     }
   }, [anthropic, buildRequestBody, mergeDelta, assembleMessage])
 
   // Main send function with tool use loop
   const send = useCallback(async (history, userText, context = {}) => {
-    if (!anthropic) throw new Error('Anthropic API key not configured')
-    if (status !== 'idle') throw new Error('Stream already in progress')
+    if (!anthropic) {
+      const fallbackReason = 'Anthropic API key not configured in useAnthropicStream send'
+      console.error('[useAnthropicStream] Send fallback triggered:', {
+        reason: fallbackReason,
+        userText,
+        hasApiKey: !!settingsManager.get('anthropicApiKey'),
+        timestamp: new Date().toISOString()
+      })
+      throw new Error(fallbackReason)
+    }
+    if (status !== 'idle') {
+      const error = 'Stream already in progress'
+      console.warn('[useAnthropicStream] Send blocked:', { reason: error, currentStatus: status })
+      throw new Error(error)
+    }
 
     setStatus('thinking')
 
@@ -292,6 +335,12 @@ Use these tools to help users build and navigate their memory palace.`
                   content: result,
                 })
               } catch (error) {
+                console.error('[useAnthropicStream] Tool execution error:', {
+                  toolName: block.name,
+                  toolInput: block.input,
+                  error: error.message,
+                  stack: error.stack
+                })
                 toolResults.push({
                   type: 'tool_result',
                   tool_use_id: block.id,
@@ -327,7 +376,26 @@ Use these tools to help users build and navigate their memory palace.`
         }
       }
     } catch (error) {
-      console.error('[useAnthropicStream] Send error:', error)
+      const errorDetails = {
+        error: error.message,
+        stack: error.stack,
+        userText,
+        status,
+        hasAnthropicKey: !!settingsManager.get('anthropicApiKey'),
+        timestamp: new Date().toISOString()
+      }
+      
+      console.error('[useAnthropicStream] Send error:', errorDetails)
+      
+      // Log specific error context
+      if (error.message.includes('API key')) {
+        console.error('[useAnthropicStream] API key related error')
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        console.error('[useAnthropicStream] Network error in streaming')
+      } else {
+        console.error('[useAnthropicStream] Unknown streaming error')
+      }
+      
       throw error
     } finally {
       setStatus('idle')
