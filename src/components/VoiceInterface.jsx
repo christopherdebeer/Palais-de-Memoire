@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMicrophone, faCircle, faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCaptioning } from '@fortawesome/free-solid-svg-icons'
 import anthropicAPI from '../services/AnthropicAPI.js'
 import settingsManager from '../services/SettingsManager.js'
 
@@ -11,8 +11,14 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
   const [isSupported, setIsSupported] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [apiConfigured, setApiConfigured] = useState(false)
+  const [textInput, setTextInput] = useState('')
+  const [showTextInput, setShowTextInput] = useState(false)
+  const [captionsEnabled, setCaptionsEnabled] = useState(false)
+  const [captionText, setCaptionText] = useState('')
+  const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
   const recognitionRef = useRef(null)
   const synthRef = useRef(null)
+  const captionTimeoutRef = useRef(null)
 
   useEffect(() => {
     // Check for Web Speech API support
@@ -35,6 +41,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript
         setTranscript(transcript)
+        showCaption(`You said: "${transcript}"`, 'recognition')
         processCommand(transcript)
       }
 
@@ -49,12 +56,18 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       }
     }
 
-    // Check API configuration
-    setApiConfigured(settingsManager.isApiConfigured())
+    // Check API configuration - only need Anthropic API for voice processing
+    setApiConfigured(anthropicAPI.isConfigured())
+
+    // Load caption preferences
+    const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
+    if (savedCaptions) {
+      setCaptionsEnabled(JSON.parse(savedCaptions))
+    }
 
     // Listen for settings changes
     const handleSettingsChange = () => {
-      setApiConfigured(settingsManager.isApiConfigured())
+      setApiConfigured(anthropicAPI.isConfigured())
     }
 
     settingsManager.addEventListener(handleSettingsChange)
@@ -65,6 +78,9 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       }
       if (synthRef.current) {
         window.speechSynthesis.cancel()
+      }
+      if (captionTimeoutRef.current) {
+        clearTimeout(captionTimeoutRef.current)
       }
       settingsManager.removeEventListener(handleSettingsChange)
     }
@@ -141,6 +157,9 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       // Cancel any existing speech
       window.speechSynthesis.cancel()
       
+      // Show caption for synthesis
+      showCaption(text, 'synthesis')
+      
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.rate = settingsManager.get('speechRate') || 1.0
       utterance.pitch = settingsManager.get('speechPitch') || 1.0
@@ -177,12 +196,98 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
     }
   }
 
+  const handleTextSubmit = async (e) => {
+    e.preventDefault()
+    if (textInput.trim() && !isProcessing) {
+      const command = textInput.trim()
+      setTextInput('')
+      setTranscript(command)
+      await processCommand(command)
+    }
+  }
+
+  const toggleTextInput = () => {
+    setShowTextInput(!showTextInput)
+  }
+
+  const toggleCaptions = () => {
+    const newState = !captionsEnabled
+    setCaptionsEnabled(newState)
+    localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(newState))
+    
+    // Hide captions immediately if disabled
+    if (!newState) {
+      setCaptionText('')
+      setCaptionMode(null)
+    }
+  }
+
+  const showCaption = (text, mode) => {
+    if (!captionsEnabled) return
+    
+    if (captionTimeoutRef.current) {
+      clearTimeout(captionTimeoutRef.current)
+    }
+    
+    setCaptionText(text)
+    setCaptionMode(mode)
+    
+    // Auto-hide after 4 seconds
+    captionTimeoutRef.current = setTimeout(() => {
+      setCaptionText('')
+      setCaptionMode(null)
+    }, 4000)
+  }
+
   if (!enabled || !isSupported) {
     return null
   }
 
   return (
     <div className="voice-interface">
+      {/* Text Input Toggle Button */}
+      <button
+        className="text-input-toggle"
+        onClick={toggleTextInput}
+        aria-label="Toggle text input"
+        disabled={isProcessing}
+      >
+        <FontAwesomeIcon icon={faKeyboard} />
+      </button>
+
+      {/* Caption Toggle Button */}
+      <button
+        className={`caption-toggle ${captionsEnabled ? 'active' : ''}`}
+        onClick={toggleCaptions}
+        aria-label={captionsEnabled ? 'Disable closed captions' : 'Enable closed captions'}
+        disabled={isProcessing}
+      >
+        <FontAwesomeIcon icon={faClosedCaptioning} />
+      </button>
+
+      {/* Manual Text Input */}
+      {showTextInput && (
+        <form className="text-input-form" onSubmit={handleTextSubmit}>
+          <input
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            placeholder="Type your command here..."
+            className="manual-text-input"
+            disabled={isProcessing}
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="text-submit-btn"
+            disabled={!textInput.trim() || isProcessing}
+            aria-label="Send text command"
+          >
+            <FontAwesomeIcon icon={faPaperPlane} />
+          </button>
+        </form>
+      )}
+
       {/* Voice Control Button */}
       <button
         className={`voice-control ${isListening ? 'listening' : ''} ${isProcessing ? 'processing' : ''}`}
@@ -240,6 +345,13 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
           </span>
         )}
       </div>
+
+      {/* Closed Caption Display */}
+      {captionText && (
+        <div className="caption-container" aria-live="polite" aria-atomic="true">
+          <p className="caption-text">{captionText}</p>
+        </div>
+      )}
     </div>
   )
 }
