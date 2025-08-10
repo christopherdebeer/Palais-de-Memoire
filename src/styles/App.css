@@ -769,6 +769,46 @@
   }
 }
 
+/* Enhanced Voice Interface Styles */
+.voice-control.processing {
+  background: rgba(255, 149, 0, 0.9);
+  cursor: not-allowed;
+}
+
+.voice-control.processing:active {
+  transform: none;
+}
+
+.voice-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.voice-status-info span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  opacity: 0.8;
+}
+
+.status-api-configured {
+  color: #007AFF;
+}
+
+.status-api-missing {
+  color: #FF9500;
+}
+
+.status-supported {
+  color: #30D158;
+}
+
+.status-unsupported {
+  color: #FF3B30;
+}
+
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner,
