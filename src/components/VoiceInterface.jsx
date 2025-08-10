@@ -85,7 +85,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
           error: event.error,
           message: event.message,
           timeStamp: event.timeStamp,
-          errorType: typeof event.error
+          errorType: typeof event.error,
+          stack: new Error().stack
         }
         
         console.error('[VoiceInterface] Speech recognition error:', errorDetails)
@@ -254,8 +255,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         } catch (streamError) {
           console.error('[VoiceInterface] Stream processing error:', {
             error: streamError.message,
+            stack: streamError.stack,
+            name: streamError.name,
             command,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            streamStatus: status
           })
           throw streamError
         }
@@ -383,7 +387,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
       
       utterance.onstart = () => console.log('[VoiceInterface] TTS started')
       utterance.onend = () => console.log('[VoiceInterface] TTS ended')
-      utterance.onerror = (event) => console.error('[VoiceInterface] TTS error:', event)
+      utterance.onerror = (event) => console.error('[VoiceInterface] TTS error:', {
+        error: event.error,
+        type: event.type,
+        stack: new Error().stack
+      })
 
       synthRef.current = utterance
       window.speechSynthesis.speak(utterance)
@@ -409,7 +417,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         console.error('[VoiceInterface] Error starting speech recognition:', {
           error: error.message,
           name: error.name,
-          stack: error.stack
+          stack: error.stack,
+          recognitionState: recognitionRef.current ? 'available' : 'null'
         })
       }
     } else {
