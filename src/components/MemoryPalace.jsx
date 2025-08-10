@@ -1,11 +1,96 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import * as THREE from 'three'
+import nipplejs from 'nipplejs'
 
-const MemoryPalace = () => {
+const MemoryPalace = forwardRef(({ 
+  wireframeEnabled = false, 
+  nippleEnabled = false 
+}, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
   const rendererRef = useRef(null)
   const cameraRef = useRef(null)
+  const wireframeSphereRef = useRef(null)
+  const nippleManagerRef = useRef(null)
+  const nippleContainerRef = useRef(null)
+
+  // Nipple.js functions
+  const initializeNipple = () => {
+    if (nippleManagerRef.current || !nippleEnabled) return
+
+    console.log('Initializing nipple.js controls...')
+    
+    // Create nipple container if it doesn't exist
+    if (!nippleContainerRef.current) {
+      const container = document.createElement('div')
+      container.className = 'nipple-container'
+      document.body.appendChild(container)
+      nippleContainerRef.current = container
+    }
+
+    // Initialize nipple manager
+    const manager = nipplejs.create({
+      zone: nippleContainerRef.current,
+      mode: 'static',
+      position: { left: '50%', top: '50%' },
+      color: 'rgba(255, 255, 255, 0.8)',
+      size: 100
+    })
+
+    nippleManagerRef.current = manager
+
+    // Handle nipple events
+    manager.on('move', (evt, data) => {
+      if (!cameraRef.current) return
+
+      const force = data.force
+      const angle = data.angle.radian
+      
+      // Convert nipple input to camera rotation
+      const rotationSpeed = 0.02 * force
+      const deltaX = Math.cos(angle) * rotationSpeed
+      const deltaY = Math.sin(angle) * rotationSpeed
+      
+      cameraRef.current.rotation.y -= deltaX
+      cameraRef.current.rotation.x -= deltaY
+      
+      // Limit vertical rotation
+      cameraRef.current.rotation.x = Math.max(
+        -Math.PI / 2, 
+        Math.min(Math.PI / 2, cameraRef.current.rotation.x)
+      )
+    })
+
+    console.log('Nipple.js controls initialized')
+  }
+
+  const cleanupNipple = () => {
+    if (nippleManagerRef.current) {
+      nippleManagerRef.current.destroy()
+      nippleManagerRef.current = null
+    }
+    
+    if (nippleContainerRef.current) {
+      document.body.removeChild(nippleContainerRef.current)
+      nippleContainerRef.current = null
+    }
+  }
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    toggleWireframe: (enabled) => {
+      if (wireframeSphereRef.current) {
+        wireframeSphereRef.current.visible = enabled
+      }
+    },
+    toggleNipple: (enabled) => {
+      if (enabled) {
+        initializeNipple()
+      } else {
+        cleanupNipple()
+      }
+    }
+  }))
 
   useEffect(() => {
     if (!mountRef.current || sceneRef.current) return
@@ -14,18 +99,33 @@ const MemoryPalace = () => {
 
     // Initialize Three.js scene
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x000000) // Ensure black background as fallback
+    
     const camera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     )
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true, 
+      alpha: false, // Change to false for better performance
+      preserveDrawingBuffer: true
+    })
 
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
     
     console.log('Appending canvas to DOM...')
+    // Ensure canvas is properly styled
+    renderer.domElement.style.position = 'absolute'
+    renderer.domElement.style.top = '0'
+    renderer.domElement.style.left = '0'
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
+    renderer.domElement.style.display = 'block'
+    
     mountRef.current.appendChild(renderer.domElement)
 
     // Create skybox sphere (inverted for interior view)
@@ -64,8 +164,10 @@ const MemoryPalace = () => {
           material.needsUpdate = true
           isTextureLoaded = true
           
-          // Hide wireframe when texture loads
-          wireframeSphere.visible = false
+          // Hide wireframe when texture loads (unless wireframe is explicitly enabled)
+          if (!wireframeEnabled) {
+            wireframeSphere.visible = false
+          }
         },
         undefined,
         (error) => {
@@ -85,6 +187,8 @@ const MemoryPalace = () => {
     
     // Add wireframe version for fallback/debug visualization
     const wireframeSphere = new THREE.Mesh(geometry, wireframeMaterial)
+    wireframeSphere.visible = wireframeEnabled // Set initial visibility
+    wireframeSphereRef.current = wireframeSphere
     scene.add(wireframeSphere)
 
     // Add ambient lighting
@@ -165,12 +269,15 @@ const MemoryPalace = () => {
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('deviceorientation', handleDeviceOrientation)
 
+    // Force an initial render to ensure something shows up
+    renderer.render(scene, camera)
+
     // Animation loop
     const animate = () => {
       requestAnimationFrame(animate)
 
       // Smooth camera rotation for mouse control
-      if (!window.DeviceOrientationEvent) {
+      if (!window.DeviceOrientationEvent && !nippleManagerRef.current) {
         camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.05
         camera.rotation.x += (targetRotationX - camera.rotation.x) * 0.05
         
@@ -183,6 +290,11 @@ const MemoryPalace = () => {
 
     animate()
     console.log('Memory Palace scene initialized successfully')
+    
+    // Initialize nipple if enabled
+    if (nippleEnabled) {
+      setTimeout(initializeNipple, 100) // Small delay to ensure DOM is ready
+    }
 
     // Cleanup
     return () => {
@@ -210,14 +322,36 @@ const MemoryPalace = () => {
       gridHelper.dispose()
       renderer.dispose()
       
+      // Cleanup nipple
+      cleanupNipple()
+      
       // Clear refs
       sceneRef.current = null
       rendererRef.current = null
       cameraRef.current = null
+      wireframeSphereRef.current = null
     }
   }, [])
 
+  // Handle wireframe toggle
+  useEffect(() => {
+    if (wireframeSphereRef.current) {
+      wireframeSphereRef.current.visible = wireframeEnabled
+    }
+  }, [wireframeEnabled])
+
+  // Handle nipple toggle
+  useEffect(() => {
+    if (nippleEnabled) {
+      initializeNipple()
+    } else {
+      cleanupNipple()
+    }
+  }, [nippleEnabled])
+
   return <div ref={mountRef} className="memory-palace-canvas" />
-}
+})
+
+MemoryPalace.displayName = 'MemoryPalace'
 
 export default MemoryPalace

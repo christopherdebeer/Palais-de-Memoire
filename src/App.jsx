@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMicrophone } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
 import MobileInterface from './components/MobileInterface'
 import VoiceInterface from './components/VoiceInterface'
+import SettingsPanel from './components/SettingsPanel'
 import './styles/App.css'
 
 function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [wireframeEnabled, setWireframeEnabled] = useState(true) // Start with wireframe enabled for debugging
+  const [nippleEnabled, setNippleEnabled] = useState(false)
+  const memoryPalaceRef = useRef()
 
   useEffect(() => {
     // Check if running on mobile
@@ -32,10 +36,24 @@ function App() {
     setVoiceEnabled(enabled)
   }
 
+  const handleWireframeToggle = (enabled) => {
+    setWireframeEnabled(enabled)
+    console.log(`Wireframe mode ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  const handleNippleToggle = (enabled) => {
+    setNippleEnabled(enabled)
+    console.log(`Nipple controls ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
-      <MemoryPalace />
+      <MemoryPalace 
+        ref={memoryPalaceRef}
+        wireframeEnabled={wireframeEnabled}
+        nippleEnabled={nippleEnabled}
+      />
       
       {/* Show loading overlay while initializing */}
       {isLoading && (
@@ -58,6 +76,13 @@ function App() {
       <VoiceInterface 
         enabled={voiceEnabled}
         isMobile={isMobile}
+      />
+
+      <SettingsPanel 
+        onWireframeToggle={handleWireframeToggle}
+        onNippleToggle={handleNippleToggle}
+        wireframeEnabled={wireframeEnabled}
+        nippleEnabled={nippleEnabled}
       />
       
       <div className="app-header">
