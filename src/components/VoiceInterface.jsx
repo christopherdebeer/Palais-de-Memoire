@@ -22,7 +22,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
   const captionTimeoutRef = useRef(null)
   
   // Initialize Anthropic streaming hook
-  const { streamMessage, status, liveBlocks } = useAnthropicStream(
+  const { send, status, liveBlocks } = useAnthropicStream(
     (message) => {
       // Handle incoming messages from stream
       console.log('[VoiceInterface] Received streaming message:', message)
@@ -175,49 +175,49 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
           objects: [] // TODO: Get from parent component
         }
         
-        // Add user message to conversation history
-        const newMessages = [
-          ...conversationHistory,
-          { role: 'user', content: command }
-        ]
-        
-        console.log('[VoiceInterface] Streaming message with context:', {
+        console.log('[VoiceInterface] Sending message with context:', {
           command,
           context,
-          messageCount: newMessages.length
+          historyLength: conversationHistory.length
         })
         
-        // Stream response from Anthropic
+        // Stream response from Anthropic using send function
         try {
-          const response = await streamMessage(newMessages, context)
+          const newMessages = await send(conversationHistory, command, context)
           
-          console.log('[VoiceInterface] Stream response received:', {
-            role: response.role,
-            contentBlocks: response.content?.length || 0
+          console.log('[VoiceInterface] Send response received:', {
+            newMessageCount: newMessages.length,
+            messageTypes: newMessages.map(m => m.role)
           })
           
-          // Extract text response from content blocks
+          // Process the assistant messages from the response
           let responseText = ''
           let toolCalls = []
           
-          if (response.content) {
-            for (const block of response.content) {
-              if (block.type === 'text') {
-                responseText += block.text
-              } else if (block.type === 'tool_use') {
-                toolCalls.push(block)
+          for (const message of newMessages) {
+            if (message.role === 'assistant' && message.content) {
+              for (const block of message.content) {
+                if (block.type === 'text') {
+                  responseText += block.text
+                } else if (block.type === 'tool_use') {
+                  toolCalls.push(block)
+                }
               }
             }
           }
           
-          console.log('[VoiceInterface] Parsed stream response:', {
+          console.log('[VoiceInterface] Parsed send response:', {
             responseText: responseText.substring(0, 100) + '...',
             toolCallCount: toolCalls.length,
             toolNames: toolCalls.map(t => t.name)
           })
           
-          // Update conversation history
-          setConversationHistory([...newMessages, response])
+          // Update conversation history with user message and new messages
+          setConversationHistory([
+            ...conversationHistory,
+            { role: 'user', content: command },
+            ...newMessages
+          ])
           
           // Set response for display
           if (responseText) {
