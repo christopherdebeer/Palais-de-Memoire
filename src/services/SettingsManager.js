@@ -17,7 +17,7 @@ export class SettingsManager {
       speechPitch: 1.0,
       
       // AI/LLM Settings
-      selectedModel: 'claude-3-sonnet-20240229',
+      selectedModel: 'claude-3-5-haiku-20241022',
       systemPrompt: `You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands. Process commands for creating rooms, adding objects, and navigating between memory spaces. Be conversational and supportive.`,
       responseTemperature: 0.7,
       
