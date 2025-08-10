@@ -46,15 +46,38 @@ export class SettingsManager {
     
     this.settings = this.loadSettings()
     this.listeners = new Set()
+    this.isInitializing = false
     
-    // Initialize persistence manager integration
-    this.initializePersistence()
+    // Initialize persistence manager integration synchronously
+    // This prevents race conditions during component initialization
+    this.initializePersistenceSync()
   }
   
   /**
-   * Initialize integration with persistence manager
+   * Initialize persistence manager synchronously to avoid race conditions
+   * This prevents settings from being overwritten during component initialization
    */
-  async initializePersistence() {
+  initializePersistenceSync() {
+    // Mark as initializing to prevent API calls during setup
+    this.isInitializing = true
+    
+    // Defer async persistence initialization to avoid race condition
+    // Components should be able to read settings immediately after constructor
+    setTimeout(async () => {
+      try {
+        await this.initializePersistenceAsync()
+      } finally {
+        this.isInitializing = false
+        // Notify listeners that initialization is complete
+        this.notifyListeners('initialization_complete', this.settings)
+      }
+    }, 0)
+  }
+  
+  /**
+   * Async persistence initialization (deferred)
+   */
+  async initializePersistenceAsync() {
     try {
       if (persistenceManager && !persistenceManager.isInitialized) {
         await persistenceManager.initialize({
@@ -63,6 +86,7 @@ export class SettingsManager {
       }
       
       // Migrate settings to persistence manager if configured
+      // Only if localStorage settings exist and persistence manager is ready
       if (this.settings.persistenceType !== 'localStorage' && persistenceManager.isInitialized) {
         await this.migrateToPersistenceManager()
       }
@@ -280,10 +304,54 @@ export class SettingsManager {
   }
 
   /**
-   * Check if APIs are configured
+   * Check if APIs are configured with defensive validation
    */
   isApiConfigured() {
-    return !!(this.settings.anthropicApiKey && this.settings.replicateApiKey)
+    // Prevent API calls during initialization to avoid race conditions
+    if (this.isInitializing) {
+      console.warn('[SettingsManager] API configuration check blocked - initialization in progress')
+      return false
+    }
+    
+    const anthropicKey = this.settings.anthropicApiKey
+    const replicateKey = this.settings.replicateApiKey
+    
+    // Validate keys are not just whitespace or empty
+    const isAnthropicValid = anthropicKey && typeof anthropicKey === 'string' && anthropicKey.trim().length > 0
+    const isReplicateValid = replicateKey && typeof replicateKey === 'string' && replicateKey.trim().length > 0
+    
+    const result = !!(isAnthropicValid && isReplicateValid)
+    
+    console.log('[SettingsManager] API configuration check:', {
+      anthropicValid: isAnthropicValid,
+      replicateValid: isReplicateValid,
+      result,
+      isInitializing: this.isInitializing
+    })
+    
+    return result
+  }
+  
+  /**
+   * Check if Anthropic API specifically is configured (for voice interface)
+   */
+  isAnthropicConfigured() {
+    if (this.isInitializing) {
+      console.warn('[SettingsManager] Anthropic configuration check blocked - initialization in progress')
+      return false
+    }
+    
+    const anthropicKey = this.settings.anthropicApiKey
+    const isValid = anthropicKey && typeof anthropicKey === 'string' && anthropicKey.trim().length > 0
+    
+    console.log('[SettingsManager] Anthropic configuration check:', {
+      hasKey: !!anthropicKey,
+      isValid,
+      keyLength: anthropicKey ? anthropicKey.length : 0,
+      isInitializing: this.isInitializing
+    })
+    
+    return isValid
   }
 
   /**

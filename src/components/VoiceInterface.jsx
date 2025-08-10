@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCaptioning } from '@fortawesome/free-solid-svg-icons'
-import anthropicAPI from '../services/AnthropicAPI.js'
+import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
 import settingsManager from '../services/SettingsManager.js'
 
 const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
@@ -16,9 +16,19 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
   const [captionsEnabled, setCaptionsEnabled] = useState(false)
   const [captionText, setCaptionText] = useState('')
   const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
+  const [conversationHistory, setConversationHistory] = useState([])
   const recognitionRef = useRef(null)
   const synthRef = useRef(null)
   const captionTimeoutRef = useRef(null)
+  
+  // Initialize Anthropic streaming hook
+  const { streamMessage, status, liveBlocks } = useAnthropicStream(
+    (message) => {
+      // Handle incoming messages from stream
+      console.log('[VoiceInterface] Received streaming message:', message)
+    },
+    null // Memory palace core - could be passed from parent component
+  )
 
   useEffect(() => {
     console.log('[VoiceInterface] Initializing voice interface...')
@@ -104,7 +114,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
     }
 
     // Check API configuration - only need Anthropic API for voice processing
-    const isConfigured = anthropicAPI.isConfigured()
+    const isConfigured = settingsManager.isAnthropicConfigured()
     console.log('[VoiceInterface] API configuration check:', {
       isConfigured,
       anthropicKey: settingsManager.get('anthropicApiKey') ? '[SET]' : '[NOT SET]'
@@ -118,10 +128,13 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
     }
 
     // Listen for settings changes
-    const handleSettingsChange = () => {
-      const newConfigured = anthropicAPI.isConfigured()
-      console.log('[VoiceInterface] Settings changed, API configured:', newConfigured)
-      setApiConfigured(newConfigured)
+    const handleSettingsChange = (eventType) => {
+      // Wait for initialization to complete before checking configuration
+      if (eventType === 'initialization_complete' || eventType === 'setting_changed') {
+        const newConfigured = settingsManager.isAnthropicConfigured()
+        console.log('[VoiceInterface] Settings changed, API configured:', newConfigured)
+        setApiConfigured(newConfigured)
+      }
     }
 
     settingsManager.addEventListener(handleSettingsChange)
@@ -144,62 +157,119 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
     console.log('[VoiceInterface] Processing command:', {
       command,
       apiConfigured,
-      isProcessing
+      isProcessing,
+      streamStatus: status
     })
     
     setIsProcessing(true)
     
     try {
       if (apiConfigured) {
-        console.log('[VoiceInterface] Using Anthropic API for command processing')
+        console.log('[VoiceInterface] Using useAnthropicStream hook for command processing')
         
-        // Use Anthropic API for intelligent command processing
+        // Build context for memory palace
         const context = {
           currentRoom: null, // TODO: Get from parent component
           rooms: [], // TODO: Get from parent component
           objects: [] // TODO: Get from parent component
         }
         
-        console.log('[VoiceInterface] Calling anthropicAPI.processInput with:', {
+        // Add user message to conversation history
+        const newMessages = [
+          ...conversationHistory,
+          { role: 'user', content: command }
+        ]
+        
+        console.log('[VoiceInterface] Streaming message with context:', {
           command,
-          context
-        })
-
-        const result = await anthropicAPI.processInput(command, context)
-        
-        console.log('[VoiceInterface] Anthropic API response:', {
-          text: result.text,
-          command: result.command,
-          parameters: result.parameters
+          context,
+          messageCount: newMessages.length
         })
         
-        setResponse(result.text)
-        speakResponse(result.text)
-
-        // Handle structured commands
-        if (result.command && onCommand) {
-          console.log('[VoiceInterface] Executing structured command:', {
-            type: result.command,
-            parameters: result.parameters
+        // Stream response from Anthropic
+        try {
+          const response = await streamMessage(newMessages, context)
+          
+          console.log('[VoiceInterface] Stream response received:', {
+            role: response.role,
+            contentBlocks: response.content?.length || 0
           })
           
-          onCommand({
-            type: result.command,
-            parameters: result.parameters,
-            originalInput: command,
-            aiResponse: result.text
+          // Extract text response from content blocks
+          let responseText = ''
+          let toolCalls = []
+          
+          if (response.content) {
+            for (const block of response.content) {
+              if (block.type === 'text') {
+                responseText += block.text
+              } else if (block.type === 'tool_use') {
+                toolCalls.push(block)
+              }
+            }
+          }
+          
+          console.log('[VoiceInterface] Parsed stream response:', {
+            responseText: responseText.substring(0, 100) + '...',
+            toolCallCount: toolCalls.length,
+            toolNames: toolCalls.map(t => t.name)
           })
-        } else {
-          console.log('[VoiceInterface] No structured command to execute')
+          
+          // Update conversation history
+          setConversationHistory([...newMessages, response])
+          
+          // Set response for display
+          if (responseText) {
+            setResponse(responseText)
+            speakResponse(responseText)
+          }
+          
+          // Handle tool calls as commands
+          if (toolCalls.length > 0 && onCommand) {
+            for (const toolCall of toolCalls) {
+              console.log('[VoiceInterface] Executing tool call:', {
+                name: toolCall.name,
+                input: toolCall.input,
+                id: toolCall.id
+              })
+              
+              onCommand({
+                type: toolCall.name.toUpperCase(),
+                parameters: toolCall.input,
+                originalInput: command,
+                aiResponse: responseText,
+                toolCallId: toolCall.id
+              })
+            }
+          } else if (!toolCalls.length && responseText && onCommand) {
+            // Send general response as info command
+            onCommand({
+              type: 'RESPONSE',
+              parameters: { text: responseText },
+              originalInput: command,
+              aiResponse: responseText
+            })
+          }
+          
+        } catch (streamError) {
+          console.error('[VoiceInterface] Stream processing error:', {
+            error: streamError.message,
+            command,
+            timestamp: new Date().toISOString()
+          })
+          throw streamError
         }
+        
       } else {
-        const fallbackReason = 'API key not configured or invalid'
+        const fallbackReason = 'Anthropic API key not configured or invalid'
         console.log('[VoiceInterface] Using fallback processing:', {
           reason: fallbackReason,
           apiConfigured,
-          hasAnthropicKey: !!settingsManager.get('anthropicApiKey')
+          hasAnthropicKey: !!settingsManager.get('anthropicApiKey'),
+          isInitializing: settingsManager.isInitializing
         })
         console.warn('[VoiceInterface] LLM fallback triggered - reason:', fallbackReason)
+        
         // Fallback to simple pattern matching when API not configured
         const lowerCommand = command.toLowerCase()
         let response = ''
@@ -231,7 +301,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
             type: 'FALLBACK',
             parameters: { input: command },
             originalInput: command,
-            aiResponse: response
+            aiResponse: response,
+            fallbackReason
           })
         }
       }
@@ -242,7 +313,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         command,
         apiConfigured,
         errorType: error.name,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        streamStatus: status
       }
       
       console.error('[VoiceInterface] Error processing command:', errorDetails)
@@ -252,6 +324,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         console.error('[VoiceInterface] API key error - check configuration')
       } else if (error.message.includes('network') || error.message.includes('fetch')) {
         console.error('[VoiceInterface] Network error - check internet connection')
+      } else if (error.message.includes('not configured')) {
+        console.error('[VoiceInterface] Configuration error - API not properly set up')
       } else {
         console.error('[VoiceInterface] Unknown error type encountered')
       }
