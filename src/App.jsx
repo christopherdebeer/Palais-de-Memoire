@@ -46,6 +46,41 @@ function App() {
     console.log(`Nipple controls ${enabled ? 'enabled' : 'disabled'}`)
   }
 
+  const handleVoiceCommand = (command) => {
+    console.log('Voice command received:', command)
+    
+    // Handle different command types
+    switch (command.type) {
+      case 'CREATE_ROOM':
+        console.log('Creating room:', command.parameters.roomName)
+        // TODO: Implement room creation logic
+        break
+      
+      case 'ADD_OBJECT':
+        console.log('Adding object:', command.parameters.objectName)
+        // TODO: Implement object addition logic
+        break
+      
+      case 'GO_TO_ROOM':
+        console.log('Navigating to room:', command.parameters.targetRoom)
+        // TODO: Implement room navigation logic
+        break
+      
+      case 'LIST_ROOMS':
+        console.log('Listing available rooms')
+        // TODO: Implement room listing logic
+        break
+      
+      case 'FALLBACK':
+        console.log('Fallback command processing for:', command.parameters.input)
+        // TODO: Implement basic fallback logic
+        break
+      
+      default:
+        console.log('Unknown command type:', command.type)
+    }
+  }
+
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
@@ -76,6 +111,7 @@ function App() {
       <VoiceInterface 
         enabled={voiceEnabled}
         isMobile={isMobile}
+        onCommand={handleVoiceCommand}
       />
 
       <SettingsPanel 
