@@ -47,17 +47,22 @@ function App() {
   }
 
   const handleVoiceCommand = (command) => {
-    console.log('Voice command received:', command)
+    console.log('[App] Voice command received:', {
+      type: command.type,
+      parameters: command.parameters,
+      originalInput: command.originalInput,
+      aiResponse: command.aiResponse
+    })
     
     // Handle different command types
     switch (command.type) {
       case 'CREATE_ROOM':
-        console.log('Creating room:', command.parameters.roomName)
+        console.log('[App] Processing CREATE_ROOM command:', command.parameters.roomName)
         // TODO: Implement room creation logic
         break
       
       case 'ADD_OBJECT':
-        console.log('Adding object:', command.parameters.objectName)
+        console.log('[App] Processing ADD_OBJECT command:', command.parameters.objectName)
         // TODO: Implement object addition logic
         break
       
