@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCaptioning } from '@fortawesome/free-solid-svg-icons'
 import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
 import settingsManager from '../services/SettingsManager.js'
+import voiceManager from '../utils/VoiceManager.js'
 
 const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState }) => {
   const [isListening, setIsListening] = useState(false)
@@ -376,7 +377,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     }
   }
 
-  const speakResponse = (text) => {
+  const speakResponse = async (text) => {
     console.log('[VoiceInterface] Speaking response:', {
       text,
       speechSynthesisSupported: 'speechSynthesis' in window,
@@ -398,20 +399,45 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         volume: utterance.volume
       })
 
-      // Use configured voice if available
-      const voices = window.speechSynthesis.getVoices()
-      const selectedVoice = settingsManager.get('voice')
+      // Use configured voice with VoiceManager for better voice handling
+      const selectedVoiceName = settingsManager.get('voice')
       console.log('[VoiceInterface] Voice selection:', {
-        availableVoices: voices.length,
-        selectedVoice,
-        voiceFound: selectedVoice && voices.some(v => v.name === selectedVoice)
+        selectedVoiceName,
+        voiceManagerLoaded: !voiceManager.isLoading()
       })
       
-      if (selectedVoice && voices.length > 0) {
-        const voice = voices.find(v => v.name === selectedVoice)
-        if (voice) {
-          utterance.voice = voice
-          console.log('[VoiceInterface] Using voice:', voice.name)
+      if (selectedVoiceName) {
+        try {
+          const selectedVoice = await voiceManager.findVoiceByName(selectedVoiceName)
+          if (selectedVoice) {
+            utterance.voice = selectedVoice
+            console.log('[VoiceInterface] Using voice from VoiceManager:', {
+              name: selectedVoice.name,
+              lang: selectedVoice.lang,
+              localService: selectedVoice.localService
+            })
+          } else {
+            console.warn('[VoiceInterface] Selected voice not found:', selectedVoiceName)
+            // Fallback to default voice for the language
+            const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
+            if (defaultVoice) {
+              utterance.voice = defaultVoice
+              console.log('[VoiceInterface] Using default voice fallback:', defaultVoice.name)
+            }
+          }
+        } catch (error) {
+          console.error('[VoiceInterface] Error setting voice:', error)
+        }
+      } else {
+        // No voice selected, use system default or get a recommended voice
+        try {
+          const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
+          if (defaultVoice) {
+            utterance.voice = defaultVoice
+            console.log('[VoiceInterface] Using system default voice:', defaultVoice.name)
+          }
+        } catch (error) {
+          console.warn('[VoiceInterface] Could not set default voice:', error)
         }
       }
 

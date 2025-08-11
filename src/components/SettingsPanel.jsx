@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash } from '@fortawesome/free-solid-svg-icons'
+import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash, faPlay, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import { faBorderAll } from '@fortawesome/free-solid-svg-icons'
 import settingsManager from '../services/SettingsManager.js'
+import voiceManager from '../utils/VoiceManager.js'
 
 const SettingsPanel = ({ 
   onWireframeToggle, 
@@ -14,6 +15,12 @@ const SettingsPanel = ({
 }) => {
   const [settings, setSettings] = useState(settingsManager.getAllSettings())
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [voices, setVoices] = useState([])
+  const [voicesLoading, setVoicesLoading] = useState(true)
+  const [voicesByLanguage, setVoicesByLanguage] = useState({})
+  const [testingVoice, setTestingVoice] = useState(null)
+  const [testResult, setTestResult] = useState(null) // 'success', 'error', or null
+  const [testMessage, setTestMessage] = useState('')
 
   // Load settings on mount
   useEffect(() => {
@@ -29,6 +36,111 @@ const SettingsPanel = ({
     settingsManager.addEventListener(handleSettingsChange)
     return () => settingsManager.removeEventListener(handleSettingsChange)
   }, [])
+
+  // Load voices when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      loadVoices()
+    }
+  }, [isOpen])
+
+  const loadVoices = async () => {
+    try {
+      setVoicesLoading(true)
+      
+      // Load all voices
+      const allVoices = await voiceManager.getVoices()
+      setVoices(allVoices)
+      
+      // Load voices grouped by language
+      const grouped = await voiceManager.getVoicesByLanguage()
+      setVoicesByLanguage(grouped)
+      
+      console.log('[SettingsPanel] Loaded voices:', {
+        total: allVoices.length,
+        languages: Object.keys(grouped).length,
+        voiceNames: allVoices.map(v => v.name),
+        groupedStructure: Object.entries(grouped).map(([lang, group]) => ({
+          language: lang,
+          count: group.voices.length,
+          voices: group.voices.map(v => v.name)
+        }))
+      })
+    } catch (error) {
+      console.error('[SettingsPanel] Failed to load voices:', error)
+    } finally {
+      setVoicesLoading(false)
+    }
+  }
+
+  const handleVoiceTest = async (voiceName) => {
+    if (testingVoice) return // Prevent multiple tests at once
+    
+    // Clear previous test results
+    setTestResult(null)
+    setTestMessage('')
+    
+    try {
+      setTestingVoice(voiceName)
+      
+      // Find the voice from the current selection (use current state, not saved settings)
+      const selectedVoice = voices.find(v => v.name === voiceName)
+      
+      if (!selectedVoice) {
+        throw new Error('Selected voice not found')
+      }
+      
+      console.log('[SettingsPanel] Testing voice:', selectedVoice.name)
+      
+      // Test the voice with current speech settings
+      await voiceManager.testVoice(
+        selectedVoice, 
+        "Hello! This is a test of the selected voice.",
+        {
+          rate: settings.speechRate || 1.0,
+          pitch: settings.speechPitch || 1.0
+        }
+      )
+      
+      // Show success feedback
+      setTestResult('success')
+      setTestMessage('Voice test completed successfully!')
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setTestResult(null)
+        setTestMessage('')
+      }, 3000)
+      
+    } catch (error) {
+      console.error('[SettingsPanel] Voice test failed:', error)
+      
+      // Show error feedback
+      setTestResult('error')
+      
+      // Provide user-friendly error messages
+      if (error.message.includes('not found')) {
+        setTestMessage('Voice not available. Please select a different voice.')
+      } else if (error.message.includes('not supported')) {
+        setTestMessage('Speech synthesis not supported in this browser.')
+      } else {
+        setTestMessage('Voice test failed. Please check your browser audio settings.')
+      }
+      
+      // Clear error message after 5 seconds
+      setTimeout(() => {
+        setTestResult(null)
+        setTestMessage('')
+      }, 5000)
+      
+    } finally {
+      setTestingVoice(null)
+    }
+  }
+
+  const handleVoiceChange = (voiceName) => {
+    handleSettingChange('voice', voiceName)
+  }
 
   const handleClose = () => {
     if (onClose) {
@@ -221,6 +333,96 @@ const SettingsPanel = ({
                   onChange={(e) => handleSettingChange('speechPitch', parseFloat(e.target.value))}
                   className="range-input"
                 />
+              </div>
+
+              {/* Voice Selection */}
+              <div className="setting-item">
+                <div className="setting-info">
+                  <label htmlFor="voice-select">Text-to-Speech Voice</label>
+                  <p>Choose the voice for AI responses and feedback</p>
+                </div>
+                <div className="voice-selection-container">
+                  {voicesLoading ? (
+                    <div className="voice-loading">
+                      <FontAwesomeIcon icon={faSpinner} spin />
+                      <span>Loading available voices...</span>
+                    </div>
+                  ) : voices.length === 0 ? (
+                    <div className="voice-unavailable">
+                      <span>No voices available - Speech synthesis not supported</span>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        id="voice-select"
+                        value={settings.voice || ''}
+                        onChange={(e) => handleVoiceChange(e.target.value)}
+                        className="settings-select voice-select"
+                      >
+                        <option value="">Default System Voice</option>
+                        {Object.entries(voicesByLanguage)
+                          .filter(([langCode, langGroup]) => langGroup.voices && langGroup.voices.length > 0) // Filter out empty language groups
+                          .map(([langCode, langGroup]) => (
+                            <optgroup key={langCode} label={`${langGroup.name} (${langGroup.voices.length})`}>
+                              {langGroup.voices
+                                .filter(voice => voice.name && voice.name.trim()) // Filter out voices with invalid names
+                                .map((voice, index) => (
+                                  <option key={`${langCode}-${voice.name || `voice-${index}`}`} value={voice.name}>
+                                    {voice.displayName}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          ))}
+                      </select>
+                      
+                      {/* Voice Test Button */}
+                      {settings.voice && (
+                        <button
+                          className="voice-test-btn"
+                          onClick={() => handleVoiceTest(settings.voice)}
+                          disabled={testingVoice === settings.voice}
+                          aria-label="Test selected voice"
+                        >
+                          {testingVoice === settings.voice ? (
+                            <FontAwesomeIcon icon={faSpinner} spin />
+                          ) : (
+                            <FontAwesomeIcon icon={faPlay} />
+                          )}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+                
+                {/* Voice Test Feedback */}
+                {testMessage && (
+                  <div className={`voice-test-feedback ${testResult}`}>
+                    <span>{testMessage}</span>
+                  </div>
+                )}
+                
+                {/* Voice Info */}
+                {settings.voice && voices.length > 0 && (
+                  <div className="voice-info">
+                    {(() => {
+                      const selectedVoice = voices.find(v => v.name === settings.voice)
+                      if (selectedVoice) {
+                        return (
+                          <div className="voice-details">
+                            <span className="voice-lang">Language: {selectedVoice.lang || 'Unknown'}</span>
+                            <span className="voice-type">
+                              {selectedVoice.localService ? 'Local Voice' : 'Cloud Voice'}
+                            </span>
+                            {voiceManager.getVoiceQuality(selectedVoice) === 'high' && (
+                              <span className="voice-quality">High Quality</span>
+                            )}
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
 
