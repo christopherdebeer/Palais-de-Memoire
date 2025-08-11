@@ -4,7 +4,7 @@ import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCa
 import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
 import settingsManager from '../services/SettingsManager.js'
 
-const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled }) => {
+const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState }) => {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
@@ -18,13 +18,13 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
   const synthRef = useRef(null)
   const captionTimeoutRef = useRef(null)
   
-  // Initialize Anthropic streaming hook
+  // Initialize Anthropic streaming hook with memory palace core
   const { send, status, liveBlocks } = useAnthropicStream(
     (message) => {
       // Handle incoming messages from stream
       console.log('[VoiceInterface] Received streaming message:', message)
     },
-    null // Memory palace core - could be passed from parent component
+    memoryPalaceCore // Pass the memory palace core for tool execution
   )
 
   useEffect(() => {
@@ -201,11 +201,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       if (apiConfigured) {
         console.log('[VoiceInterface] Using useAnthropicStream hook for command processing')
         
-        // Build context for memory palace
+        // Build context for memory palace from current state
         const context = {
-          currentRoom: null, // TODO: Get from parent component
-          rooms: [], // TODO: Get from parent component
-          objects: [] // TODO: Get from parent component
+          currentRoom: currentPalaceState?.currentRoom || null,
+          rooms: memoryPalaceCore ? memoryPalaceCore.getAllRooms() : [],
+          objects: memoryPalaceCore ? memoryPalaceCore.getCurrentRoomObjects() : []
         }
         
         console.log('[VoiceInterface] Sending message with context:', {

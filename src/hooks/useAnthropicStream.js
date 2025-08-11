@@ -125,34 +125,51 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
 
     let contextPrompt = basePrompt + '\n\n'
 
+    // Current room context
     if (currentRoom) {
       contextPrompt += `CURRENT ROOM: ${currentRoom.name}\n`
       contextPrompt += `ROOM DESCRIPTION: ${currentRoom.description}\n`
+      
+      if (objects.length > 0) {
+        contextPrompt += `OBJECTS IN THIS ROOM:\n${objects.map(obj => 
+          `- ${obj.name}: ${obj.info || obj.information}`
+        ).join('\n')}\n`
+      } else {
+        contextPrompt += `OBJECTS IN THIS ROOM: None yet\n`
+      }
+    } else {
+      contextPrompt += `CURRENT ROOM: None (user needs to create a room first)\n`
     }
 
+    // Available rooms context
     if (rooms.length > 0) {
-      contextPrompt += `\nAVAILABLE ROOMS:\n${rooms.map(room => 
-        `- ${room.name}: ${room.description}`
-      ).join('\n')}\n`
-    }
-
-    if (objects.length > 0) {
-      contextPrompt += `\nOBJECTS IN CURRENT ROOM:\n${objects.map(obj => 
-        `- ${obj.name}: ${obj.info}`
-      ).join('\n')}\n`
+      contextPrompt += `\nALL ROOMS IN PALACE (${rooms.length} total):\n${rooms.map(room => {
+        const isCurrent = currentRoom && room.id === currentRoom.id
+        return `- ${room.name}${isCurrent ? ' (CURRENT)' : ''}: ${room.description}`
+      }).join('\n')}\n`
+    } else {
+      contextPrompt += `\nALL ROOMS IN PALACE: None yet (suggest creating the first room)\n`
     }
 
     contextPrompt += `
 MEMORY PALACE TOOLS AVAILABLE:
-- create_room: Create a new memory room
-- edit_room: Modify current room description  
-- go_to_room: Navigate to another room
-- add_object: Add memory object to current room
-- remove_object: Remove object from room
-- list_rooms: Show available rooms
-- get_room_info: Get details about current room
+- create_room: Create a new memory room with name and description
+- edit_room: Modify current room's description  
+- go_to_room: Navigate to another existing room by name
+- add_object: Add a memory object to the current room
+- remove_object: Remove an object from the current room
+- list_rooms: Show all available rooms with current room marked
+- get_room_info: Get detailed info about current room and its objects
 
-Use these tools to help users build and navigate their memory palace.`
+IMPORTANT GUIDELINES:
+- Always use tools to perform actions rather than just describing them
+- If user wants to create something, use create_room or add_object tools
+- If user wants to go somewhere, use go_to_room tool
+- If user asks about current state, use get_room_info or list_rooms tools
+- Be conversational and helpful while taking concrete actions
+- Encourage exploration and memory association techniques
+
+Use these tools actively to help users build and navigate their memory palace.`
 
     return contextPrompt
   }, [])

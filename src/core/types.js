@@ -106,6 +106,7 @@ export const EventTypes = {
   ROOM_UPDATED: 'room_updated',
   ROOM_DELETED: 'room_deleted',
   ROOM_CHANGED: 'room_changed',
+  ROOM_NAVIGATED: 'room_navigated',
   OBJECT_CREATED: 'object_created',
   OBJECT_UPDATED: 'object_updated',
   OBJECT_DELETED: 'object_deleted',

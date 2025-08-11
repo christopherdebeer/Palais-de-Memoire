@@ -52,18 +52,13 @@ export class MemoryPalaceToolManager {
    * Create a new room
    */
   async createRoom({ name, description }) {
-    if (!this.roomManager) {
+    if (!this.core) {
       return `Room creation not available - Memory Palace core not initialized`
     }
 
     try {
-      const room = await this.roomManager.createRoom({
-        name,
-        description,
-        position: { x: 0, y: 0, z: 0 } // Default position
-      })
-      
-      return `Successfully created room "${name}" with description: ${description}`
+      const room = await this.core.createRoom(name, description)
+      return `Successfully created room "${name}" with description: ${description}. Room ID: ${room.id}`
     } catch (error) {
       return `Failed to create room "${name}": ${error.message}`
     }
@@ -73,18 +68,20 @@ export class MemoryPalaceToolManager {
    * Edit current room description
    */
   async editRoom({ description }) {
-    if (!this.roomManager) {
+    if (!this.core || !this.roomManager) {
       return `Room editing not available - Memory Palace core not initialized`
     }
 
     try {
-      const currentRoom = this.roomManager.getCurrentRoom()
+      const currentState = this.core.getCurrentState()
+      const currentRoom = currentState.currentRoom
+      
       if (!currentRoom) {
         return `No current room to edit`
       }
 
       await this.roomManager.updateRoom(currentRoom.id, { description })
-      return `Successfully updated room description to: ${description}`
+      return `Successfully updated room "${currentRoom.name}" description to: ${description}`
     } catch (error) {
       return `Failed to edit room: ${error.message}`
     }
@@ -94,18 +91,23 @@ export class MemoryPalaceToolManager {
    * Navigate to another room
    */
   async goToRoom({ roomName }) {
-    if (!this.roomManager) {
+    if (!this.core) {
       return `Room navigation not available - Memory Palace core not initialized`
     }
 
     try {
-      const room = await this.roomManager.findRoomByName(roomName)
+      const rooms = this.core.getAllRooms()
+      const room = rooms.find(r => 
+        r.name.toLowerCase().includes(roomName.toLowerCase())
+      )
+      
       if (!room) {
-        return `Room "${roomName}" not found`
+        const availableRooms = rooms.map(r => r.name).join(', ')
+        return `Room "${roomName}" not found. Available rooms: ${availableRooms || 'none'}`
       }
 
-      await this.roomManager.navigateToRoom(room.id)
-      return `Successfully navigated to room: ${roomName}`
+      await this.core.navigateToRoom(room.id)
+      return `Successfully navigated to room: ${room.name}`
     } catch (error) {
       return `Failed to navigate to room "${roomName}": ${error.message}`
     }
@@ -115,24 +117,18 @@ export class MemoryPalaceToolManager {
    * Add object to current room
    */
   async addObject({ name, info }) {
-    if (!this.objectManager || !this.roomManager) {
+    if (!this.core) {
       return `Object management not available - Memory Palace core not initialized`
     }
 
     try {
-      const currentRoom = this.roomManager.getCurrentRoom()
-      if (!currentRoom) {
-        return `No current room to add object to`
+      const currentState = this.core.getCurrentState()
+      if (!currentState.currentRoom) {
+        return `No current room to add object to. Please create a room first.`
       }
 
-      await this.objectManager.createObject({
-        name,
-        info,
-        roomId: currentRoom.id,
-        position: { x: 0, y: 0, z: 0 } // Default position
-      })
-
-      return `Successfully added object "${name}" with info: ${info}`
+      const object = await this.core.addObject(name, info)
+      return `Successfully added object "${name}" with info: ${info} to room "${currentState.currentRoom.name}"`
     } catch (error) {
       return `Failed to add object "${name}": ${error.message}`
     }
@@ -142,23 +138,28 @@ export class MemoryPalaceToolManager {
    * Remove object from current room
    */
   async removeObject({ name }) {
-    if (!this.objectManager || !this.roomManager) {
+    if (!this.core || !this.objectManager) {
       return `Object management not available - Memory Palace core not initialized`
     }
 
     try {
-      const currentRoom = this.roomManager.getCurrentRoom()
-      if (!currentRoom) {
+      const currentState = this.core.getCurrentState()
+      if (!currentState.currentRoom) {
         return `No current room to remove object from`
       }
 
-      const object = await this.objectManager.findObjectByName(name, currentRoom.id)
+      const objects = this.core.getCurrentRoomObjects()
+      const object = objects.find(obj => 
+        obj.name.toLowerCase().includes(name.toLowerCase())
+      )
+      
       if (!object) {
-        return `Object "${name}" not found in current room`
+        const availableObjects = objects.map(obj => obj.name).join(', ')
+        return `Object "${name}" not found in current room. Available objects: ${availableObjects || 'none'}`
       }
 
       await this.objectManager.deleteObject(object.id)
-      return `Successfully removed object: ${name}`
+      return `Successfully removed object: ${object.name}`
     } catch (error) {
       return `Failed to remove object "${name}": ${error.message}`
     }
@@ -168,22 +169,26 @@ export class MemoryPalaceToolManager {
    * List all available rooms
    */
   async listRooms() {
-    if (!this.roomManager) {
+    if (!this.core) {
       return `Room listing not available - Memory Palace core not initialized`
     }
 
     try {
-      const rooms = await this.roomManager.getAllRooms()
+      const rooms = this.core.getAllRooms()
       
       if (rooms.length === 0) {
-        return `No rooms found in your memory palace`
+        return `No rooms found in your memory palace. Say "create a room" to get started!`
       }
 
-      const roomList = rooms.map(room => 
-        `- ${room.name}: ${room.description}`
-      ).join('\n')
+      const currentState = this.core.getCurrentState()
+      const currentRoomId = currentState.currentRoom?.id
 
-      return `Available rooms in your memory palace:\n${roomList}`
+      const roomList = rooms.map(room => {
+        const marker = room.id === currentRoomId ? ' (current)' : ''
+        return `- ${room.name}${marker}: ${room.description}`
+      }).join('\n')
+
+      return `Available rooms in your memory palace (${rooms.length} total):\n${roomList}`
     } catch (error) {
       return `Failed to list rooms: ${error.message}`
     }
@@ -193,27 +198,35 @@ export class MemoryPalaceToolManager {
    * Get information about current room
    */
   async getRoomInfo() {
-    if (!this.roomManager || !this.objectManager) {
+    if (!this.core) {
       return `Room info not available - Memory Palace core not initialized`
     }
 
     try {
-      const currentRoom = this.roomManager.getCurrentRoom()
+      const currentState = this.core.getCurrentState()
+      const currentRoom = currentState.currentRoom
+      
       if (!currentRoom) {
-        return `No current room`
+        return `No current room. Say "create a room" to get started!`
       }
 
-      const objects = await this.objectManager.getObjectsInRoom(currentRoom.id)
+      const objects = this.core.getCurrentRoomObjects()
       
       let info = `Current room: ${currentRoom.name}\n`
       info += `Description: ${currentRoom.description}\n`
       
       if (objects.length > 0) {
-        info += `\nObjects in this room:\n`
-        info += objects.map(obj => `- ${obj.name}: ${obj.info}`).join('\n')
+        info += `\nObjects in this room (${objects.length} total):\n`
+        info += objects.map(obj => `- ${obj.name}: ${obj.info || obj.information}`).join('\n')
       } else {
-        info += `\nNo objects in this room`
+        info += `\nNo objects in this room yet. Say "add an object" to place something here.`
       }
+
+      // Add room statistics
+      const stats = currentState.stats
+      info += `\n\nMemory Palace Statistics:`
+      info += `\n- Total rooms: ${stats.totalRooms}`
+      info += `\n- Total objects: ${stats.totalObjects}`
 
       return info
     } catch (error) {
