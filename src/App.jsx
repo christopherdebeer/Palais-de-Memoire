@@ -174,16 +174,33 @@ function App() {
         
         // Execute the action directly
         const toolName = command === 'list-rooms' ? 'list_rooms' : 'get_room_info'
-        const result = await memoryPalaceCore.roomManager ? 
-          (await import('./utils/memoryPalaceTools.js')).default.prototype.executeTool.call(
-            { core: memoryPalaceCore, roomManager: memoryPalaceCore.roomManager, objectManager: memoryPalaceCore.objectManager },
-            toolName, {}, null
-          ) : 'Memory Palace not fully initialized'
+        let result
+        
+        if (memoryPalaceCore.roomManager) {
+          const MemoryPalaceToolManager = (await import('./utils/memoryPalaceTools.js')).default
+          const toolManager = new MemoryPalaceToolManager(memoryPalaceCore)
+          result = await toolManager.executeTool(toolName, {}, null)
+        } else {
+          result = 'Memory Palace not fully initialized'
+        }
         
         console.log('[App] Direct action result:', result)
         
-        // Show result in a simple alert for now (could be enhanced with a result modal)
-        alert(result)
+        // Convert result to string if it's an object
+        const resultText = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)
+        
+        // Trigger TTS and captions instead of alert
+        handleCaptionUpdate(resultText, 'synthesis')
+        
+        // Use TTS functionality
+        if (window.speechSynthesis && resultText) {
+          window.speechSynthesis.cancel()
+          const utterance = new SpeechSynthesisUtterance(resultText)
+          utterance.rate = 0.9
+          utterance.pitch = 1.0
+          utterance.volume = 0.8
+          window.speechSynthesis.speak(utterance)
+        }
         
       } catch (error) {
         console.error('[App] Error executing direct action:', error)
@@ -347,8 +364,21 @@ function App() {
       setActionModalOpen(false)
       setCurrentAction(null)
       
-      // Show success message (could be enhanced with a toast notification)
-      alert(`Success: ${result}`)
+      // Convert result to string if it's an object
+      const resultText = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)
+      
+      // Trigger TTS and captions instead of alert
+      handleCaptionUpdate(`Success: ${resultText}`, 'synthesis')
+      
+      // Use TTS functionality
+      if (window.speechSynthesis && resultText) {
+        window.speechSynthesis.cancel()
+        const utterance = new SpeechSynthesisUtterance(`Success: ${resultText}`)
+        utterance.rate = 0.9
+        utterance.pitch = 1.0
+        utterance.volume = 0.8
+        window.speechSynthesis.speak(utterance)
+      }
       
     } catch (error) {
       console.error('[App] Error executing action:', error)
