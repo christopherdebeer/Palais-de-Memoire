@@ -40,7 +40,8 @@ function App() {
   
   // Minimap state
   const [showMinimap, setShowMinimap] = useState(true)
-  const [minimapCollapsed, setMinimapCollapsed] = useState(false)
+  const [minimapCollapsed, setMinimapCollapsed] = useState(true) // Start collapsed by default
+  const [minimapPosition, setMinimapPosition] = useState({ x: 20, y: 20 }) // Default position
   const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: 0 })
   
   // Mobile motion control state
@@ -776,6 +777,8 @@ function App() {
           onLookAt={handleMinimapLookAt}
           onToggle={handleMinimapToggle}
           isCollapsed={minimapCollapsed}
+          position={minimapPosition}
+          onPositionChange={setMinimapPosition}
         />
       )}
 

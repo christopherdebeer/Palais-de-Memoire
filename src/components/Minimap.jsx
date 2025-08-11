@@ -8,11 +8,16 @@ const Minimap = ({
   cameraRotation = { yaw: 0, pitch: 0 },
   onLookAt = null,
   onToggle = null,
-  isCollapsed = false
+  isCollapsed = false,
+  position = { x: 20, y: 20 },
+  onPositionChange = null
 }) => {
   const canvasRef = useRef(null)
+  const minimapRef = useRef(null)
   const [hoveredObject, setHoveredObject] = useState(null)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
 
   // Minimap dimensions
   const MINIMAP_SIZE = isCollapsed ? 120 : 200
@@ -216,11 +221,77 @@ const Minimap = ({
     setHoveredObject(null)
   }
 
+  // Drag handlers for minimap repositioning
+  const handleHeaderMouseDown = (event) => {
+    if (event.target.closest('.minimap-btn')) {
+      // Don't start dragging if clicking on a button
+      return
+    }
+    
+    setIsDragging(true)
+    const rect = minimapRef.current.getBoundingClientRect()
+    setDragOffset({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    })
+    event.preventDefault()
+  }
+
+  const handleMouseMove = (event) => {
+    if (!isDragging || !onPositionChange) return
+
+    const newX = event.clientX - dragOffset.x
+    const newY = event.clientY - dragOffset.y
+
+    // Keep minimap within viewport bounds
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const minimapWidth = isCollapsed ? 140 : 220
+    const minimapHeight = isCollapsed ? 160 : 280
+
+    const clampedX = Math.max(0, Math.min(newX, viewportWidth - minimapWidth))
+    const clampedY = Math.max(0, Math.min(newY, viewportHeight - minimapHeight))
+
+    onPositionChange({ x: clampedX, y: clampedY })
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  // Add global mouse event listeners for dragging
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'grabbing'
+      document.body.style.userSelect = 'none'
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [isDragging, dragOffset, onPositionChange, isCollapsed])
+
   if (!isVisible) return null
 
   return (
-    <div className={`minimap ${isCollapsed ? 'collapsed' : 'expanded'}`}>
-      <div className="minimap-header">
+    <div 
+      ref={minimapRef}
+      className={`minimap ${isCollapsed ? 'collapsed' : 'expanded'} ${isDragging ? 'dragging' : ''}`}
+      style={{
+        left: `${position.x}px`,
+        top: `${position.y}px`
+      }}
+    >
+      <div 
+        className="minimap-header"
+        onMouseDown={handleHeaderMouseDown}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      >
         <div className="minimap-title">
           <FontAwesomeIcon icon={faMap} />
           {!isCollapsed && <span>Room Map</span>}
