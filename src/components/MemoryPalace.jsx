@@ -155,7 +155,7 @@ const MemoryPalace = forwardRef(({
     
     // Try to load local skybox first, fallback to remote if needed
     const tryLoadSkybox = () => {
-      const localSkyboxPath = './assets/default_skybox.jpg'
+      const localSkyboxPath = '/default_skybox.jpg'
       
       skyboxTexture = textureLoader.load(
         localSkyboxPath,
