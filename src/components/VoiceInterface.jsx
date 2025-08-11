@@ -515,8 +515,24 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       enabled,
       isSupported,
       isListening,
-      isProcessing
+      isProcessing,
+      apiConfigured
     })
+    
+    // Check if API is configured before starting voice recognition
+    if (!apiConfigured) {
+      console.warn('[VoiceInterface] API not configured - providing feedback instead of starting recognition')
+      const fallbackReason = 'Anthropic API key not configured or invalid'
+      const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
+      
+      // Provide the same feedback as text input would
+      if (onCaptionUpdate) {
+        onCaptionUpdate(response, 'synthesis')
+      }
+      speakResponse(response)
+      
+      return
+    }
     
     if (recognitionRef.current && enabled && isSupported && !isListening) {
       try {
@@ -553,6 +569,25 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       const command = textInput.trim()
       setTextInput('')
       setTranscript(command)
+      
+      // Check if API is configured before processing text input
+      if (!apiConfigured) {
+        console.warn('[VoiceInterface] API not configured - providing feedback for text input')
+        const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
+        
+        // Provide consistent feedback for text input
+        if (onCaptionUpdate) {
+          onCaptionUpdate(`You typed: "${command}"`, 'recognition')
+          // Brief delay then show the response
+          setTimeout(() => {
+            onCaptionUpdate(response, 'synthesis')
+          }, 1000)
+        }
+        speakResponse(response)
+        
+        return
+      }
+      
       await processCommand(command)
     }
   }
