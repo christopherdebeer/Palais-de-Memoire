@@ -13,6 +13,9 @@ const MemoryPalace = forwardRef(({
   const wireframeSphereRef = useRef(null)
   const nippleManagerRef = useRef(null)
   const nippleContainerRef = useRef(null)
+  
+  // Camera rotation state - needs to be accessible across all functions
+  const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
 
   // Nipple.js functions
   const initializeNipple = () => {
@@ -47,18 +50,30 @@ const MemoryPalace = forwardRef(({
       const angle = data.angle.radian
       
       // Convert nipple input to camera rotation
-      const rotationSpeed = 0.02 * force
+      const rotationSpeed = 1000 * force // Increased for better responsiveness
       const deltaX = Math.cos(angle) * rotationSpeed
       const deltaY = Math.sin(angle) * rotationSpeed
       
-      cameraRef.current.rotation.y -= deltaX
-      cameraRef.current.rotation.x -= deltaY
+      // Update yaw and pitch using prototype's approach
+      cameraRotationRef.current.yaw += deltaX   // Horizontal rotation (left/right) - fixed direction
+      cameraRotationRef.current.pitch += deltaY // Vertical rotation (up/down) - fixed direction
       
-      // Limit vertical rotation
-      cameraRef.current.rotation.x = Math.max(
-        -Math.PI / 2, 
-        Math.min(Math.PI / 2, cameraRef.current.rotation.x)
-      )
+      // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
+      cameraRotationRef.current.yaw = Math.max(-135, Math.min(135, cameraRotationRef.current.yaw))
+      
+      // Clamp vertical rotation - from prototype
+      cameraRotationRef.current.pitch = Math.max(-85, Math.min(85, cameraRotationRef.current.pitch))
+      
+      // Apply rotation using spherical coordinate approach (adjusted for forward-facing)
+      const phi = THREE.MathUtils.degToRad(90 - cameraRotationRef.current.pitch)
+      const theta = THREE.MathUtils.degToRad(cameraRotationRef.current.yaw)
+      
+      // Rotate coordinate system so 0,0 faces forward (positive X)
+      const x = 500 * Math.sin(phi) * Math.cos(theta)
+      const y = 500 * Math.cos(phi)
+      const z = 500 * Math.sin(phi) * Math.sin(theta)
+      
+      cameraRef.current.lookAt(x, y, z)
     })
 
     console.log('Nipple.js controls initialized')
@@ -162,6 +177,10 @@ const MemoryPalace = forwardRef(({
         (texture) => {
           // Local texture loaded successfully
           console.log('Local skybox texture loaded successfully')
+          texture.mapping = THREE.EquirectangularReflectionMapping
+          texture.wrapS = THREE.RepeatWrapping
+          texture.wrapT = THREE.ClampToEdgeWrapping
+          texture.offset.x = 0.5 // Shift texture by 180 degrees to show front when looking at positive X
           material.map = texture
           material.color.setHex(0xffffff)
           material.needsUpdate = true
@@ -180,6 +199,10 @@ const MemoryPalace = forwardRef(({
             'https://page-images.websim.com/Create_a_360_degree_equirectangular_panoramic_image_in_21_9_aspect_ratio_showing__scene_____TECHNICA_694056a68c0178.jpg',
             (texture) => {
               console.log('Remote skybox texture loaded successfully')
+              texture.mapping = THREE.EquirectangularReflectionMapping
+              texture.wrapS = THREE.RepeatWrapping
+              texture.wrapT = THREE.ClampToEdgeWrapping
+              texture.offset.x = 0.5 // Shift texture by 180 degrees to show front when looking at positive X
               material.map = texture
               material.color.setHex(0xffffff)
               material.needsUpdate = true
@@ -231,8 +254,10 @@ const MemoryPalace = forwardRef(({
 
       // Convert canvas to texture
       const proceduralTexture = new THREE.CanvasTexture(canvas)
+      proceduralTexture.mapping = THREE.EquirectangularReflectionMapping
       proceduralTexture.wrapS = THREE.RepeatWrapping
       proceduralTexture.wrapT = THREE.ClampToEdgeWrapping
+      proceduralTexture.offset.x = 0.5 // Shift texture by 180 degrees to show front when looking at positive X
       
       material.map = proceduralTexture
       material.color.setHex(0xffffff)
@@ -313,14 +338,42 @@ const MemoryPalace = forwardRef(({
 
     window.addEventListener('resize', handleResize)
 
-    // Mouse and touch controls
-    let mouseX = 0
-    let mouseY = 0
-    let targetRotationX = 0
-    let targetRotationY = 0
+    // Camera control state
     let isDragging = false
-    let lastTouchX = 0
-    let lastTouchY = 0
+    let lastMouseX = 0
+    let lastMouseY = 0
+    let rotationVelocityX = 0
+    let rotationVelocityY = 0
+    let isClick = false
+    let mouseDownTime = 0
+    
+    // Camera control settings
+    const mouseSensitivity = 0.003
+    const touchSensitivity = 0.004
+    const keyboardSensitivity = 0.02
+    const dampingFactor = 0.85
+    const maxVerticalAngle = Math.PI / 2 - 0.1 // Slight margin from straight up/down
+    
+    // Initialize camera rotation state from ref (facing forward in equirectangular space)
+    let yaw = cameraRotationRef.current.yaw || 0   // Start looking forward (center of equirectangular)
+    let pitch = cameraRotationRef.current.pitch || 0 // Start looking straight ahead
+    
+    // Set initial camera position and look direction
+    camera.position.set(0, 0, 0)
+    // Face forward (positive X direction) which is the center of equirectangular textures
+    camera.lookAt(1, 0, 0)
+    
+    // Keyboard state
+    const keys = {
+      ArrowLeft: false,
+      ArrowRight: false,
+      ArrowUp: false,
+      ArrowDown: false,
+      KeyA: false,
+      KeyD: false,
+      KeyW: false,
+      KeyS: false
+    }
     
     // Raycaster for click detection on skybox
     const raycaster = new THREE.Raycaster()
@@ -328,41 +381,76 @@ const MemoryPalace = forwardRef(({
 
     const handleMouseMove = (event) => {
       if (isDragging) {
-        const deltaX = (event.clientX - lastTouchX) * 0.005
-        const deltaY = (event.clientY - lastTouchY) * 0.005
+        const deltaX = (event.clientX - lastMouseX) * mouseSensitivity
+        const deltaY = (event.clientY - lastMouseY) * mouseSensitivity
         
-        camera.rotation.y -= deltaX
-        camera.rotation.x -= deltaY
+        // Update yaw and pitch using prototype's approach
+        yaw += deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
+        pitch += deltaY * 50 // Vertical rotation (up/down) - fixed direction and scaling
         
-        // Limit vertical rotation
-        camera.rotation.x = Math.max(
-          -Math.PI / 2, 
-          Math.min(Math.PI / 2, camera.rotation.x)
-        )
+        // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
+        yaw = Math.max(-135, Math.min(135, yaw))
         
-        lastTouchX = event.clientX
-        lastTouchY = event.clientY
-      } else {
-        // Original mouse hover behavior for non-dragging
-        mouseX = (event.clientX - window.innerWidth / 2) * 0.001
-        mouseY = (event.clientY - window.innerHeight / 2) * 0.001
+        // Clamp vertical rotation - from prototype
+        pitch = Math.max(-85, Math.min(85, pitch))
         
-        targetRotationY = mouseX * Math.PI
-        targetRotationX = mouseY * Math.PI * 0.5
+        // Store back to ref
+        cameraRotationRef.current.yaw = yaw
+        cameraRotationRef.current.pitch = pitch
+        
+        // Apply rotation using spherical coordinate approach (adjusted for forward-facing)
+        const phi = THREE.MathUtils.degToRad(90 - pitch)
+        const theta = THREE.MathUtils.degToRad(yaw)
+        
+        // Rotate coordinate system so 0,0 faces forward (positive X)
+        const x = 500 * Math.sin(phi) * Math.cos(theta)
+        const y = 500 * Math.cos(phi)  
+        const z = 500 * Math.sin(phi) * Math.sin(theta)
+        
+        camera.lookAt(x, y, z)
+        
+        // Store velocity for momentum (optional future enhancement)
+        rotationVelocityX = deltaY * 0.1
+        rotationVelocityY = deltaX * 0.1
+        
+        lastMouseX = event.clientX
+        lastMouseY = event.clientY
+        
+        // If we've moved significantly, it's not a click
+        if (Math.abs(deltaX) > 0.01 || Math.abs(deltaY) > 0.01) {
+          isClick = false
+        }
       }
     }
 
     const handleMouseDown = (event) => {
+      // Prevent context menu on right click
+      if (event.button === 2) {
+        event.preventDefault()
+        return
+      }
+      
       isDragging = true
-      lastTouchX = event.clientX
-      lastTouchY = event.clientY
+      isClick = true
+      mouseDownTime = Date.now()
+      lastMouseX = event.clientX
+      lastMouseY = event.clientY
       renderer.domElement.style.cursor = 'grabbing'
+      
+      // Prevent text selection while dragging
+      event.preventDefault()
     }
 
     const handleMouseUp = (event) => {
       if (isDragging) {
         isDragging = false
         renderer.domElement.style.cursor = 'grab'
+        
+        // Check if this was a click (short duration, minimal movement)
+        const clickDuration = Date.now() - mouseDownTime
+        if (isClick && clickDuration < 200) {
+          handleClick(event)
+        }
       }
     }
 
@@ -408,35 +496,72 @@ const MemoryPalace = forwardRef(({
       event.preventDefault()
       if (event.touches.length === 1) {
         isDragging = true
-        lastTouchX = event.touches[0].clientX
-        lastTouchY = event.touches[0].clientY
+        isClick = true
+        mouseDownTime = Date.now()
+        lastMouseX = event.touches[0].clientX
+        lastMouseY = event.touches[0].clientY
       }
     }
 
     const handleTouchMove = (event) => {
       event.preventDefault()
       if (event.touches.length === 1 && isDragging) {
-        const deltaX = (event.touches[0].clientX - lastTouchX) * 0.005
-        const deltaY = (event.touches[0].clientY - lastTouchY) * 0.005
+        const deltaX = (event.touches[0].clientX - lastMouseX) * mouseSensitivity  // Changed to use mouseSensitivity for consistency
+        const deltaY = (event.touches[0].clientY - lastMouseY) * mouseSensitivity  // Changed to use mouseSensitivity for consistency
         
-        camera.rotation.y -= deltaX
-        camera.rotation.x -= deltaY
+        // Update yaw and pitch using prototype's approach
+        yaw += deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
+        pitch += deltaY * 50 // Vertical rotation (up/down) - fixed direction and scaling
         
-        // Limit vertical rotation
-        camera.rotation.x = Math.max(
-          -Math.PI / 2, 
-          Math.min(Math.PI / 2, camera.rotation.x)
-        )
+        // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
+        yaw = Math.max(-135, Math.min(135, yaw))
         
-        lastTouchX = event.touches[0].clientX
-        lastTouchY = event.touches[0].clientY
+        // Clamp vertical rotation - from prototype
+        pitch = Math.max(-85, Math.min(85, pitch))
+        
+        // Store back to ref
+        cameraRotationRef.current.yaw = yaw
+        cameraRotationRef.current.pitch = pitch
+        
+        // Apply rotation using spherical coordinate approach (adjusted for forward-facing)
+        const phi = THREE.MathUtils.degToRad(90 - pitch)
+        const theta = THREE.MathUtils.degToRad(yaw)
+        
+        // Rotate coordinate system so 0,0 faces forward (positive X)
+        const x = 500 * Math.sin(phi) * Math.cos(theta)
+        const y = 500 * Math.cos(phi)
+        const z = 500 * Math.sin(phi) * Math.sin(theta)
+        
+        camera.lookAt(x, y, z)
+        
+        lastMouseX = event.touches[0].clientX
+        lastMouseY = event.touches[0].clientY
+        
+        // If we've moved significantly, it's not a tap
+        if (Math.abs(deltaX) > 0.01 || Math.abs(deltaY) > 0.01) {
+          isClick = false
+        }
       }
     }
 
     const handleTouchEnd = (event) => {
       event.preventDefault()
       if (event.touches.length === 0) {
-        isDragging = false
+        if (isDragging) {
+          isDragging = false
+          
+          // Check if this was a tap (short duration, minimal movement)
+          const tapDuration = Date.now() - mouseDownTime
+          if (isClick && tapDuration < 200) {
+            // Simulate click event for touch
+            const touch = event.changedTouches[0]
+            const clickEvent = {
+              clientX: touch.clientX,
+              clientY: touch.clientY
+            }
+            handleClick(clickEvent)
+          }
+        }
       }
     }
 
@@ -447,6 +572,72 @@ const MemoryPalace = forwardRef(({
         const gamma = event.gamma * Math.PI / 180
 
         camera.rotation.set(beta - Math.PI / 2, alpha, -gamma)
+      }
+    }
+
+    // Keyboard event handlers
+    const handleKeyDown = (event) => {
+      if (keys.hasOwnProperty(event.code)) {
+        keys[event.code] = true
+        event.preventDefault() // Prevent default browser behavior for these keys
+      }
+    }
+
+    const handleKeyUp = (event) => {
+      if (keys.hasOwnProperty(event.code)) {
+        keys[event.code] = false
+        event.preventDefault()
+      }
+    }
+
+    // Process keyboard input for camera rotation
+    const processKeyboardInput = () => {
+      if (!isDragging) { // Only apply keyboard controls when not dragging
+        let deltaX = 0
+        let deltaY = 0
+
+        // Horizontal rotation (left/right)
+        if (keys.ArrowLeft || keys.KeyA) {
+          deltaX = keyboardSensitivity * 50 // Scale to match mouse sensitivity
+        }
+        if (keys.ArrowRight || keys.KeyD) {
+          deltaX = -keyboardSensitivity * 50
+        }
+
+        // Vertical rotation (up/down)
+        if (keys.ArrowUp || keys.KeyW) {
+          deltaY = keyboardSensitivity * 50
+        }
+        if (keys.ArrowDown || keys.KeyS) {
+          deltaY = -keyboardSensitivity * 50
+        }
+
+        // Apply rotation
+        if (deltaX !== 0 || deltaY !== 0) {
+          yaw += deltaX
+          pitch += deltaY
+
+          // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
+          yaw = Math.max(-135, Math.min(135, yaw))
+          
+          // Clamp vertical rotation - from prototype
+          pitch = Math.max(-85, Math.min(85, pitch))
+          
+          // Store back to ref
+          cameraRotationRef.current.yaw = yaw
+          cameraRotationRef.current.pitch = pitch
+          
+          // Apply rotation using spherical coordinate approach (adjusted for forward-facing)
+          const phi = THREE.MathUtils.degToRad(90 - pitch)
+          const theta = THREE.MathUtils.degToRad(yaw)
+          
+          // Rotate coordinate system so 0,0 faces forward (positive X)
+          const x = 500 * Math.sin(phi) * Math.cos(theta)
+          const y = 500 * Math.cos(phi)
+          const z = 500 * Math.sin(phi) * Math.sin(theta)
+          
+          camera.lookAt(x, y, z)
+        }
       }
     }
 
@@ -464,6 +655,10 @@ const MemoryPalace = forwardRef(({
     renderer.domElement.addEventListener('touchmove', handleTouchMove, { passive: false })
     renderer.domElement.addEventListener('touchend', handleTouchEnd, { passive: false })
     
+    // Keyboard events
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    
     window.addEventListener('deviceorientation', handleDeviceOrientation)
 
     // Force an initial render to ensure something shows up
@@ -473,15 +668,10 @@ const MemoryPalace = forwardRef(({
     const animate = () => {
       requestAnimationFrame(animate)
 
-      // Smooth camera rotation for mouse control
-      if (!window.DeviceOrientationEvent && !nippleManagerRef.current) {
-        camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.05
-        camera.rotation.x += (targetRotationX - camera.rotation.x) * 0.05
-        
-        // Limit vertical rotation
-        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x))
-      }
+      // Process keyboard input for smooth camera rotation
+      processKeyboardInput()
 
+      // Render the scene
       renderer.render(scene, camera)
     }
 
@@ -499,6 +689,8 @@ const MemoryPalace = forwardRef(({
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('deviceorientation', handleDeviceOrientation)
       
       // Remove canvas event listeners

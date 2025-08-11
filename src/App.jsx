@@ -13,6 +13,7 @@ function App() {
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [wireframeEnabled, setWireframeEnabled] = useState(true) // Start with wireframe enabled for debugging
   const [nippleEnabled, setNippleEnabled] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const memoryPalaceRef = useRef()
 
   useEffect(() => {
@@ -34,6 +35,10 @@ function App() {
 
   const handleVoiceToggle = (enabled) => {
     setVoiceEnabled(enabled)
+  }
+
+  const handleListeningChange = (listening) => {
+    setIsListening(listening)
   }
 
   const handleWireframeToggle = (enabled) => {
@@ -87,7 +92,7 @@ function App() {
   }
 
   return (
-    <div className={`app ${isMobile ? 'mobile' : 'desktop'}`}>
+    <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${isListening ? 'listening' : ''}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
       <MemoryPalace 
         ref={memoryPalaceRef}
@@ -117,7 +122,18 @@ function App() {
         enabled={voiceEnabled}
         isMobile={isMobile}
         onCommand={handleVoiceCommand}
+        onListeningChange={handleListeningChange}
       />
+      
+      {/* Voice Status Indicator - only shown when listening */}
+      {isListening && (
+        <div className="voice-status">
+          <div className="voice-indicator">
+            <div className="pulse"></div>
+            <span>Listening...</span>
+          </div>
+        </div>
+      )}
 
       <SettingsPanel 
         onWireframeToggle={handleWireframeToggle}

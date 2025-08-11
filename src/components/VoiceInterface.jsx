@@ -4,7 +4,7 @@ import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCa
 import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
 import settingsManager from '../services/SettingsManager.js'
 
-const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
+const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
@@ -56,6 +56,10 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         console.log('[VoiceInterface] Speech recognition started')
         setIsListening(true)
         setTranscript('')
+        // Notify parent component about listening state change
+        if (onListeningChange) {
+          onListeningChange(true)
+        }
       }
 
       recognition.onresult = (event) => {
@@ -104,11 +108,19 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
         
         setIsListening(false)
         setIsProcessing(false)
+        // Notify parent component about listening state change
+        if (onListeningChange) {
+          onListeningChange(false)
+        }
       }
 
       recognition.onend = () => {
         console.log('[VoiceInterface] Speech recognition ended')
         setIsListening(false)
+        // Notify parent component about listening state change
+        if (onListeningChange) {
+          onListeningChange(false)
+        }
       }
     } else {
       console.warn('[VoiceInterface] Web Speech API not supported in this browser')
@@ -430,6 +442,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand }) => {
     console.log('[VoiceInterface] Stopping speech recognition')
     if (recognitionRef.current) {
       recognitionRef.current.stop()
+    }
+    // Ensure listening state is updated immediately
+    setIsListening(false)
+    if (onListeningChange) {
+      onListeningChange(false)
     }
   }
 
