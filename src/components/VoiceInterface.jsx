@@ -31,121 +31,144 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
   )
 
   useEffect(() => {
-    console.log('[VoiceInterface] Initializing voice interface...')
-    
-    // Check for Web Speech API support
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      console.log('[VoiceInterface] Web Speech API supported')
-      setIsSupported(true)
+    const initializeVoiceInterface = async () => {
+      console.log('[VoiceInterface] Initializing voice interface...')
       
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-      recognitionRef.current = new SpeechRecognition()
-      
-      const recognition = recognitionRef.current
-      recognition.continuous = false
-      recognition.interimResults = false
-      recognition.lang = 'en-US'
-      
-      console.log('[VoiceInterface] Speech recognition configured:', {
-        continuous: recognition.continuous,
-        interimResults: recognition.interimResults,
-        lang: recognition.lang
-      })
-
-      recognition.onstart = () => {
-        console.log('[VoiceInterface] Speech recognition started')
-        setIsListening(true)
-        setTranscript('')
-        // Notify parent component about listening state change
-        if (onListeningChange) {
-          onListeningChange(true)
-        }
+      // Wait for settings manager to initialize
+      try {
+        console.log('[VoiceInterface] Waiting for settings initialization...')
+        await settingsManager.waitForInitialization()
+        console.log('[VoiceInterface] Settings initialization complete')
+      } catch (error) {
+        console.error('[VoiceInterface] Settings initialization error:', error)
       }
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript
-        const confidence = event.results[0][0].confidence
-        console.log('[VoiceInterface] Speech recognition result:', {
-          transcript,
-          confidence,
-          resultCount: event.results.length,
-          transcriptEmpty: !transcript || transcript.trim().length === 0
+      
+      // Check for Web Speech API support
+      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        console.log('[VoiceInterface] Web Speech API supported')
+        setIsSupported(true)
+        
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+        recognitionRef.current = new SpeechRecognition()
+        
+        const recognition = recognitionRef.current
+        recognition.continuous = false
+        recognition.interimResults = false
+        recognition.lang = 'en-US'
+        
+        console.log('[VoiceInterface] Speech recognition configured:', {
+          continuous: recognition.continuous,
+          interimResults: recognition.interimResults,
+          lang: recognition.lang
         })
-        
-        if (!transcript || transcript.trim().length === 0) {
-          console.warn('[VoiceInterface] Voice input captured but transcript is empty')
-          showCaption('No speech detected, please try again', 'recognition')
-          return
+
+        recognition.onstart = () => {
+          console.log('[VoiceInterface] Speech recognition started')
+          setIsListening(true)
+          setTranscript('')
+          // Notify parent component about listening state change
+          if (onListeningChange) {
+            onListeningChange(true)
+          }
         }
-        
-        console.log('[VoiceInterface] Processing captured voice input:', transcript)
-        setTranscript(transcript)
-        showCaption(`You said: "${transcript}"`, 'recognition')
-        processCommand(transcript)
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript
+          const confidence = event.results[0][0].confidence
+          console.log('[VoiceInterface] Speech recognition result:', {
+            transcript,
+            confidence,
+            resultCount: event.results.length,
+            transcriptEmpty: !transcript || transcript.trim().length === 0
+          })
+          
+          if (!transcript || transcript.trim().length === 0) {
+            console.warn('[VoiceInterface] Voice input captured but transcript is empty')
+            showCaption('No speech detected, please try again', 'recognition')
+            return
+          }
+          
+          console.log('[VoiceInterface] Processing captured voice input:', transcript)
+          setTranscript(transcript)
+          showCaption(`You said: "${transcript}"`, 'recognition')
+          processCommand(transcript)
+        }
+
+        recognition.onerror = (event) => {
+          const errorDetails = {
+            error: event.error,
+            message: event.message,
+            timeStamp: event.timeStamp,
+            errorType: typeof event.error,
+            stack: new Error().stack
+          }
+          
+          console.error('[VoiceInterface] Speech recognition error:', errorDetails)
+          
+          // Log specific error context for debugging
+          if (event.error === 'no-speech') {
+            console.warn('[VoiceInterface] No speech was detected during recognition')
+          } else if (event.error === 'audio-capture') {
+            console.error('[VoiceInterface] Audio capture failed - check microphone permissions')
+          } else if (event.error === 'not-allowed') {
+            console.error('[VoiceInterface] Speech recognition not allowed - check browser permissions')
+          } else {
+            console.error('[VoiceInterface] Unknown speech recognition error:', event.error)
+          }
+          
+          setIsListening(false)
+          setIsProcessing(false)
+          // Notify parent component about listening state change
+          if (onListeningChange) {
+            onListeningChange(false)
+          }
+        }
+
+        recognition.onend = () => {
+          console.log('[VoiceInterface] Speech recognition ended')
+          setIsListening(false)
+          // Notify parent component about listening state change
+          if (onListeningChange) {
+            onListeningChange(false)
+          }
+        }
+      } else {
+        console.warn('[VoiceInterface] Web Speech API not supported in this browser')
       }
 
-      recognition.onerror = (event) => {
-        const errorDetails = {
-          error: event.error,
-          message: event.message,
-          timeStamp: event.timeStamp,
-          errorType: typeof event.error,
-          stack: new Error().stack
-        }
-        
-        console.error('[VoiceInterface] Speech recognition error:', errorDetails)
-        
-        // Log specific error context for debugging
-        if (event.error === 'no-speech') {
-          console.warn('[VoiceInterface] No speech was detected during recognition')
-        } else if (event.error === 'audio-capture') {
-          console.error('[VoiceInterface] Audio capture failed - check microphone permissions')
-        } else if (event.error === 'not-allowed') {
-          console.error('[VoiceInterface] Speech recognition not allowed - check browser permissions')
-        } else {
-          console.error('[VoiceInterface] Unknown speech recognition error:', event.error)
-        }
-        
-        setIsListening(false)
-        setIsProcessing(false)
-        // Notify parent component about listening state change
-        if (onListeningChange) {
-          onListeningChange(false)
-        }
-      }
+      // Check API configuration after initialization - only need Anthropic API for voice processing
+      const isConfigured = settingsManager.isAnthropicConfigured()
+      console.log('[VoiceInterface] Initial API configuration check:', {
+        isConfigured,
+        anthropicKey: settingsManager.get('anthropicApiKey') ? '[SET]' : '[NOT SET]',
+        isInitializing: settingsManager.isInitializing
+      })
+      setApiConfigured(isConfigured)
 
-      recognition.onend = () => {
-        console.log('[VoiceInterface] Speech recognition ended')
-        setIsListening(false)
-        // Notify parent component about listening state change
-        if (onListeningChange) {
-          onListeningChange(false)
-        }
+      // Load caption preferences
+      const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
+      if (savedCaptions) {
+        setCaptionsEnabled(JSON.parse(savedCaptions))
       }
-    } else {
-      console.warn('[VoiceInterface] Web Speech API not supported in this browser')
     }
 
-    // Check API configuration - only need Anthropic API for voice processing
-    const isConfigured = settingsManager.isAnthropicConfigured()
-    console.log('[VoiceInterface] API configuration check:', {
-      isConfigured,
-      anthropicKey: settingsManager.get('anthropicApiKey') ? '[SET]' : '[NOT SET]'
-    })
-    setApiConfigured(isConfigured)
-
-    // Load caption preferences
-    const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
-    if (savedCaptions) {
-      setCaptionsEnabled(JSON.parse(savedCaptions))
-    }
+    // Initialize asynchronously
+    initializeVoiceInterface()
 
     // Listen for settings changes
-    const handleSettingsChange = (eventType) => {
+    const handleSettingsChange = (eventType, data) => {
+      console.log('[VoiceInterface] Settings event:', eventType, data)
+      
       // Wait for initialization to complete before checking configuration
-      if (eventType === 'initialization_complete' || eventType === 'setting_changed') {
+      if (eventType === 'initialization_complete') {
+        console.log('[VoiceInterface] Settings initialization complete, checking API configuration')
         const newConfigured = settingsManager.isAnthropicConfigured()
-        console.log('[VoiceInterface] Settings changed, API configured:', newConfigured)
+        console.log('[VoiceInterface] Post-initialization API configured:', newConfigured)
+        setApiConfigured(newConfigured)
+      } else if (eventType === 'setting_changed' && data?.key === 'anthropicApiKey') {
+        console.log('[VoiceInterface] Anthropic API key changed')
+        const newConfigured = settingsManager.isAnthropicConfigured()
+        console.log('[VoiceInterface] API key change - configured:', newConfigured)
         setApiConfigured(newConfigured)
       }
     }

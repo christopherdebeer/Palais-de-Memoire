@@ -46,32 +46,49 @@ export class SettingsManager {
     
     this.settings = this.loadSettings()
     this.listeners = new Set()
-    this.isInitializing = false
+    this.isInitializing = true
+    this.initializationPromise = null
     
-    // Initialize persistence manager integration synchronously
-    // This prevents race conditions during component initialization
-    this.initializePersistenceSync()
+    // Initialize persistence manager integration with proper promise handling
+    this.initializationPromise = this.initializePersistenceSync()
   }
   
   /**
-   * Initialize persistence manager synchronously to avoid race conditions
+   * Initialize persistence manager with proper promise handling
    * This prevents settings from being overwritten during component initialization
    */
   initializePersistenceSync() {
-    // Mark as initializing to prevent API calls during setup
-    this.isInitializing = true
-    
-    // Defer async persistence initialization to avoid race condition
-    // Components should be able to read settings immediately after constructor
-    setTimeout(async () => {
-      try {
-        await this.initializePersistenceAsync()
-      } finally {
-        this.isInitializing = false
-        // Notify listeners that initialization is complete
-        this.notifyListeners('initialization_complete', this.settings)
-      }
-    }, 0)
+    // Return a promise that resolves when initialization is complete
+    return new Promise((resolve) => {
+      // Mark as initializing to prevent API calls during setup
+      this.isInitializing = true
+      
+      // Defer async persistence initialization to avoid race condition
+      // Components should be able to read settings immediately after constructor
+      setTimeout(async () => {
+        try {
+          await this.initializePersistenceAsync()
+        } catch (error) {
+          console.error('Persistence initialization error:', error)
+        } finally {
+          this.isInitializing = false
+          // Notify listeners that initialization is complete
+          this.notifyListeners('initialization_complete', this.settings)
+          resolve()
+        }
+      }, 0)
+    })
+  }
+
+  /**
+   * Wait for initialization to complete
+   * Components can use this to ensure settings are ready before making API calls
+   */
+  async waitForInitialization() {
+    if (this.initializationPromise) {
+      await this.initializationPromise
+    }
+    return !this.isInitializing
   }
   
   /**

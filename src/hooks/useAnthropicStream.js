@@ -3,7 +3,7 @@
  * Handles streaming conversations with proper browser headers and tool calls
  */
 
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import Anthropic from '@anthropic-ai/sdk'
 import settingsManager from '../services/SettingsManager.js'
 import MemoryPalaceToolManager from '../utils/memoryPalaceTools.js'
@@ -14,11 +14,25 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
   const [pendingTool, setPendingTool] = useState(null)
   const abortRef = useRef(null)
 
+  // Track initialization state
+  const [isInitialized, setIsInitialized] = useState(false)
+  const [initializationError, setInitializationError] = useState(null)
+
   // Anthropic SDK instance with proper browser configuration
   const anthropic = useMemo(() => {
+    // Don't create instance during settings initialization
+    if (settingsManager.isInitializing) {
+      console.log('[useAnthropicStream] Waiting for settings initialization...')
+      return null
+    }
+
     const apiKey = settingsManager.get('anthropicApiKey')
-    if (!apiKey) return null
+    if (!apiKey) {
+      console.log('[useAnthropicStream] No API key available')
+      return null
+    }
     
+    console.log('[useAnthropicStream] Creating Anthropic SDK instance')
     return new Anthropic({
       dangerouslyAllowBrowser: true,
       apiKey: apiKey,
@@ -28,7 +42,44 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
     })
-  }, [settingsManager.get('anthropicApiKey')])
+  }, [settingsManager.get('anthropicApiKey'), settingsManager.isInitializing])
+
+  // Handle settings initialization
+  useEffect(() => {
+    const initializeHook = async () => {
+      try {
+        setInitializationError(null)
+        console.log('[useAnthropicStream] Waiting for settings initialization...')
+        
+        await settingsManager.waitForInitialization()
+        
+        console.log('[useAnthropicStream] Settings initialized, checking API configuration')
+        setIsInitialized(true)
+      } catch (error) {
+        console.error('[useAnthropicStream] Initialization error:', error)
+        setInitializationError(error)
+        setIsInitialized(true) // Still mark as initialized to prevent hanging
+      }
+    }
+
+    initializeHook()
+  }, [])
+
+  // Listen for settings changes
+  useEffect(() => {
+    const handleSettingsChange = (eventType, data) => {
+      if (eventType === 'initialization_complete') {
+        console.log('[useAnthropicStream] Settings initialization complete')
+        setIsInitialized(true)
+      } else if (eventType === 'setting_changed' && data.key === 'anthropicApiKey') {
+        console.log('[useAnthropicStream] Anthropic API key changed')
+        // The useMemo will automatically recreate the anthropic instance
+      }
+    }
+
+    settingsManager.addEventListener(handleSettingsChange)
+    return () => settingsManager.removeEventListener(handleSettingsChange)
+  }, [])
 
   // Merge delta helper for streaming content
   const mergeDelta = useCallback((block, delta) => {
