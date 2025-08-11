@@ -27,6 +27,8 @@ function App() {
   const [actionModalOpen, setActionModalOpen] = useState(false)
   const [currentAction, setCurrentAction] = useState(null)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
+  const [isCreationMode, setIsCreationMode] = useState(false)
+  const [pendingCreationPosition, setPendingCreationPosition] = useState(null)
   const memoryPalaceRef = useRef()
   const captionTimeoutRef = useRef(null)
 
@@ -488,6 +490,43 @@ function App() {
     }
   }
 
+  const handleCreationModeTriggered = (creationData) => {
+    console.log('[App] Creation mode triggered:', creationData)
+    
+    if (!memoryPalaceCore || !coreInitialized) {
+      console.warn('[App] Memory Palace Core not initialized, cannot enter creation mode')
+      return
+    }
+    
+    // Store the creation position and enter creation mode
+    setPendingCreationPosition(creationData.position)
+    setIsCreationMode(true)
+    
+    // Show visual feedback
+    handleCaptionUpdate('Double-click detected! Describe what you want to create at this location.', 'synthesis')
+    
+    // Auto-start voice listening for creation mode
+    if (voiceEnabled) {
+      console.log('[App] Auto-starting voice input for creation mode')
+      // The VoiceInterface will detect creation mode and auto-start listening
+    }
+    
+    // Auto-exit creation mode after 10 seconds if no voice input
+    setTimeout(() => {
+      if (isCreationMode) {
+        console.log('[App] Creation mode timeout - exiting')
+        setIsCreationMode(false)
+        setPendingCreationPosition(null)
+      }
+    }, 10000)
+  }
+
+  const handleCreationModeComplete = () => {
+    console.log('[App] Creation mode complete')
+    setIsCreationMode(false)
+    setPendingCreationPosition(null)
+  }
+
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${isListening ? 'listening' : ''}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
@@ -495,6 +534,7 @@ function App() {
         ref={memoryPalaceRef}
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
+        onCreationModeTriggered={handleCreationModeTriggered}
       />
       
       {/* Show loading overlay while initializing */}
@@ -519,6 +559,8 @@ function App() {
         captionsEnabled={captionsEnabled}
         memoryPalaceCore={memoryPalaceCore}
         currentPalaceState={currentPalaceState}
+        isCreationMode={isCreationMode}
+        pendingCreationPosition={pendingCreationPosition}
       />
       
       {/* Voice Status Indicator - only shown when listening */}

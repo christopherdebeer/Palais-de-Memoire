@@ -121,9 +121,19 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
     const basePrompt = settingsManager.get('systemPrompt') || 
       'You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands.'
     
-    const { currentRoom, rooms = [], objects = [] } = context
+    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null } = context
 
     let contextPrompt = basePrompt + '\n\n'
+
+    // Creation mode context
+    if (isCreationMode && creationPosition) {
+      contextPrompt += `🎯 CREATION MODE ACTIVE!\n`
+      contextPrompt += `The user has DOUBLE-CLICKED on the skybox at position (${creationPosition.x.toFixed(2)}, ${creationPosition.y.toFixed(2)}, ${creationPosition.z.toFixed(2)}).\n`
+      contextPrompt += `They want to create something at this specific location. Listen to their description and determine:\n`
+      contextPrompt += `- If it's a MEMORY OBJECT (furniture, items, decorations, books, etc.) → use add_object_at_position\n`
+      contextPrompt += `- If it's a DOOR/PASSAGE (doorway, portal, stairs, window to another room) → use create_door_at_position\n`
+      contextPrompt += `IMPORTANT: Use the exact position coordinates provided in the creationPosition for the spatial tools.\n\n`
+    }
 
     // Current room context
     if (currentRoom) {
@@ -160,14 +170,22 @@ MEMORY PALACE TOOLS AVAILABLE:
 - remove_object: Remove an object from the current room
 - list_rooms: Show all available rooms with current room marked
 - get_room_info: Get detailed info about current room and its objects
+- add_object_at_position: Add memory object at specific spatial coordinates (for creation mode)
+- create_door_at_position: Create door/connection at specific spatial coordinates (for creation mode)
 
 IMPORTANT GUIDELINES:
 - Always use tools to perform actions rather than just describing them
 - If user wants to create something, use create_room or add_object tools
 - If user wants to go somewhere, use go_to_room tool
 - If user asks about current state, use get_room_info or list_rooms tools
+- In CREATION MODE: Use spatial tools (add_object_at_position or create_door_at_position) with the provided coordinates
 - Be conversational and helpful while taking concrete actions
 - Encourage exploration and memory association techniques
+
+CREATION MODE DECISION LOGIC:
+When in creation mode, analyze the user's description:
+- Objects: furniture, decorations, books, paintings, sculptures, plants, tools, personal items
+- Doors: doorways, passages, stairs, windows leading elsewhere, portals, archways, gates
 
 Use these tools actively to help users build and navigate their memory palace.`
 

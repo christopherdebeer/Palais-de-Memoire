@@ -5,7 +5,7 @@ import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
 import settingsManager from '../services/SettingsManager.js'
 import voiceManager from '../utils/VoiceManager.js'
 
-const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState }) => {
+const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition }) => {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
@@ -188,6 +188,17 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     }
   }, [])
 
+  // Auto-start listening when creation mode is activated
+  useEffect(() => {
+    if (isCreationMode && enabled && isSupported && !isListening && !isProcessing) {
+      console.log('[VoiceInterface] Creation mode detected - auto-starting voice input')
+      // Small delay to ensure UI is ready
+      setTimeout(() => {
+        startListening()
+      }, 500)
+    }
+  }, [isCreationMode, enabled, isSupported, isListening, isProcessing])
+
   const processCommand = async (command) => {
     console.log('[VoiceInterface] Processing command:', {
       command,
@@ -206,7 +217,10 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         const context = {
           currentRoom: currentPalaceState?.currentRoom || null,
           rooms: memoryPalaceCore ? memoryPalaceCore.getAllRooms() : [],
-          objects: memoryPalaceCore ? memoryPalaceCore.getCurrentRoomObjects() : []
+          objects: memoryPalaceCore ? memoryPalaceCore.getCurrentRoomObjects() : [],
+          // Add creation mode context
+          isCreationMode: isCreationMode || false,
+          creationPosition: pendingCreationPosition || null
         }
         
         console.log('[VoiceInterface] Sending message with context:', {

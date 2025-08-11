@@ -1035,12 +1035,57 @@
   }
 }
 
+/* Creation Mode Styles */
+.creation-mode-indicator {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-popover);
+  background: var(--color-warning-90);
+  color: var(--color-white);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--color-warning);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  animation: pulse-glow 2s infinite;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.7);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 0 1rem rgba(255, 149, 0, 0);
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+/* Enhanced caption styling for creation mode */
+.app-caption-text.creation-mode {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-bold);
+  text-shadow: 0 0 0.5rem rgba(255, 149, 0, 0.5);
+}
+
+/* Karaoke-style highlighting for spoken words */
+.app-caption-text.synthesis .spoken {
+  color: #007AFF;
+  font-weight: 600;
+}
+
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
   .loading-spinner,
   .voice-control.listening,
   .voice-btn.active,
-  .pulse-dot {
+  .pulse-dot,
+  .creation-mode-indicator {
     animation: none;
   }
 }

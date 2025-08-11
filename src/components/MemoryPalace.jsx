@@ -4,7 +4,8 @@ import nipplejs from 'nipplejs'
 
 const MemoryPalace = forwardRef(({ 
   wireframeEnabled = false, 
-  nippleEnabled = false 
+  nippleEnabled = false,
+  onCreationModeTriggered = null
 }, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
@@ -347,6 +348,12 @@ const MemoryPalace = forwardRef(({
     let isClick = false
     let mouseDownTime = 0
     
+    // Double-click detection state
+    let lastClickTime = 0
+    let lastClickPosition = { x: 0, y: 0 }
+    const DOUBLE_CLICK_THRESHOLD = 300 // ms
+    const DOUBLE_CLICK_DISTANCE_THRESHOLD = 10 // pixels
+    
     // Camera control settings
     const mouseSensitivity = 0.003
     const touchSensitivity = 0.004
@@ -456,38 +463,133 @@ const MemoryPalace = forwardRef(({
 
     const handleClick = (event) => {
       if (!isDragging) {
-        // Calculate mouse position in normalized device coordinates (-1 to +1)
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
-
-        // Update the picking ray with the camera and mouse position
-        raycaster.setFromCamera(mouse, camera)
-
-        // Calculate objects intersecting the picking ray
-        const intersects = raycaster.intersectObject(sphere)
-
-        if (intersects.length > 0) {
-          const intersectionPoint = intersects[0].point
-          console.log('Skybox clicked at point:', intersectionPoint)
-          
-          // Here you can add logic for room/door/object interactions
-          // For now, just log the click position
-          console.log('Click detected on skybox sphere - ready for interaction logic')
-          
-          // Optional: Add visual feedback
-          const clickIndicator = new THREE.SphereGeometry(2, 8, 6)
-          const clickMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 })
-          const clickMesh = new THREE.Mesh(clickIndicator, clickMaterial)
-          clickMesh.position.copy(intersectionPoint)
-          scene.add(clickMesh)
-          
-          // Remove indicator after 1 second
-          setTimeout(() => {
-            scene.remove(clickMesh)
-            clickIndicator.dispose()
-            clickMaterial.dispose()
-          }, 1000)
+        const currentTime = Date.now()
+        const currentPosition = { x: event.clientX, y: event.clientY }
+        
+        // Check for double-click
+        const timeSinceLastClick = currentTime - lastClickTime
+        const distanceFromLastClick = Math.sqrt(
+          Math.pow(currentPosition.x - lastClickPosition.x, 2) + 
+          Math.pow(currentPosition.y - lastClickPosition.y, 2)
+        )
+        
+        const isDoubleClick = timeSinceLastClick < DOUBLE_CLICK_THRESHOLD && 
+                             distanceFromLastClick < DOUBLE_CLICK_DISTANCE_THRESHOLD
+        
+        // Update click tracking
+        lastClickTime = currentTime
+        lastClickPosition = currentPosition
+        
+        if (isDoubleClick) {
+          console.log('[MemoryPalace] Double-click detected - entering creation mode')
+          handleCreationModeClick(event)
+        } else {
+          // Single click - handle existing object interactions
+          handleSingleClick(event)
         }
+      }
+    }
+
+    const handleSingleClick = (event) => {
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+
+      // Update the picking ray with the camera and mouse position
+      raycaster.setFromCamera(mouse, camera)
+
+      // Calculate objects intersecting the picking ray
+      const intersects = raycaster.intersectObject(sphere)
+
+      if (intersects.length > 0) {
+        const intersectionPoint = intersects[0].point
+        console.log('[MemoryPalace] Single click at point:', intersectionPoint)
+        
+        // Add visual feedback for single click
+        const clickIndicator = new THREE.SphereGeometry(1, 8, 6)
+        const clickMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x00ff00, 
+          transparent: true, 
+          opacity: 0.7 
+        })
+        const clickMesh = new THREE.Mesh(clickIndicator, clickMaterial)
+        clickMesh.position.copy(intersectionPoint)
+        scene.add(clickMesh)
+        
+        // Remove indicator after 0.5 seconds
+        setTimeout(() => {
+          scene.remove(clickMesh)
+          clickIndicator.dispose()
+          clickMaterial.dispose()
+        }, 500)
+      }
+    }
+
+    const handleCreationModeClick = (event) => {
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+
+      // Update the picking ray with the camera and mouse position
+      raycaster.setFromCamera(mouse, camera)
+
+      // Calculate objects intersecting the picking ray
+      const intersects = raycaster.intersectObject(sphere)
+
+      if (intersects.length > 0) {
+        const intersectionPoint = intersects[0].point
+        console.log('[MemoryPalace] Creation mode triggered at point:', intersectionPoint)
+        
+        // Position object/door slightly outside the sphere surface (like prototype)
+        const positionMultiplier = 1.02
+        const creationPosition = {
+          x: intersectionPoint.x * positionMultiplier,
+          y: intersectionPoint.y * positionMultiplier,
+          z: intersectionPoint.z * positionMultiplier
+        }
+        
+        // Add visual feedback for creation mode
+        const creationIndicator = new THREE.SphereGeometry(3, 8, 6)
+        const creationMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0xff6600, 
+          transparent: true, 
+          opacity: 0.8 
+        })
+        const creationMesh = new THREE.Mesh(creationIndicator, creationMaterial)
+        creationMesh.position.copy(intersectionPoint)
+        scene.add(creationMesh)
+        
+        // Pulsing animation for creation indicator
+        let pulseDirection = 1
+        const pulseAnimation = () => {
+          if (creationMesh.parent) {
+            const scale = creationMesh.scale.x + (pulseDirection * 0.02)
+            if (scale > 1.3) pulseDirection = -1
+            if (scale < 0.7) pulseDirection = 1
+            creationMesh.scale.setScalar(scale)
+            requestAnimationFrame(pulseAnimation)
+          }
+        }
+        pulseAnimation()
+        
+        // Notify parent component about creation mode
+        if (onCreationModeTriggered) {
+          onCreationModeTriggered({
+            position: creationPosition,
+            screenPosition: { x: event.clientX, y: event.clientY },
+            worldPosition: intersectionPoint,
+            timestamp: Date.now()
+          })
+        }
+        
+        // Remove creation indicator after 5 seconds (or when creation is complete)
+        setTimeout(() => {
+          if (creationMesh.parent) {
+            scene.remove(creationMesh)
+            creationIndicator.dispose()
+            creationMaterial.dispose()
+          }
+        }, 5000)
       }
     }
 

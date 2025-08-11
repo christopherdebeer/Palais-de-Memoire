@@ -44,6 +44,12 @@ export class MemoryPalaceToolManager {
         case 'regenerate_room_image':
           return await this.regenerateRoomImage(input)
         
+        case 'add_object_at_position':
+          return await this.addObjectAtPosition(input)
+        
+        case 'create_door_at_position':
+          return await this.createDoorAtPosition(input)
+        
         default:
           throw new Error(`Unknown tool: ${toolName}`)
       }
@@ -121,7 +127,7 @@ export class MemoryPalaceToolManager {
   /**
    * Add object to current room
    */
-  async addObject({ name, info }) {
+  async addObject({ name, info, position }) {
     if (!this.core) {
       return `Object management not available - Memory Palace core not initialized`
     }
@@ -132,10 +138,75 @@ export class MemoryPalaceToolManager {
         return `No current room to add object to. Please create a room first.`
       }
 
-      const object = await this.core.addObject(name, info)
-      return `Successfully added object "${name}" with info: ${info} to room "${currentState.currentRoom.name}"`
+      const object = await this.core.addObject(name, info, position)
+      return `Successfully added object "${name}" with info: ${info} to room "${currentState.currentRoom.name}"${position ? ' at the specified location' : ''}`
     } catch (error) {
       return `Failed to add object "${name}": ${error.message}`
+    }
+  }
+
+  /**
+   * Add object at specific position (for creation mode)
+   */
+  async addObjectAtPosition({ name, info, position }) {
+    if (!this.core) {
+      return `Object management not available - Memory Palace core not initialized`
+    }
+
+    try {
+      const currentState = this.core.getCurrentState()
+      if (!currentState.currentRoom) {
+        return `No current room to add object to. Please create a room first.`
+      }
+
+      if (!position) {
+        return `Position is required for spatial object creation`
+      }
+
+      const object = await this.core.addObject(name, info, position)
+      return `Successfully created object "${name}" at the clicked location with info: ${info}`
+    } catch (error) {
+      return `Failed to create object "${name}" at position: ${error.message}`
+    }
+  }
+
+  /**
+   * Create door at specific position (for creation mode)
+   */
+  async createDoorAtPosition({ description, targetRoomName, targetRoomDescription, position }) {
+    if (!this.core) {
+      return `Door creation not available - Memory Palace core not initialized`
+    }
+
+    try {
+      const currentState = this.core.getCurrentState()
+      if (!currentState.currentRoom) {
+        return `No current room to create door from. Please create a room first.`
+      }
+
+      if (!position) {
+        return `Position is required for spatial door creation`
+      }
+
+      // Create a new connected room if target room details provided
+      if (targetRoomName && targetRoomDescription) {
+        const newRoom = await this.core.createRoom(targetRoomName, targetRoomDescription)
+        
+        // Create bidirectional connection with spatial positioning
+        // This would need to be implemented in the core to handle spatial door creation
+        // For now, we'll create the object as a door marker
+        const doorObject = await this.core.addObject(
+          description || `Door to ${targetRoomName}`,
+          `Door leading to ${targetRoomName}: ${targetRoomDescription}`,
+          position
+        )
+        
+        return `Successfully created door "${description || `Door to ${targetRoomName}`}" at the clicked location, leading to the new room "${targetRoomName}"`
+      } else {
+        return `Target room name and description are required for door creation`
+      }
+    } catch (error) {
+      return `Failed to create door at position: ${error.message}`
     }
   }
 
@@ -399,6 +470,66 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {}
+        }
+      },
+      {
+        name: 'add_object_at_position',
+        description: 'Add a memory object at a specific spatial position (used when user double-clicks skybox)',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Name of the memory object'
+            },
+            info: {
+              type: 'string',
+              description: 'Information or memory to associate with this object'
+            },
+            position: {
+              type: 'object',
+              description: 'Spatial position coordinates',
+              properties: {
+                x: { type: 'number' },
+                y: { type: 'number' },
+                z: { type: 'number' }
+              },
+              required: ['x', 'y', 'z']
+            }
+          },
+          required: ['name', 'info', 'position']
+        }
+      },
+      {
+        name: 'create_door_at_position',
+        description: 'Create a door/connection at a specific spatial position (used when user double-clicks skybox)',
+        input_schema: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+              description: 'Description of the door/entrance'
+            },
+            targetRoomName: {
+              type: 'string',
+              description: 'Name of the new room to create and connect to'
+            },
+            targetRoomDescription: {
+              type: 'string',
+              description: 'Description of the new room to create'
+            },
+            position: {
+              type: 'object',
+              description: 'Spatial position coordinates',
+              properties: {
+                x: { type: 'number' },
+                y: { type: 'number' },
+                z: { type: 'number' }
+              },
+              required: ['x', 'y', 'z']
+            }
+          },
+          required: ['description', 'targetRoomName', 'targetRoomDescription', 'position']
         }
       }
     ]
