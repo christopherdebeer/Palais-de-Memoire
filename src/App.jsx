@@ -577,8 +577,8 @@ function App() {
       memoryPalaceCoreRunning: memoryPalaceCore?.isRunning
     })
     
-    // Check if core initialization is complete using the ref
-    if (!coreInitializationRef.current || !memoryPalaceCore) {
+    // Check if core initialization is complete using state
+    if (!coreInitialized || !memoryPalaceCore) {
       console.warn('[App] Memory Palace Core not initialized, cannot enter creation mode')
       console.warn('[App] Debug info:', {
         memoryPalaceCore: !!memoryPalaceCore,
