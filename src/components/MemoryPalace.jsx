@@ -55,7 +55,7 @@ const MemoryPalace = forwardRef(({
       const deltaY = Math.sin(angle) * rotationSpeed
       
       // Update yaw and pitch using prototype's approach
-      cameraRotationRef.current.yaw += deltaX   // Horizontal rotation (left/right) - fixed direction
+      cameraRotationRef.current.yaw -= deltaX   // Horizontal rotation (left/right) - fixed direction
       cameraRotationRef.current.pitch += deltaY // Vertical rotation (up/down) - fixed direction
       
       // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
@@ -385,7 +385,7 @@ const MemoryPalace = forwardRef(({
         const deltaY = (event.clientY - lastMouseY) * mouseSensitivity
         
         // Update yaw and pitch using prototype's approach
-        yaw += deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
+        yaw -= deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
         pitch += deltaY * 50 // Vertical rotation (up/down) - fixed direction and scaling
         
         // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
@@ -510,7 +510,7 @@ const MemoryPalace = forwardRef(({
         const deltaY = (event.touches[0].clientY - lastMouseY) * mouseSensitivity  // Changed to use mouseSensitivity for consistency
         
         // Update yaw and pitch using prototype's approach
-        yaw += deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
+        yaw -= deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
         pitch += deltaY * 50 // Vertical rotation (up/down) - fixed direction and scaling
         
         // Constrain horizontal rotation to 90% freedom (prevent viewing directly behind) - from prototype
@@ -598,10 +598,10 @@ const MemoryPalace = forwardRef(({
 
         // Horizontal rotation (left/right)
         if (keys.ArrowLeft || keys.KeyA) {
-          deltaX = keyboardSensitivity * 50 // Scale to match mouse sensitivity
+          deltaX = -keyboardSensitivity * 50 // Scale to match mouse sensitivity
         }
         if (keys.ArrowRight || keys.KeyD) {
-          deltaX = -keyboardSensitivity * 50
+          deltaX = keyboardSensitivity * 50
         }
 
         // Vertical rotation (up/down)
