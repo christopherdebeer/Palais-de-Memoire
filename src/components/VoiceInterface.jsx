@@ -145,11 +145,20 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
       })
       setApiConfigured(isConfigured)
 
-      // Load caption preferences
+      // Load caption preferences - default to enabled
       const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
-      if (savedCaptions) {
+      if (savedCaptions !== null) {
         setCaptionsEnabled(JSON.parse(savedCaptions))
+      } else {
+        // Default to enabled for better user experience
+        setCaptionsEnabled(true)
+        localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
       }
+      
+      console.log('[VoiceInterface] Caption preferences loaded:', {
+        savedCaptions,
+        captionsEnabled: savedCaptions !== null ? JSON.parse(savedCaptions) : true
+      })
     }
 
     // Initialize asynchronously
@@ -389,9 +398,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
       // Cancel any existing speech
       window.speechSynthesis.cancel()
       
-      // Show caption for synthesis
-      showCaption(text, 'synthesis')
-      
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.rate = settingsManager.get('speechRate') || 1.0
       utterance.pitch = settingsManager.get('speechPitch') || 1.0
@@ -419,14 +425,66 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
           console.log('[VoiceInterface] Using voice:', voice.name)
         }
       }
+
+      // Enhanced caption display with karaoke-style highlighting
+      if (captionsEnabled) {
+        console.log('[VoiceInterface] Setting up TTS captions for:', text.substring(0, 50) + '...')
+        setCaptionMode('synthesis')
+        setCaptionText(text)
+        
+        // Set up word-by-word highlighting
+        let wordIndex = 0
+        const words = text.split(/\s+/)
+        
+        utterance.onboundary = (event) => {
+          console.log('[VoiceInterface] TTS boundary event:', event.name, 'wordIndex:', wordIndex)
+          if (event.name === 'word' && captionsEnabled) {
+            wordIndex++
+            const spoken = words.slice(0, wordIndex).join(' ')
+            const remaining = words.slice(wordIndex).join(' ')
+            
+            // Create karaoke-style highlighting
+            const highlightedText = remaining.length > 0 
+              ? `<span class="spoken">${spoken}</span> ${remaining}`
+              : `<span class="spoken">${spoken}</span>`
+            
+            console.log('[VoiceInterface] Updating caption with highlighting:', highlightedText.substring(0, 50) + '...')
+            setCaptionText(highlightedText)
+          }
+        }
+      } else {
+        console.log('[VoiceInterface] Captions disabled, not showing TTS captions')
+      }
       
-      utterance.onstart = () => console.log('[VoiceInterface] TTS started')
-      utterance.onend = () => console.log('[VoiceInterface] TTS ended')
-      utterance.onerror = (event) => console.error('[VoiceInterface] TTS error:', {
-        error: event.error,
-        type: event.type,
-        stack: new Error().stack
-      })
+      utterance.onstart = () => {
+        console.log('[VoiceInterface] TTS started')
+      }
+      
+      utterance.onend = () => {
+        console.log('[VoiceInterface] TTS ended')
+        // Hide captions after a delay
+        if (captionsEnabled && captionMode === 'synthesis') {
+          setTimeout(() => {
+            if (captionMode === 'synthesis') {
+              setCaptionText('')
+              setCaptionMode(null)
+            }
+          }, 1500)
+        }
+      }
+      
+      utterance.onerror = (event) => {
+        console.error('[VoiceInterface] TTS error:', {
+          error: event.error,
+          type: event.type,
+          stack: new Error().stack
+        })
+        // Hide captions on error
+        if (captionsEnabled && captionMode === 'synthesis') {
+          setCaptionText('')
+          setCaptionMode(null)
+        }
+      }
 
       synthRef.current = utterance
       window.speechSynthesis.speak(utterance)
@@ -595,17 +653,15 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
         </span>
       </button>
 
-      {/* Transcript Display */}
-      {transcript && (
-        <div className="transcript">
-          <strong>You said:</strong> "{transcript}"
-        </div>
-      )}
-
-      {/* Response Display */}
-      {response && (
-        <div className="response">
-          <strong>Assistant:</strong> {response}
+      {/* Enhanced Closed Caption Display */}
+      {captionText && captionsEnabled && (
+        <div className="caption-overlay" aria-live="polite" aria-atomic="true">
+          <div className="caption-content">
+            <p 
+              className={`caption-text ${captionMode}`}
+              dangerouslySetInnerHTML={{ __html: captionText }}
+            />
+          </div>
         </div>
       )}
 
@@ -633,12 +689,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
         )}
       </div>
 
-      {/* Closed Caption Display */}
-      {captionText && (
-        <div className="caption-container" aria-live="polite" aria-atomic="true">
-          <p className="caption-text">{captionText}</p>
-        </div>
-      )}
     </div>
   )
 }
