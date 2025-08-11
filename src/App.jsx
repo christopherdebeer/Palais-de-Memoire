@@ -255,7 +255,7 @@ function App() {
     
     try {
       // Handle different command types with actual core operations
-      switch (command.type) {
+      switch (command.type.toLowerCase()) {
         case 'create_room':
           console.log('[App] Processing CREATE_ROOM command:', command.parameters)
           if (command.parameters.name && command.parameters.description) {
@@ -278,6 +278,23 @@ function App() {
             )
             console.log('[App] Object added successfully:', object)
             updatePalaceState(memoryPalaceCore)
+          }
+          break
+        
+        case 'remove_object':
+          console.log('[App] Processing REMOVE_OBJECT command:', command.parameters)
+          if (command.parameters.name && memoryPalaceCore.objectManager) {
+            const currentObjects = memoryPalaceCore.getCurrentRoomObjects()
+            const targetObject = currentObjects.find(obj => 
+              obj.name.toLowerCase().includes(command.parameters.name.toLowerCase())
+            )
+            if (targetObject) {
+              await memoryPalaceCore.objectManager.deleteObject(targetObject.id)
+              console.log('[App] Object removed successfully:', targetObject)
+              updatePalaceState(memoryPalaceCore)
+            } else {
+              console.warn('[App] Object not found:', command.parameters.name)
+            }
           }
           break
         
@@ -325,13 +342,34 @@ function App() {
           // The response is already handled by the AI, just log for debugging
           break
         
-        case 'FALLBACK':
-          console.log('[App] Processing fallback command:', command.parameters.input)
+        case 'response':
+          console.log('[App] Processing AI RESPONSE command:', command.parameters)
+          // Handle general AI responses that don't require specific actions
+          // The response text is already handled by TTS in VoiceInterface
+          if (command.parameters?.text) {
+            console.log('[App] AI response text:', command.parameters.text.substring(0, 100) + '...')
+          }
+          break
+        
+        case 'fallback':
+          console.log('[App] Processing fallback command:', command.parameters?.input || 'no input')
           // Handle basic fallback logic - no core operations needed
+          // The fallback response is already handled by TTS in VoiceInterface
           break
         
         default:
-          console.log('[App] Unknown command type:', command.type)
+          console.warn('[App] Unknown command type:', {
+            type: command.type,
+            originalType: command.type,
+            lowercaseType: command.type.toLowerCase(),
+            parameters: command.parameters,
+            availableCommands: [
+              'create_room', 'add_object', 'remove_object', 'go_to_room', 
+              'edit_room', 'list_rooms', 'get_room_info', 'response', 'fallback'
+            ]
+          })
+          // Don't throw error, just log for debugging
+          break
       }
     } catch (error) {
       console.error('[App] Error processing voice command:', error)
