@@ -52,6 +52,9 @@ function App() {
   
   const memoryPalaceRef = useRef()
   const captionTimeoutRef = useRef(null)
+  
+  // Cancellation ref for preventing state updates after unmount - MUST be at top level
+  const isCancelledRef = useRef(false)
 
   useEffect(() => {
     // Check if running on mobile
@@ -63,7 +66,7 @@ function App() {
     window.addEventListener('resize', checkMobile)
     
     // Initialize Memory Palace Core - prevent multiple initializations
-    const initializeCore = async (isCancelled = { current: false }) => {
+    const initializeCore = async (isCancelledParam = isCancelledRef) => {
       if (coreInitializationRef.current) {
         console.log('[App] Core initialization already in progress, skipping...')
         return
@@ -128,7 +131,7 @@ function App() {
           console.log('[App] Core started, updating state...')
           
           // Check if component was unmounted during initialization
-          if (isCancelled.current) {
+          if (isCancelledParam.current) {
             console.log('[App] Component unmounted during initialization, aborting state updates')
             return
           }
@@ -164,15 +167,12 @@ function App() {
       localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
     }
 
-    // Track if component is mounted to prevent state updates after unmount
-    const isCancelled = useRef(false)
-    
     // Initialize core inside useEffect to handle React lifecycle properly
-    initializeCore(isCancelled).then(() => {
+    initializeCore(isCancelledRef).then(() => {
       // Only update loading state if component is still mounted
-      if (!isCancelled.current) {
+      if (!isCancelledRef.current) {
         setTimeout(() => {
-          if (!isCancelled.current) {
+          if (!isCancelledRef.current) {
             setIsLoading(false)
           }
         }, 1000)
@@ -181,7 +181,7 @@ function App() {
     
     return () => {
       // Mark as cancelled to prevent state updates
-      isCancelled.current = true
+      isCancelledRef.current = true
       
       window.removeEventListener('resize', checkMobile)
       if (captionTimeoutRef.current) {
