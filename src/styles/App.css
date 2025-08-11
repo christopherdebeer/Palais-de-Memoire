@@ -351,14 +351,7 @@
 }
 
 .app-caption-content {
-  background: rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-lg);
-  padding: var(--space-md) var(--space-lg);
   max-width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .app-caption-text {
@@ -1002,12 +995,7 @@
     bottom: 160px; /* More space above voice interface on mobile */
     padding: 0 var(--space-md);
   }
-  
-  .app-caption-content {
-    padding: var(--space-md) var(--space-lg);
-    background: rgba(0, 0, 0, 0.95); /* More opaque on mobile */
-    border: 2px solid rgba(255, 255, 255, 0.3);
-  }
+
   
   .app-caption-text {
     font-size: 1.1rem;
