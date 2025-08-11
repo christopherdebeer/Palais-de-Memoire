@@ -190,14 +190,22 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
 
   // Auto-start listening when creation mode is activated
   useEffect(() => {
-    if (isCreationMode && enabled && isSupported && !isListening && !isProcessing) {
+    if (isCreationMode && enabled && isSupported && !isListening && !isProcessing && apiConfigured) {
       console.log('[VoiceInterface] Creation mode detected - auto-starting voice input')
       // Small delay to ensure UI is ready
       setTimeout(() => {
         startListening()
       }, 500)
+    } else if (isCreationMode && !apiConfigured) {
+      console.warn('[VoiceInterface] Creation mode triggered but API not configured')
+      // Provide feedback that API needs to be configured
+      const response = 'Please configure your Anthropic API key in the settings panel to use voice creation mode.'
+      if (onCaptionUpdate) {
+        onCaptionUpdate(response, 'synthesis')
+      }
+      speakResponse(response)
     }
-  }, [isCreationMode, enabled, isSupported, isListening, isProcessing])
+  }, [isCreationMode, enabled, isSupported, isListening, isProcessing, apiConfigured])
 
   const processCommand = async (command) => {
     console.log('[VoiceInterface] Processing command:', {

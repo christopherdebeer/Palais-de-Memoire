@@ -27,6 +27,7 @@ function App() {
   const [memoryPalaceCore, setMemoryPalaceCore] = useState(null)
   const [coreInitialized, setCoreInitialized] = useState(false)
   const [currentPalaceState, setCurrentPalaceState] = useState(null)
+  const coreInitializationRef = useRef(false)
   const [actionModalOpen, setActionModalOpen] = useState(false)
   const [currentAction, setCurrentAction] = useState(null)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
@@ -60,8 +61,14 @@ function App() {
     checkMobile()
     window.addEventListener('resize', checkMobile)
     
-    // Initialize Memory Palace Core
+    // Initialize Memory Palace Core - prevent multiple initializations
     const initializeCore = async () => {
+      if (coreInitializationRef.current) {
+        console.log('[App] Core initialization already in progress, skipping...')
+        return
+      }
+      
+      coreInitializationRef.current = true
       console.log('[App] Initializing Memory Palace Core...')
       
       try {
@@ -74,10 +81,18 @@ function App() {
         })
         
         const initialized = await core.initialize()
+        console.log('[App] Core initialization result:', initialized)
+        
         if (initialized) {
+          console.log('[App] Starting core...')
           await core.start()
+          console.log('[App] Core started, updating state...')
+          
+          // Update state and store core reference
           setMemoryPalaceCore(core)
           setCoreInitialized(true)
+          
+          console.log('[App] State updated - core:', !!core, 'initialized: true')
           
           // Set up event listeners for state updates
           core.on('room_created', (room) => {
@@ -99,11 +114,14 @@ function App() {
           updatePalaceState(core)
           
           console.log('[App] Memory Palace Core initialized successfully')
+          
         } else {
           console.error('[App] Failed to initialize Memory Palace Core')
+          coreInitializationRef.current = false
         }
       } catch (error) {
         console.error('[App] Error initializing Memory Palace Core:', error)
+        coreInitializationRef.current = false
       }
     }
     
@@ -274,7 +292,8 @@ function App() {
       type: command.type,
       parameters: command.parameters,
       originalInput: command.originalInput,
-      aiResponse: command.aiResponse
+      aiResponse: command.aiResponse,
+      isCreationMode: isCreationMode
     })
     
     if (!memoryPalaceCore || !coreInitialized) {
@@ -294,19 +313,31 @@ function App() {
             )
             console.log('[App] Room created successfully:', room)
             updatePalaceState(memoryPalaceCore)
+            
+            // Exit creation mode if this was triggered by creation mode
+            if (isCreationMode) {
+              handleCreationModeComplete()
+            }
           }
           break
         
         case 'add_object':
           console.log('[App] Processing ADD_OBJECT command:', command.parameters)
           if (command.parameters.name && command.parameters.info) {
+            // Use pending creation position if in creation mode
+            const position = isCreationMode ? pendingCreationPosition : (command.parameters.position || null)
             const object = await memoryPalaceCore.addObject(
               command.parameters.name,
               command.parameters.info,
-              command.parameters.position || null
+              position
             )
             console.log('[App] Object added successfully:', object)
             updatePalaceState(memoryPalaceCore)
+            
+            // Exit creation mode if this was triggered by creation mode
+            if (isCreationMode) {
+              handleCreationModeComplete()
+            }
           }
           break
         
@@ -511,11 +542,32 @@ function App() {
 
   const handleCreationModeTriggered = (creationData) => {
     console.log('[App] Creation mode triggered:', creationData)
+    console.log('[App] Current state check:', {
+      memoryPalaceCore: !!memoryPalaceCore,
+      coreInitialized,
+      coreInitializationRef: coreInitializationRef.current,
+      memoryPalaceCoreInitialized: memoryPalaceCore?.isInitialized,
+      memoryPalaceCoreRunning: memoryPalaceCore?.isRunning
+    })
     
-    if (!memoryPalaceCore || !coreInitialized) {
+    // Check if core initialization is complete using the ref
+    if (!coreInitializationRef.current || !memoryPalaceCore) {
       console.warn('[App] Memory Palace Core not initialized, cannot enter creation mode')
+      console.warn('[App] Debug info:', {
+        memoryPalaceCore: !!memoryPalaceCore,
+        coreInitialized,
+        coreInitializationRef: coreInitializationRef.current,
+        memoryPalaceCoreState: memoryPalaceCore ? {
+          isInitialized: memoryPalaceCore.isInitialized,
+          isRunning: memoryPalaceCore.isRunning,
+          hasRoomManager: !!memoryPalaceCore.roomManager,
+          hasObjectManager: !!memoryPalaceCore.objectManager
+        } : 'null'
+      })
       return
     }
+    
+    console.log('[App] ✅ Memory Palace Core is ready - entering creation mode')
     
     // Store the creation position and enter creation mode
     setPendingCreationPosition(creationData.position)
