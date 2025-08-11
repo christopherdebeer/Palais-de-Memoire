@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faTimes, faEdit, faTrash, faMove, faEye, faMapMarkerAlt } from '@fortawesome/free-solid-svg-icons'
+import { faTimes, faEdit, faTrash, faArrowsAlt, faEye, faMapMarkerAlt } from '@fortawesome/free-solid-svg-icons'
 
 const ObjectInspector = ({ 
   isOpen, 
@@ -180,7 +180,7 @@ const ObjectInspector = ({
                   disabled={isProcessing}
                   title="Move object"
                 >
-                  <FontAwesomeIcon icon={faMove} />
+                  <FontAwesomeIcon icon={faArrowsAlt} />
                   Move
                 </button>
                 
