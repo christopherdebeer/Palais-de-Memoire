@@ -414,8 +414,8 @@ function App() {
     const hideDelay = mode === 'synthesis' ? 6000 : 4000
     captionTimeoutRef.current = setTimeout(() => {
       console.log('[App] Auto-hiding caption')
-      // setCaptionText('')
-      // setCaptionMode(null)
+      setCaptionText('')
+      setCaptionMode(null)
     }, hideDelay)
   }
 
