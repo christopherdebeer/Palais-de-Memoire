@@ -5,7 +5,10 @@ import MemoryPalace from './components/MemoryPalace'
 import VoiceInterface from './components/VoiceInterface'
 import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
+import ObjectInspector from './components/ObjectInspector'
+import Minimap from './components/Minimap'
 import { MemoryPalaceCore } from './core/MemoryPalaceCore.js'
+import MobileMotionController from './utils/MobileMotionController.js'
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 
@@ -29,6 +32,21 @@ function App() {
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [isCreationMode, setIsCreationMode] = useState(false)
   const [pendingCreationPosition, setPendingCreationPosition] = useState(null)
+  
+  // Object interaction state
+  const [selectedObject, setSelectedObject] = useState(null)
+  const [objectInspectorOpen, setObjectInspectorOpen] = useState(false)
+  const [isProcessingObjectAction, setIsProcessingObjectAction] = useState(false)
+  
+  // Minimap state
+  const [showMinimap, setShowMinimap] = useState(true)
+  const [minimapCollapsed, setMinimapCollapsed] = useState(false)
+  const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: 0 })
+  
+  // Mobile motion control state
+  const [motionControlEnabled, setMotionControlEnabled] = useState(false)
+  const [motionController, setMotionController] = useState(null)
+  
   const memoryPalaceRef = useRef()
   const captionTimeoutRef = useRef(null)
 
@@ -527,6 +545,146 @@ function App() {
     setPendingCreationPosition(null)
   }
 
+  // Object interaction handlers
+  const handleObjectSelected = (objectId) => {
+    console.log('[App] Object selected:', objectId)
+    if (!memoryPalaceCore || !coreInitialized) return
+    
+    const objects = memoryPalaceCore.getCurrentRoomObjects()
+    const object = objects.find(obj => obj.id === objectId)
+    
+    if (object) {
+      setSelectedObject(object)
+      setObjectInspectorOpen(true)
+    }
+  }
+
+  const handleObjectEdit = async (updatedObject) => {
+    console.log('[App] Object edit:', updatedObject)
+    if (!memoryPalaceCore || !coreInitialized) return
+    
+    try {
+      setIsProcessingObjectAction(true)
+      
+      // Update object through core
+      await memoryPalaceCore.objectManager.updateObject(updatedObject.id, {
+        name: updatedObject.name,
+        information: updatedObject.information
+      })
+      
+      // Update local state
+      setSelectedObject(updatedObject)
+      updatePalaceState(memoryPalaceCore)
+      
+      handleCaptionUpdate(`Object "${updatedObject.name}" updated successfully`, 'synthesis')
+      
+    } catch (error) {
+      console.error('[App] Error updating object:', error)
+      alert(`Error updating object: ${error.message}`)
+    } finally {
+      setIsProcessingObjectAction(false)
+    }
+  }
+
+  const handleObjectDelete = async (objectId) => {
+    console.log('[App] Object delete:', objectId)
+    if (!memoryPalaceCore || !coreInitialized) return
+    
+    try {
+      setIsProcessingObjectAction(true)
+      
+      // Delete object through core
+      await memoryPalaceCore.objectManager.deleteObject(objectId)
+      
+      // Close inspector and update state
+      setObjectInspectorOpen(false)
+      setSelectedObject(null)
+      updatePalaceState(memoryPalaceCore)
+      
+      handleCaptionUpdate('Object deleted successfully', 'synthesis')
+      
+    } catch (error) {
+      console.error('[App] Error deleting object:', error)
+      alert(`Error deleting object: ${error.message}`)
+    } finally {
+      setIsProcessingObjectAction(false)
+    }
+  }
+
+  const handleObjectMove = (objectId) => {
+    console.log('[App] Object move:', objectId)
+    // TODO: Implement object moving functionality
+    // This could enter a "move mode" where the user clicks to place the object
+    handleCaptionUpdate('Object moving not yet implemented', 'synthesis')
+  }
+
+  const handleObjectInspectorClose = () => {
+    setObjectInspectorOpen(false)
+    setSelectedObject(null)
+  }
+
+  // Minimap handlers
+  const handleMinimapToggle = () => {
+    setMinimapCollapsed(!minimapCollapsed)
+  }
+
+  const handleMinimapLookAt = (rotation) => {
+    console.log('[App] Minimap look at:', rotation)
+    setCameraRotation(rotation)
+    
+    // Update camera in MemoryPalace component
+    if (memoryPalaceRef.current && memoryPalaceRef.current.setCameraRotation) {
+      memoryPalaceRef.current.setCameraRotation(rotation)
+    }
+  }
+
+  // Mobile motion control handlers
+  const handleMotionControlToggle = async (enabled) => {
+    console.log('[App] Motion control toggle:', enabled)
+    
+    if (enabled) {
+      if (!motionController) {
+        // Create motion controller
+        const controller = new MobileMotionController((rotation) => {
+          setCameraRotation(rotation)
+          // Update camera in MemoryPalace component
+          if (memoryPalaceRef.current && memoryPalaceRef.current.setCameraRotation) {
+            memoryPalaceRef.current.setCameraRotation(rotation)
+          }
+        })
+        
+        setMotionController(controller)
+        
+        const success = await controller.enable()
+        if (success) {
+          setMotionControlEnabled(true)
+          handleCaptionUpdate('Motion control enabled - tilt your device to look around', 'synthesis')
+        } else {
+          handleCaptionUpdate('Motion control permission denied or not supported', 'synthesis')
+        }
+      } else {
+        const success = await motionController.enable()
+        if (success) {
+          setMotionControlEnabled(true)
+          handleCaptionUpdate('Motion control enabled', 'synthesis')
+        }
+      }
+    } else {
+      if (motionController) {
+        motionController.disable()
+        setMotionControlEnabled(false)
+        handleCaptionUpdate('Motion control disabled', 'synthesis')
+      }
+    }
+  }
+
+  const handleMotionControlCalibrate = () => {
+    if (motionController && motionControlEnabled) {
+      motionController.calibrate()
+      handleCaptionUpdate('Motion control calibrated', 'synthesis')
+    }
+  }
+
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${isListening ? 'listening' : ''}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
@@ -535,6 +693,10 @@ function App() {
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
         onCreationModeTriggered={handleCreationModeTriggered}
+        onObjectSelected={handleObjectSelected}
+        selectedObjectId={selectedObject?.id}
+        cameraRotation={cameraRotation}
+        onCameraRotationChange={setCameraRotation}
       />
       
       {/* Show loading overlay while initializing */}
@@ -593,6 +755,29 @@ function App() {
         isOpen={isSettingsOpen}
         onClose={handleSettingsClose}
       />
+
+      {/* Object Inspector Modal */}
+      <ObjectInspector
+        isOpen={objectInspectorOpen}
+        object={selectedObject}
+        onClose={handleObjectInspectorClose}
+        onEdit={handleObjectEdit}
+        onDelete={handleObjectDelete}
+        onMove={handleObjectMove}
+        isProcessing={isProcessingObjectAction}
+      />
+
+      {/* Minimap */}
+      {showMinimap && (
+        <Minimap
+          isVisible={showMinimap}
+          objects={currentPalaceState?.objects || []}
+          cameraRotation={cameraRotation}
+          onLookAt={handleMinimapLookAt}
+          onToggle={handleMinimapToggle}
+          isCollapsed={minimapCollapsed}
+        />
+      )}
 
       {/* Action Form Modal */}
       <ActionFormModal

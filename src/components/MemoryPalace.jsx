@@ -5,7 +5,9 @@ import nipplejs from 'nipplejs'
 const MemoryPalace = forwardRef(({ 
   wireframeEnabled = false, 
   nippleEnabled = false,
-  onCreationModeTriggered = null
+  onCreationModeTriggered = null,
+  onObjectSelected = null,
+  selectedObjectId = null
 }, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
