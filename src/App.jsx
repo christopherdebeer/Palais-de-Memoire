@@ -163,7 +163,7 @@ function App() {
     setIsMenuOpen(false)
     
     // Handle direct actions (no parameters required)
-    if (command === 'list-rooms' || command === 'get-room-info') {
+    if (command === 'list-rooms' || command === 'get-room-info' || command === 'regenerate-image') {
       if (!memoryPalaceCore || !coreInitialized) {
         console.warn('[App] Memory Palace Core not initialized')
         return
@@ -173,7 +173,15 @@ function App() {
         setIsProcessingAction(true)
         
         // Execute the action directly
-        const toolName = command === 'list-rooms' ? 'list_rooms' : 'get_room_info'
+        let toolName
+        if (command === 'list-rooms') {
+          toolName = 'list_rooms'
+        } else if (command === 'get-room-info') {
+          toolName = 'get_room_info'
+        } else if (command === 'regenerate-image') {
+          toolName = 'regenerate_room_image'
+        }
+        
         let result
         
         if (memoryPalaceCore.roomManager) {
@@ -340,6 +348,15 @@ function App() {
           const currentObjects = memoryPalaceCore.getCurrentRoomObjects()
           console.log('[App] Current room objects:', currentObjects)
           // The response is already handled by the AI, just log for debugging
+          break
+        
+        case 'regenerate_room_image':
+          console.log('[App] Processing REGENERATE_ROOM_IMAGE command')
+          // The image regeneration is handled by the tool manager and AI response
+          // Just log for debugging - the actual work is done in the tool
+          if (currentPalaceState?.currentRoom) {
+            console.log('[App] Regenerating image for room:', currentPalaceState.currentRoom.name)
+          }
           break
         
         case 'response':
@@ -569,16 +586,20 @@ function App() {
                   onClick={() => handleMenuCommand('list-rooms')}
                   disabled={isProcessingAction}
                 >
-                  <FontAwesomeIcon icon={faList} />
-                  <span>List All Rooms</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faList} />
+                    <span>List All Rooms</span>
+                  </div>
                 </button>
                 <button 
                   className="menu-item"
                   onClick={() => handleMenuCommand('get-room-info')}
                   disabled={isProcessingAction}
                 >
-                  <FontAwesomeIcon icon={faEye} />
-                  <span>Current Room Info</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faEye} />
+                    <span>Current Room Info</span>
+                  </div>
                 </button>
               </div>
 
@@ -589,24 +610,55 @@ function App() {
                   onClick={() => handleMenuCommand('create-room')}
                   disabled={isProcessingAction}
                 >
-                  <FontAwesomeIcon icon={faPlus} />
-                  <span>Create New Room</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faPlus} />
+                    <span>Create New Room</span>
+                  </div>
                 </button>
                 <button 
                   className="menu-item"
                   onClick={() => handleMenuCommand('edit-room')}
                   disabled={isProcessingAction || !currentPalaceState?.currentRoom}
                 >
-                  <FontAwesomeIcon icon={faEdit} />
-                  <span>Edit Current Room</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faEdit} />
+                    <span>Edit Current Room</span>
+                  </div>
+                  {(isProcessingAction || !currentPalaceState?.currentRoom) && (
+                    <small className="disabled-reason">
+                      {isProcessingAction ? 'Processing...' : 'No current room'}
+                    </small>
+                  )}
                 </button>
                 <button 
                   className="menu-item"
                   onClick={() => handleMenuCommand('go-to-room')}
                   disabled={isProcessingAction || !currentPalaceState?.stats?.totalRooms}
                 >
-                  <FontAwesomeIcon icon={faArrowRight} />
-                  <span>Navigate to Room</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faArrowRight} />
+                    <span>Navigate to Room</span>
+                  </div>
+                  {(isProcessingAction || !currentPalaceState?.stats?.totalRooms) && (
+                    <small className="disabled-reason">
+                      {isProcessingAction ? 'Processing...' : 'No rooms available'}
+                    </small>
+                  )}
+                </button>
+                <button 
+                  className="menu-item"
+                  onClick={() => handleMenuCommand('regenerate-image')}
+                  disabled={isProcessingAction || !currentPalaceState?.currentRoom}
+                >
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faEdit} />
+                    <span>Regenerate Room Image</span>
+                  </div>
+                  {(isProcessingAction || !currentPalaceState?.currentRoom) && (
+                    <small className="disabled-reason">
+                      {isProcessingAction ? 'Processing...' : 'No current room'}
+                    </small>
+                  )}
                 </button>
               </div>
 
@@ -617,16 +669,30 @@ function App() {
                   onClick={() => handleMenuCommand('add-object')}
                   disabled={isProcessingAction || !currentPalaceState?.currentRoom}
                 >
-                  <FontAwesomeIcon icon={faPlus} />
-                  <span>Add Memory Object</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faPlus} />
+                    <span>Add Memory Object</span>
+                  </div>
+                  {(isProcessingAction || !currentPalaceState?.currentRoom) && (
+                    <small className="disabled-reason">
+                      {isProcessingAction ? 'Processing...' : 'No current room'}
+                    </small>
+                  )}
                 </button>
                 <button 
                   className="menu-item"
                   onClick={() => handleMenuCommand('remove-object')}
                   disabled={isProcessingAction || !currentPalaceState?.stats?.totalObjects}
                 >
-                  <FontAwesomeIcon icon={faTrash} />
-                  <span>Remove Object</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faTrash} />
+                    <span>Remove Object</span>
+                  </div>
+                  {(isProcessingAction || !currentPalaceState?.stats?.totalObjects) && (
+                    <small className="disabled-reason">
+                      {isProcessingAction ? 'Processing...' : 'No objects to remove'}
+                    </small>
+                  )}
                 </button>
               </div>
 
@@ -636,8 +702,10 @@ function App() {
                   className="menu-item"
                   onClick={() => handleMenuCommand('about')}
                 >
-                  <FontAwesomeIcon icon={faInfo} />
-                  <span>About</span>
+                  <div className="menu-item-content">
+                    <FontAwesomeIcon icon={faInfo} />
+                    <span>About</span>
+                  </div>
                 </button>
               </div>
             </div>

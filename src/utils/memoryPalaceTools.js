@@ -3,6 +3,8 @@
  * Handles tool execution for memory palace operations via Claude
  */
 
+import replicateAPI from '../services/ReplicateAPI.js'
+
 export class MemoryPalaceToolManager {
   constructor(memoryPalaceCore) {
     this.core = memoryPalaceCore
@@ -38,6 +40,9 @@ export class MemoryPalaceToolManager {
         
         case 'get_room_info':
           return await this.getRoomInfo()
+        
+        case 'regenerate_room_image':
+          return await this.regenerateRoomImage(input)
         
         default:
           throw new Error(`Unknown tool: ${toolName}`)
@@ -235,6 +240,61 @@ export class MemoryPalaceToolManager {
   }
 
   /**
+   * Regenerate image for current room using existing description
+   */
+  async regenerateRoomImage(input = {}) {
+    if (!this.core) {
+      return `Image regeneration not available - Memory Palace core not initialized`
+    }
+
+    try {
+      const currentState = this.core.getCurrentState()
+      const currentRoom = currentState.currentRoom
+      
+      if (!currentRoom) {
+        return `No current room to regenerate image for. Please create a room first.`
+      }
+
+      console.log(`[MemoryPalaceTools] Regenerating image for room: ${currentRoom.name}`)
+      
+      // Check if Replicate API is configured
+      if (!replicateAPI.isConfigured()) {
+        return `Image regeneration not available - Replicate API key not configured. Please configure your Replicate API key in settings to generate room images.`
+      }
+
+      // Generate new image using existing room description
+      const result = await replicateAPI.generateSkyboxImage(
+        currentRoom.description, 
+        currentRoom.name
+      )
+
+      if (result.success) {
+        // Update room with new image URL if the core supports it
+        if (this.roomManager && result.url) {
+          try {
+            await this.roomManager.updateRoom(currentRoom.id, { 
+              imageUrl: result.url,
+              lastImageGenerated: new Date().toISOString(),
+              imagePrompt: result.prompt
+            })
+            console.log(`[MemoryPalaceTools] Updated room ${currentRoom.name} with new image URL`)
+          } catch (updateError) {
+            console.warn(`[MemoryPalaceTools] Could not update room with image URL:`, updateError)
+          }
+        }
+
+        return `Successfully regenerated image for room "${currentRoom.name}"! The new skybox image has been generated using the existing description: "${currentRoom.description}". Image URL: ${result.url}`
+      } else {
+        return `Failed to regenerate image for room "${currentRoom.name}": ${result.error || 'Unknown error'}`
+      }
+
+    } catch (error) {
+      console.error(`[MemoryPalaceTools] Error regenerating room image:`, error)
+      return `Failed to regenerate room image: ${error.message}`
+    }
+  }
+
+  /**
    * Get tool definitions for Claude
    */
   static getToolDefinitions() {
@@ -328,6 +388,14 @@ export class MemoryPalaceToolManager {
       {
         name: 'get_room_info',
         description: 'Get detailed information about the current room and its objects',
+        input_schema: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'regenerate_room_image',
+        description: 'Regenerate the skybox image for the current room using its existing description with a new random seed',
         input_schema: {
           type: 'object',
           properties: {}
