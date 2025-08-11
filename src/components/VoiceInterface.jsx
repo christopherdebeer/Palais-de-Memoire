@@ -4,7 +4,7 @@ import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCa
 import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
 import settingsManager from '../services/SettingsManager.js'
 
-const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => {
+const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled }) => {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [response, setResponse] = useState('')
@@ -13,9 +13,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
   const [apiConfigured, setApiConfigured] = useState(false)
   const [textInput, setTextInput] = useState('')
   const [showTextInput, setShowTextInput] = useState(false)
-  const [captionsEnabled, setCaptionsEnabled] = useState(false)
-  const [captionText, setCaptionText] = useState('')
-  const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
   const [conversationHistory, setConversationHistory] = useState([])
   const recognitionRef = useRef(null)
   const synthRef = useRef(null)
@@ -84,13 +81,17 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
           
           if (!transcript || transcript.trim().length === 0) {
             console.warn('[VoiceInterface] Voice input captured but transcript is empty')
-            showCaption('No speech detected, please try again', 'recognition')
+            if (onCaptionUpdate) {
+              onCaptionUpdate('No speech detected, please try again', 'recognition')
+            }
             return
           }
           
           console.log('[VoiceInterface] Processing captured voice input:', transcript)
           setTranscript(transcript)
-          showCaption(`You said: "${transcript}"`, 'recognition')
+          if (onCaptionUpdate) {
+            onCaptionUpdate(`You said: "${transcript}"`, 'recognition')
+          }
           processCommand(transcript)
         }
 
@@ -145,20 +146,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
       })
       setApiConfigured(isConfigured)
 
-      // Load caption preferences - default to enabled
-      const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
-      if (savedCaptions !== null) {
-        setCaptionsEnabled(JSON.parse(savedCaptions))
-      } else {
-        // Default to enabled for better user experience
-        setCaptionsEnabled(true)
-        localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
-      }
-      
-      console.log('[VoiceInterface] Caption preferences loaded:', {
-        savedCaptions,
-        captionsEnabled: savedCaptions !== null ? JSON.parse(savedCaptions) : true
-      })
+      // Caption preferences are now managed at App level
+      console.log('[VoiceInterface] Caption management moved to App level')
     }
 
     // Initialize asynchronously
@@ -427,10 +416,9 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
       }
 
       // Enhanced caption display with karaoke-style highlighting
-      if (captionsEnabled) {
+      if (captionsEnabled && onCaptionUpdate) {
         console.log('[VoiceInterface] Setting up TTS captions for:', text.substring(0, 50) + '...')
-        setCaptionMode('synthesis')
-        setCaptionText(text)
+        onCaptionUpdate(text, 'synthesis')
         
         // Set up word-by-word highlighting
         let wordIndex = 0
@@ -438,7 +426,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
         
         utterance.onboundary = (event) => {
           console.log('[VoiceInterface] TTS boundary event:', event.name, 'wordIndex:', wordIndex)
-          if (event.name === 'word' && captionsEnabled) {
+          if (event.name === 'word' && captionsEnabled && onCaptionUpdate) {
             wordIndex++
             const spoken = words.slice(0, wordIndex).join(' ')
             const remaining = words.slice(wordIndex).join(' ')
@@ -449,7 +437,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
               : `<span class="spoken">${spoken}</span>`
             
             console.log('[VoiceInterface] Updating caption with highlighting:', highlightedText.substring(0, 50) + '...')
-            setCaptionText(highlightedText)
+            onCaptionUpdate(highlightedText, 'synthesis')
           }
         }
       } else {
@@ -462,15 +450,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
       
       utterance.onend = () => {
         console.log('[VoiceInterface] TTS ended')
-        // Hide captions after a delay
-        if (captionsEnabled && captionMode === 'synthesis') {
-          setTimeout(() => {
-            if (captionMode === 'synthesis') {
-              setCaptionText('')
-              setCaptionMode(null)
-            }
-          }, 1500)
-        }
+        // Caption hiding is now handled at App level
       }
       
       utterance.onerror = (event) => {
@@ -479,11 +459,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
           type: event.type,
           stack: new Error().stack
         })
-        // Hide captions on error
-        if (captionsEnabled && captionMode === 'synthesis') {
-          setCaptionText('')
-          setCaptionMode(null)
-        }
+        // Caption hiding is now handled at App level
       }
 
       synthRef.current = utterance
@@ -547,42 +523,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
 
   const toggleCaptions = () => {
     const newState = !captionsEnabled
-    setCaptionsEnabled(newState)
-    localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(newState))
-    
-    // Hide captions immediately if disabled
-    if (!newState) {
-      setCaptionText('')
-      setCaptionMode(null)
+    if (onCaptionToggle) {
+      onCaptionToggle(newState)
     }
   }
 
-  const showCaption = (text, mode) => {
-    console.log('[VoiceInterface] Showing caption:', {
-      text,
-      mode,
-      captionsEnabled
-    })
-    
-    if (!captionsEnabled) {
-      console.log('[VoiceInterface] Captions disabled - not showing')
-      return
-    }
-    
-    if (captionTimeoutRef.current) {
-      clearTimeout(captionTimeoutRef.current)
-    }
-    
-    setCaptionText(text)
-    setCaptionMode(mode)
-    
-    // Auto-hide after 4 seconds
-    captionTimeoutRef.current = setTimeout(() => {
-      console.log('[VoiceInterface] Auto-hiding caption')
-      setCaptionText('')
-      setCaptionMode(null)
-    }, 4000)
-  }
 
   if (!enabled || !isSupported) {
     return null
@@ -653,17 +598,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange }) => 
         </span>
       </button>
 
-      {/* Enhanced Closed Caption Display */}
-      {captionText && captionsEnabled && (
-        <div className="caption-overlay" aria-live="polite" aria-atomic="true">
-          <div className="caption-content">
-            <p 
-              className={`caption-text ${captionMode}`}
-              dangerouslySetInnerHTML={{ __html: captionText }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Voice Status */}
       <div className="voice-status-info">

@@ -15,7 +15,11 @@ function App() {
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [captionText, setCaptionText] = useState('')
+  const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
+  const [captionsEnabled, setCaptionsEnabled] = useState(true)
   const memoryPalaceRef = useRef()
+  const captionTimeoutRef = useRef(null)
 
   useEffect(() => {
     // Check if running on mobile
@@ -30,8 +34,23 @@ function App() {
     setTimeout(() => {
       setIsLoading(false)
     }, 1500)
+
+    // Load caption preferences - default to enabled
+    const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
+    if (savedCaptions !== null) {
+      setCaptionsEnabled(JSON.parse(savedCaptions))
+    } else {
+      // Default to enabled for better user experience
+      setCaptionsEnabled(true)
+      localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
+    }
     
-    return () => window.removeEventListener('resize', checkMobile)
+    return () => {
+      window.removeEventListener('resize', checkMobile)
+      if (captionTimeoutRef.current) {
+        clearTimeout(captionTimeoutRef.current)
+      }
+    }
   }, [])
 
   const handleVoiceToggle = (enabled) => {
@@ -114,6 +133,44 @@ function App() {
     }
   }
 
+  const handleCaptionUpdate = (text, mode) => {
+    console.log('[App] Caption update:', { text, mode, captionsEnabled })
+    
+    if (!captionsEnabled) {
+      console.log('[App] Captions disabled - not showing')
+      return
+    }
+    
+    if (captionTimeoutRef.current) {
+      clearTimeout(captionTimeoutRef.current)
+    }
+    
+    setCaptionText(text)
+    setCaptionMode(mode)
+    
+    // Auto-hide after 4 seconds for recognition, longer for synthesis
+    const hideDelay = mode === 'synthesis' ? 6000 : 4000
+    captionTimeoutRef.current = setTimeout(() => {
+      console.log('[App] Auto-hiding caption')
+      setCaptionText('')
+      setCaptionMode(null)
+    }, hideDelay)
+  }
+
+  const handleCaptionToggle = (enabled) => {
+    setCaptionsEnabled(enabled)
+    localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(enabled))
+    
+    // Hide captions immediately if disabled
+    if (!enabled) {
+      setCaptionText('')
+      setCaptionMode(null)
+      if (captionTimeoutRef.current) {
+        clearTimeout(captionTimeoutRef.current)
+      }
+    }
+  }
+
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${isListening ? 'listening' : ''}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
@@ -140,6 +197,9 @@ function App() {
         isMobile={isMobile}
         onCommand={handleVoiceCommand}
         onListeningChange={handleListeningChange}
+        onCaptionUpdate={handleCaptionUpdate}
+        onCaptionToggle={handleCaptionToggle}
+        captionsEnabled={captionsEnabled}
       />
       
       {/* Voice Status Indicator - only shown when listening */}
@@ -148,6 +208,18 @@ function App() {
           <div className="voice-indicator">
             <div className="pulse"></div>
             <span>Listening...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Global Closed Caption Display - positioned at App level for maximum visibility */}
+      {captionText && captionsEnabled && (
+        <div className="app-caption-overlay" aria-live="polite" aria-atomic="true">
+          <div className="app-caption-content">
+            <p 
+              className={`app-caption-text ${captionMode || ''}`}
+              dangerouslySetInnerHTML={{ __html: captionText }}
+            />
           </div>
         </div>
       )}
