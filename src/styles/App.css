@@ -1360,6 +1360,26 @@
   cursor: grabbing;
 }
 
+/* Mobile touch improvements */
+@media (max-width: 48em) {
+  .minimap-header {
+    padding: var(--space-md) var(--space-md);
+    min-height: 44px; /* Better touch target */
+    touch-action: none; /* Prevent default touch behaviors */
+  }
+  
+  .minimap-btn {
+    width: 2rem;
+    height: 2rem;
+    min-height: 44px; /* Better touch target */
+    min-width: 44px;
+  }
+  
+  .minimap.dragging {
+    touch-action: none;
+  }
+}
+
 .minimap-title {
   display: flex;
   align-items: center;

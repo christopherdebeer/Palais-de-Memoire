@@ -221,7 +221,7 @@ const Minimap = ({
     setHoveredObject(null)
   }
 
-  // Drag handlers for minimap repositioning
+  // Drag handlers for minimap repositioning (mouse and touch)
   const handleHeaderMouseDown = (event) => {
     if (event.target.closest('.minimap-btn')) {
       // Don't start dragging if clicking on a button
@@ -233,6 +233,22 @@ const Minimap = ({
     setDragOffset({
       x: event.clientX - rect.left,
       y: event.clientY - rect.top
+    })
+    event.preventDefault()
+  }
+
+  const handleHeaderTouchStart = (event) => {
+    if (event.target.closest('.minimap-btn')) {
+      // Don't start dragging if touching a button
+      return
+    }
+    
+    setIsDragging(true)
+    const rect = minimapRef.current.getBoundingClientRect()
+    const touch = event.touches[0]
+    setDragOffset({
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top
     })
     event.preventDefault()
   }
@@ -255,21 +271,57 @@ const Minimap = ({
     onPositionChange({ x: clampedX, y: clampedY })
   }
 
+  const handleTouchMove = (event) => {
+    if (!isDragging || !onPositionChange) return
+
+    const touch = event.touches[0]
+    const newX = touch.clientX - dragOffset.x
+    const newY = touch.clientY - dragOffset.y
+
+    // Keep minimap within viewport bounds
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const minimapWidth = isCollapsed ? 140 : 220
+    const minimapHeight = isCollapsed ? 160 : 280
+
+    const clampedX = Math.max(0, Math.min(newX, viewportWidth - minimapWidth))
+    const clampedY = Math.max(0, Math.min(newY, viewportHeight - minimapHeight))
+
+    onPositionChange({ x: clampedX, y: clampedY })
+    event.preventDefault() // Prevent scrolling
+  }
+
   const handleMouseUp = () => {
     setIsDragging(false)
   }
 
-  // Add global mouse event listeners for dragging
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+  }
+
+  // Add global mouse and touch event listeners for dragging
   useEffect(() => {
     if (isDragging) {
+      // Mouse events
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
+      
+      // Touch events
+      document.addEventListener('touchmove', handleTouchMove, { passive: false })
+      document.addEventListener('touchend', handleTouchEnd)
+      
       document.body.style.cursor = 'grabbing'
       document.body.style.userSelect = 'none'
       
       return () => {
+        // Clean up mouse events
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        
+        // Clean up touch events
+        document.removeEventListener('touchmove', handleTouchMove)
+        document.removeEventListener('touchend', handleTouchEnd)
+        
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
       }
@@ -290,6 +342,7 @@ const Minimap = ({
       <div 
         className="minimap-header"
         onMouseDown={handleHeaderMouseDown}
+        onTouchStart={handleHeaderTouchStart}
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
         <div className="minimap-title">
