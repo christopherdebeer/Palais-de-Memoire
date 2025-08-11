@@ -128,7 +128,8 @@ export class MemoryPalaceCore extends EventEmitter {
       // Attempt partial recovery if possible
       await this.attemptRecovery();
       
-      return false
+      // Return actual initialization state after recovery attempt
+      return this.isInitialized
     }
   }
   
