@@ -148,13 +148,6 @@ function App() {
       }
     }
     
-    // Initialize core and then finish loading
-    initializeCore().then(() => {
-      setTimeout(() => {
-        setIsLoading(false)
-      }, 1000)
-    })
-
     // Load caption preferences - default to enabled
     const savedCaptions = localStorage.getItem('memoryCaptionsEnabled')
     if (savedCaptions !== null) {
@@ -164,6 +157,13 @@ function App() {
       setCaptionsEnabled(true)
       localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
     }
+
+    // Initialize core inside useEffect to handle React lifecycle properly
+    initializeCore().then(() => {
+      setTimeout(() => {
+        setIsLoading(false)
+      }, 1000)
+    })
     
     return () => {
       window.removeEventListener('resize', checkMobile)
@@ -174,6 +174,8 @@ function App() {
       if (memoryPalaceCore) {
         memoryPalaceCore.dispose()
       }
+      // Reset initialization ref to allow re-initialization on remount
+      coreInitializationRef.current = false
     }
   }, [])
 
