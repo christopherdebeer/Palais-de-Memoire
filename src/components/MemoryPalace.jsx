@@ -575,18 +575,45 @@ const MemoryPalace = forwardRef(({
       }
     }
 
-    // Keyboard event handlers
+    // Helper function to check if user is currently typing in an input field
+    const isTypingInInput = () => {
+      const activeElement = document.activeElement
+      if (!activeElement) return false
+      
+      const inputTypes = ['INPUT', 'TEXTAREA', 'SELECT']
+      const isInputElement = inputTypes.includes(activeElement.tagName)
+      const isContentEditable = activeElement.contentEditable === 'true'
+      
+      // Also check for specific input types that should allow typing
+      if (activeElement.tagName === 'INPUT') {
+        const inputType = activeElement.type.toLowerCase()
+        const textInputTypes = ['text', 'password', 'email', 'search', 'url', 'tel', 'number']
+        return textInputTypes.includes(inputType)
+      }
+      
+      return isInputElement || isContentEditable
+    }
+
+    // Keyboard event handlers with smart input detection
     const handleKeyDown = (event) => {
       if (keys.hasOwnProperty(event.code)) {
-        keys[event.code] = true
-        event.preventDefault() // Prevent default browser behavior for these keys
+        // Only handle navigation keys if user is NOT typing in an input field
+        if (!isTypingInInput()) {
+          keys[event.code] = true
+          event.preventDefault() // Prevent default browser behavior for navigation keys
+        }
+        // If user IS typing, let the input field handle the key normally
       }
     }
 
     const handleKeyUp = (event) => {
       if (keys.hasOwnProperty(event.code)) {
-        keys[event.code] = false
-        event.preventDefault()
+        // Only handle navigation keys if user is NOT typing in an input field
+        if (!isTypingInInput()) {
+          keys[event.code] = false
+          event.preventDefault()
+        }
+        // If user IS typing, let the input field handle the key normally
       }
     }
 
