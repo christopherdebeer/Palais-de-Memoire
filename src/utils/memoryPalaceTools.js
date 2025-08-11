@@ -10,6 +10,49 @@ export class MemoryPalaceToolManager {
     this.core = memoryPalaceCore
     this.roomManager = memoryPalaceCore?.roomManager
     this.objectManager = memoryPalaceCore?.objectManager
+    
+    // Track initialization state
+    this.isReady = this.checkIfReady()
+    
+    console.log(`[MemoryPalaceTools] Tool manager initialized:`, {
+      hasCore: !!this.core,
+      coreInitialized: this.core?.isInitialized,
+      coreRunning: this.core?.isRunning,
+      hasRoomManager: !!this.roomManager,
+      hasObjectManager: !!this.objectManager,
+      isReady: this.isReady
+    })
+  }
+  
+  /**
+   * Check if the tool manager is ready to use
+   */
+  checkIfReady() {
+    return !!(
+      this.core && 
+      this.core.isInitialized && 
+      this.roomManager && 
+      this.objectManager
+    )
+  }
+  
+  /**
+   * Validate core readiness and throw error if not ready
+   */
+  validateCore() {
+    if (!this.core) {
+      throw new Error('Memory Palace core not initialized')
+    }
+    
+    if (!this.core.isInitialized) {
+      throw new Error('Memory Palace core not fully initialized')
+    }
+    
+    if (!this.roomManager || !this.objectManager) {
+      throw new Error('Memory Palace managers not available')
+    }
+    
+    return true
   }
 
   /**
@@ -19,6 +62,10 @@ export class MemoryPalaceToolManager {
     console.log(`[MemoryPalaceTools] Executing ${toolName}`, input)
 
     try {
+      // Check if core is ready before executing any tool
+      if (!this.isReady && !this.checkIfReady()) {
+        return `Tool execution failed: Memory Palace core is not fully initialized. Please wait a moment and try again.`
+      }
       switch (toolName) {
         case 'create_room':
           return await this.createRoom(input)
@@ -63,11 +110,8 @@ export class MemoryPalaceToolManager {
    * Create a new room
    */
   async createRoom({ name, description }) {
-    if (!this.core) {
-      return `Room creation not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const room = await this.core.createRoom(name, description)
       return `Successfully created room "${name}" with description: ${description}. Room ID: ${room.id}`
     } catch (error) {
@@ -79,11 +123,8 @@ export class MemoryPalaceToolManager {
    * Edit current room description
    */
   async editRoom({ description }) {
-    if (!this.core || !this.roomManager) {
-      return `Room editing not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       const currentRoom = currentState.currentRoom
       
@@ -102,11 +143,8 @@ export class MemoryPalaceToolManager {
    * Navigate to another room
    */
   async goToRoom({ roomName }) {
-    if (!this.core) {
-      return `Room navigation not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const rooms = this.core.getAllRooms()
       const room = rooms.find(r => 
         r.name.toLowerCase().includes(roomName.toLowerCase())
@@ -128,11 +166,8 @@ export class MemoryPalaceToolManager {
    * Add object to current room
    */
   async addObject({ name, info, position }) {
-    if (!this.core) {
-      return `Object management not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       if (!currentState.currentRoom) {
         return `No current room to add object to. Please create a room first.`
@@ -149,11 +184,8 @@ export class MemoryPalaceToolManager {
    * Add object at specific position (for creation mode)
    */
   async addObjectAtPosition({ name, info, position }) {
-    if (!this.core) {
-      return `Object management not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       if (!currentState.currentRoom) {
         return `No current room to add object to. Please create a room first.`
@@ -174,11 +206,8 @@ export class MemoryPalaceToolManager {
    * Create door at specific position (for creation mode)
    */
   async createDoorAtPosition({ description, targetRoomName, targetRoomDescription, position }) {
-    if (!this.core) {
-      return `Door creation not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       if (!currentState.currentRoom) {
         return `No current room to create door from. Please create a room first.`
@@ -214,11 +243,8 @@ export class MemoryPalaceToolManager {
    * Remove object from current room
    */
   async removeObject({ name }) {
-    if (!this.core || !this.objectManager) {
-      return `Object management not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       if (!currentState.currentRoom) {
         return `No current room to remove object from`
@@ -245,11 +271,8 @@ export class MemoryPalaceToolManager {
    * List all available rooms
    */
   async listRooms() {
-    if (!this.core) {
-      return `Room listing not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const rooms = this.core.getAllRooms()
       
       if (rooms.length === 0) {
@@ -274,11 +297,8 @@ export class MemoryPalaceToolManager {
    * Get information about current room
    */
   async getRoomInfo() {
-    if (!this.core) {
-      return `Room info not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       const currentRoom = currentState.currentRoom
       
@@ -314,11 +334,8 @@ export class MemoryPalaceToolManager {
    * Regenerate image for current room using existing description
    */
   async regenerateRoomImage(input = {}) {
-    if (!this.core) {
-      return `Image regeneration not available - Memory Palace core not initialized`
-    }
-
     try {
+      this.validateCore()
       const currentState = this.core.getCurrentState()
       const currentRoom = currentState.currentRoom
       

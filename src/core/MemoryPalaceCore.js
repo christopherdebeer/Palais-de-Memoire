@@ -57,24 +57,25 @@ export class MemoryPalaceCore extends EventEmitter {
     }
 
     const startTime = performance.now()
+    this.lastError = null
     
     try {
       console.log('[MemoryPalaceCore] Starting initialization process...')
       console.log('[MemoryPalaceCore] Config:', this.config)
       
-      // Initialize state management
+      // Initialize state management with retry mechanism
       console.log('[MemoryPalaceCore] Step 1: Initializing StateManager...')
-      await this.initializeStateManager()
+      await this.initializeWithRetry(this.initializeStateManager.bind(this), 'StateManager')
       console.log('[MemoryPalaceCore] Step 1: StateManager initialized successfully')
       
-      // Initialize API management
+      // Initialize API management with retry mechanism
       console.log('[MemoryPalaceCore] Step 2: Initializing APIManager...')
-      await this.initializeAPIManager()
+      await this.initializeWithRetry(this.initializeAPIManager.bind(this), 'APIManager')
       console.log('[MemoryPalaceCore] Step 2: APIManager initialized successfully')
       
-      // Initialize core managers
+      // Initialize core managers with retry mechanism
       console.log('[MemoryPalaceCore] Step 3: Initializing core managers...')
-      await this.initializeCoreManagers()
+      await this.initializeWithRetry(this.initializeCoreManagers.bind(this), 'CoreManagers')
       console.log('[MemoryPalaceCore] Step 3: Core managers initialized successfully')
       
       // Set up event listeners
@@ -84,7 +85,7 @@ export class MemoryPalaceCore extends EventEmitter {
       
       // Apply initial configuration
       console.log('[MemoryPalaceCore] Step 5: Applying initial configuration...')
-      await this.applyConfiguration()
+      await this.initializeWithRetry(this.applyConfiguration.bind(this), 'Configuration')
       console.log('[MemoryPalaceCore] Step 5: Initial configuration applied successfully')
       
       this.isInitialized = true
@@ -105,6 +106,7 @@ export class MemoryPalaceCore extends EventEmitter {
       return true
       
     } catch (error) {
+      this.lastError = error;
       console.error('[MemoryPalaceCore] ❌ Initialization failed:', error)
       console.error('[MemoryPalaceCore] Error stack:', error.stack)
       console.error('[MemoryPalaceCore] Current state at failure:', {
@@ -119,9 +121,110 @@ export class MemoryPalaceCore extends EventEmitter {
       this.emit(EventTypes.ERROR_OCCURRED, { 
         type: 'initialization_error', 
         error: error.message,
-        stack: error.stack
+        stack: error.stack,
+        component: error.component || 'unknown'
       })
+      
+      // Attempt partial recovery if possible
+      await this.attemptRecovery();
+      
       return false
+    }
+  }
+  
+  /**
+   * Initialize a component with retry mechanism
+   * @param {Function} initFunction - Initialization function to call
+   * @param {string} componentName - Name of the component being initialized
+   * @param {number} maxRetries - Maximum number of retry attempts
+   * @returns {Promise<void>}
+   */
+  async initializeWithRetry(initFunction, componentName, maxRetries = 2) {
+    let attempts = 0;
+    let lastError = null;
+    
+    while (attempts <= maxRetries) {
+      try {
+        await initFunction();
+        return; // Success, exit the retry loop
+      } catch (error) {
+        attempts++;
+        lastError = error;
+        console.warn(`[MemoryPalaceCore] ${componentName} initialization attempt ${attempts} failed:`, error);
+        
+        if (attempts <= maxRetries) {
+          // Wait before retrying (exponential backoff)
+          const delay = Math.pow(2, attempts) * 500;
+          console.log(`[MemoryPalaceCore] Retrying ${componentName} initialization in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // If we get here, all attempts failed
+    const enhancedError = new Error(`${componentName} initialization failed after ${maxRetries + 1} attempts: ${lastError.message}`);
+    enhancedError.component = componentName;
+    enhancedError.originalError = lastError;
+    throw enhancedError;
+  }
+  
+  /**
+   * Attempt recovery from initialization failure
+   * @returns {Promise<boolean>} Recovery success status
+   */
+  async attemptRecovery() {
+    console.log('[MemoryPalaceCore] Attempting recovery from initialization failure...');
+    
+    try {
+      // Check which components were successfully initialized
+      const hasStateManager = !!this.stateManager;
+      const hasAPIManager = !!this.apiManager;
+      
+      // If we have state manager but no API manager, try to continue with mock API
+      if (hasStateManager && !hasAPIManager) {
+        console.log('[MemoryPalaceCore] Attempting to recover with mock API provider...');
+        try {
+          this.apiManager = new APIManager();
+          this.apiManager.initialize(APIManager.createMockProvider());
+          console.log('[MemoryPalaceCore] Successfully recovered API manager with mock provider');
+        } catch (error) {
+          console.error('[MemoryPalaceCore] Failed to recover API manager:', error);
+        }
+      }
+      
+      // If we have both state and API but no managers, try to initialize them
+      if (hasStateManager && this.apiManager && (!this.roomManager || !this.objectManager)) {
+        console.log('[MemoryPalaceCore] Attempting to recover core managers...');
+        try {
+          await this.initializeCoreManagers();
+          console.log('[MemoryPalaceCore] Successfully recovered core managers');
+        } catch (error) {
+          console.error('[MemoryPalaceCore] Failed to recover core managers:', error);
+        }
+      }
+      
+      // Set up event listeners if we have the necessary components
+      if (this.stateManager && this.apiManager && this.roomManager && this.objectManager) {
+        this.setupEventListeners();
+        
+        // Mark as partially initialized if we have the minimum required components
+        this.isInitialized = true;
+        console.log('[MemoryPalaceCore] Partial recovery successful, core is usable with limited functionality');
+        this.emit('core_recovered', { 
+          hasStateManager: !!this.stateManager,
+          hasAPIManager: !!this.apiManager,
+          hasRoomManager: !!this.roomManager,
+          hasObjectManager: !!this.objectManager,
+          hasInteractionController: !!this.interactionController
+        });
+        return true;
+      }
+      
+      console.log('[MemoryPalaceCore] Recovery failed, core is not usable');
+      return false;
+    } catch (error) {
+      console.error('[MemoryPalaceCore] Recovery attempt failed:', error);
+      return false;
     }
   }
 
@@ -632,24 +735,51 @@ export class MemoryPalaceCore extends EventEmitter {
   /**
    * Dispose of the system and clean up resources
    */
-  dispose() {
-    if (this.isRunning) {
-      this.stop()
+  async dispose() {
+    try {
+      // Stop the system if it's running
+      if (this.isRunning) {
+        await this.stop()
+      }
+      
+      // Properly dispose of each subsystem if they have dispose methods
+      if (this.interactionController?.dispose) {
+        await this.interactionController.dispose()
+      }
+      
+      if (this.objectManager?.dispose) {
+        await this.objectManager.dispose()
+      }
+      
+      if (this.roomManager?.dispose) {
+        await this.roomManager.dispose()
+      }
+      
+      if (this.apiManager?.dispose) {
+        await this.apiManager.dispose()
+      }
+      
+      if (this.stateManager?.dispose) {
+        await this.stateManager.dispose()
+      }
+      
+      // Clear all event listeners
+      this.clear()
+      
+      // Clear subsystem references
+      this.stateManager = null
+      this.apiManager = null
+      this.roomManager = null
+      this.objectManager = null
+      this.interactionController = null
+      
+      this.isInitialized = false
+      this.isRunning = false
+      
+      console.log('[MemoryPalaceCore] All resources disposed successfully')
+    } catch (error) {
+      console.error('[MemoryPalaceCore] Error during disposal:', error)
     }
-    
-    // Clear all event listeners
-    this.clear()
-    
-    // Clear subsystem references
-    this.stateManager = null
-    this.apiManager = null
-    this.roomManager = null
-    this.objectManager = null
-    this.interactionController = null
-    
-    this.isInitialized = false
-    
-    console.log('Memory Palace Core disposed')
   }
 }
 

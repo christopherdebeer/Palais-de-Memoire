@@ -20,12 +20,14 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
   const captionTimeoutRef = useRef(null)
   
   // Initialize Anthropic streaming hook with memory palace core
+  // Ensure we only pass the core if it's properly initialized
   const { send, status, liveBlocks } = useAnthropicStream(
     (message) => {
       // Handle incoming messages from stream
       console.log('[VoiceInterface] Received streaming message:', message)
     },
-    memoryPalaceCore // Pass the memory palace core for tool execution
+    // Only pass the core if it's initialized and running
+    memoryPalaceCore?.isInitialized && memoryPalaceCore?.isRunning ? memoryPalaceCore : null
   )
 
   useEffect(() => {
@@ -190,7 +192,10 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
 
   // Auto-start listening when creation mode is activated
   useEffect(() => {
-    if (isCreationMode && enabled && isSupported && !isListening && !isProcessing && apiConfigured) {
+    // Check if core is ready before auto-starting
+    const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
+    
+    if (isCreationMode && enabled && isSupported && !isListening && !isProcessing && apiConfigured && isCoreReady) {
       console.log('[VoiceInterface] Creation mode detected - auto-starting voice input')
       // Small delay to ensure UI is ready
       setTimeout(() => {
@@ -204,8 +209,16 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         onCaptionUpdate(response, 'synthesis')
       }
       speakResponse(response)
+    } else if (isCreationMode && !isCoreReady) {
+      console.warn('[VoiceInterface] Creation mode triggered but Memory Palace Core not ready')
+      // Provide feedback that core is not ready
+      const response = 'Memory Palace is still initializing. Please try again in a moment.'
+      if (onCaptionUpdate) {
+        onCaptionUpdate(response, 'synthesis')
+      }
+      speakResponse(response)
     }
-  }, [isCreationMode, enabled, isSupported, isListening, isProcessing, apiConfigured])
+  }, [isCreationMode, enabled, isSupported, isListening, isProcessing, apiConfigured, memoryPalaceCore])
 
   const processCommand = async (command) => {
     console.log('[VoiceInterface] Processing command:', {
@@ -221,15 +234,23 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       if (apiConfigured) {
         console.log('[VoiceInterface] Using useAnthropicStream hook for command processing')
         
-        // Build context for memory palace from current state
-        const context = {
-          currentRoom: currentPalaceState?.currentRoom || null,
-          rooms: memoryPalaceCore ? memoryPalaceCore.getAllRooms() : [],
-          objects: memoryPalaceCore ? memoryPalaceCore.getCurrentRoomObjects() : [],
-          // Add creation mode context
-          isCreationMode: isCreationMode || false,
-          creationPosition: pendingCreationPosition || null
-        }
+  // Build context for memory palace from current state
+  // First check if memoryPalaceCore is initialized and running
+  const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
+  
+  const context = {
+    currentRoom: currentPalaceState?.currentRoom || null,
+    rooms: isCoreReady ? memoryPalaceCore.getAllRooms() : [],
+    objects: isCoreReady ? memoryPalaceCore.getCurrentRoomObjects() : [],
+    // Add creation mode context
+    isCreationMode: isCreationMode || false,
+    creationPosition: pendingCreationPosition || null,
+    // Add core status for better error handling
+    coreStatus: {
+      isInitialized: memoryPalaceCore?.isInitialized || false,
+      isRunning: memoryPalaceCore?.isRunning || false
+    }
+  }
         
         console.log('[VoiceInterface] Sending message with context:', {
           command,

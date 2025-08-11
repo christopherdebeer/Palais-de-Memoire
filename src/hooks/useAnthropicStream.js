@@ -121,7 +121,7 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
     const basePrompt = settingsManager.get('systemPrompt') || 
       'You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands.'
     
-    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null } = context
+    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null, coreStatus = {} } = context
 
     let contextPrompt = basePrompt + '\n\n'
 
@@ -181,6 +181,7 @@ IMPORTANT GUIDELINES:
 - In CREATION MODE: Use spatial tools (add_object_at_position or create_door_at_position) with the provided coordinates
 - Be conversational and helpful while taking concrete actions
 - Encourage exploration and memory association techniques
+- If a tool fails due to initialization issues, inform the user that the system is still initializing and to try again in a moment
 
 CREATION MODE DECISION LOGIC:
 When in creation mode, analyze the user's description:
@@ -192,9 +193,24 @@ Use these tools actively to help users build and navigate their memory palace.`
     return contextPrompt
   }, [])
 
-  // Memory palace tool manager
+  // Memory palace tool manager with proper initialization check
   const toolManager = useMemo(() => {
-    return memoryPalaceCore ? new MemoryPalaceToolManager(memoryPalaceCore) : null
+    // Check if core is properly initialized before creating tool manager
+    if (memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning) {
+      console.log('[useAnthropicStream] Creating tool manager with initialized core')
+      return new MemoryPalaceToolManager(memoryPalaceCore)
+    } else {
+      if (memoryPalaceCore) {
+        console.warn('[useAnthropicStream] Memory Palace core provided but not fully initialized:', {
+          hasCore: !!memoryPalaceCore,
+          isInitialized: memoryPalaceCore?.isInitialized,
+          isRunning: memoryPalaceCore?.isRunning
+        })
+      } else {
+        console.log('[useAnthropicStream] No Memory Palace core provided')
+      }
+      return null
+    }
   }, [memoryPalaceCore])
 
   // Get memory palace tools for Claude
@@ -206,8 +222,19 @@ Use these tools actively to help users build and navigate their memory palace.`
   const executeToolCall = useCallback(async (toolName, input, toolUseId) => {
     console.log(`[useAnthropicStream] Executing tool: ${toolName}`, input)
     
-    if (toolManager) {
+    // Check if core is ready at execution time (in case it was initialized after hook mount)
+    const isCoreReady = memoryPalaceCore && 
+                        memoryPalaceCore.isInitialized && 
+                        memoryPalaceCore.isRunning;
+    
+    if (toolManager && toolManager.isReady) {
       return await toolManager.executeTool(toolName, input, toolUseId)
+    } else if (isCoreReady) {
+      // Core is ready but toolManager wasn't created or updated yet
+      // Create a new tool manager on-demand
+      console.log('[useAnthropicStream] Creating on-demand tool manager for execution')
+      const onDemandToolManager = new MemoryPalaceToolManager(memoryPalaceCore)
+      return await onDemandToolManager.executeTool(toolName, input, toolUseId)
     } else {
       // Fallback responses when memory palace core is not available
       switch (toolName) {

@@ -8,6 +8,7 @@ import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
 import { MemoryPalaceCore } from './core/MemoryPalaceCore.js'
+import { EventTypes } from './core/types.js'
 import MobileMotionController from './utils/MobileMotionController.js'
 import './styles/App.css'
 import './styles/ActionFormModal.css'
@@ -80,6 +81,44 @@ function App() {
           autopilot: false
         })
         
+        // Set up event listeners for state updates BEFORE initialization
+        // This ensures we don't miss any events during the initialization process
+        const setupEventListeners = (core) => {
+          // Store unsubscribe functions to prevent memory leaks
+          const unsubscribers = [];
+          
+          unsubscribers.push(core.on('room_created', (room) => {
+            console.log('[App] Room created:', room)
+            updatePalaceState(core)
+          }));
+          
+          unsubscribers.push(core.on('object_created', (object) => {
+            console.log('[App] Object created:', object)
+            updatePalaceState(core)
+          }));
+          
+          unsubscribers.push(core.on('room_navigated', (room) => {
+            console.log('[App] Navigated to room:', room)
+            updatePalaceState(core)
+          }));
+          
+          // Add error event listener
+          unsubscribers.push(core.on(EventTypes.ERROR_OCCURRED, (error) => {
+            console.error('[App] Core error:', error)
+            // Provide user feedback for critical errors
+            if (error.type === 'initialization_error' || error.type === 'startup_error') {
+              handleCaptionUpdate(`Error: ${error.error}. Please try refreshing the application.`, 'synthesis')
+            }
+          }));
+          
+          // Return unsubscribe function that cleans up all listeners
+          return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+        };
+        
+        // Setup event listeners and store cleanup function
+        const cleanupListeners = setupEventListeners(core);
+        
+        // Initialize the core
         const initialized = await core.initialize()
         console.log('[App] Core initialization result:', initialized)
         
@@ -93,22 +132,6 @@ function App() {
           setCoreInitialized(true)
           
           console.log('[App] State updated - core:', !!core, 'initialized: true')
-          
-          // Set up event listeners for state updates
-          core.on('room_created', (room) => {
-            console.log('[App] Room created:', room)
-            updatePalaceState(core)
-          })
-          
-          core.on('object_created', (object) => {
-            console.log('[App] Object created:', object)
-            updatePalaceState(core)
-          })
-          
-          core.on('room_navigated', (room) => {
-            console.log('[App] Navigated to room:', room)
-            updatePalaceState(core)
-          })
           
           // Initial state update
           updatePalaceState(core)
@@ -157,9 +180,13 @@ function App() {
   // Helper function to update palace state
   const updatePalaceState = (core) => {
     if (core) {
-      const state = core.getCurrentState()
-      setCurrentPalaceState(state)
-      console.log('[App] Palace state updated:', state)
+      try {
+        const state = core.getCurrentState()
+        setCurrentPalaceState(state)
+        console.log('[App] Palace state updated:', state)
+      } catch (error) {
+        console.error('[App] Error updating palace state:', error)
+      }
     }
   }
 
