@@ -139,14 +139,14 @@ const MemoryPalace = forwardRef(({
     // Create material with fallback color initially
     const material = new THREE.MeshBasicMaterial({
       color: 0x1a1a2e, // Dark fallback color
-      side: THREE.BackSide
+      side: THREE.DoubleSide
     })
     
     // Create wireframe material as fallback
     const wireframeMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ff00, // Green wireframe
       wireframe: true,
-      side: THREE.BackSide,
+      side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.3
     })
