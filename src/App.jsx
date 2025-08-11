@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMicrophone } from '@fortawesome/free-solid-svg-icons'
+import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
-import MobileInterface from './components/MobileInterface'
 import VoiceInterface from './components/VoiceInterface'
 import SettingsPanel from './components/SettingsPanel'
 import './styles/App.css'
@@ -10,10 +9,12 @@ import './styles/App.css'
 function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
-  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
   const [wireframeEnabled, setWireframeEnabled] = useState(true) // Start with wireframe enabled for debugging
   const [nippleEnabled, setNippleEnabled] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const memoryPalaceRef = useRef()
 
   useEffect(() => {
@@ -49,6 +50,28 @@ function App() {
   const handleNippleToggle = (enabled) => {
     setNippleEnabled(enabled)
     console.log(`Nipple controls ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  const handleMenuToggle = () => {
+    setIsMenuOpen(!isMenuOpen)
+  }
+
+  const handleSettingsToggle = () => {
+    setIsSettingsOpen(!isSettingsOpen)
+  }
+
+  const handleSettingsClose = () => {
+    setIsSettingsOpen(false)
+  }
+
+  const handleMenuClose = () => {
+    setIsMenuOpen(false)
+  }
+
+  const handleMenuCommand = (command) => {
+    console.log('Menu command:', command)
+    setIsMenuOpen(false)
+    // Handle menu commands here
   }
 
   const handleVoiceCommand = (command) => {
@@ -111,12 +134,6 @@ function App() {
         </div>
       )}
       
-      {isMobile && (
-        <MobileInterface 
-          voiceEnabled={voiceEnabled}
-          onVoiceToggle={handleVoiceToggle}
-        />
-      )}
       
       <VoiceInterface 
         enabled={voiceEnabled}
@@ -140,17 +157,96 @@ function App() {
         onNippleToggle={handleNippleToggle}
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
+        isOpen={isSettingsOpen}
+        onClose={handleSettingsClose}
       />
+
+      {/* Main Menu */}
+      {isMenuOpen && (
+        <>
+          <div className="menu-backdrop" onClick={handleMenuClose} />
+          <div className="main-menu">
+            <div className="menu-header">
+              <h3>Menu</h3>
+              <button 
+                className="close-menu-btn"
+                onClick={handleMenuClose}
+                aria-label="Close menu"
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+            
+            <div className="menu-content">
+              <div className="menu-section">
+                <h4>Navigation</h4>
+                <button 
+                  className="menu-item"
+                  onClick={() => handleMenuCommand('home')}
+                >
+                  <FontAwesomeIcon icon={faHome} />
+                  <span>Home</span>
+                </button>
+                <button 
+                  className="menu-item"
+                  onClick={() => handleMenuCommand('list-rooms')}
+                >
+                  <FontAwesomeIcon icon={faList} />
+                  <span>List Rooms</span>
+                </button>
+              </div>
+
+              <div className="menu-section">
+                <h4>Actions</h4>
+                <button 
+                  className="menu-item"
+                  onClick={() => handleMenuCommand('create-room')}
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>Create Room</span>
+                </button>
+                <button 
+                  className="menu-item"
+                  onClick={() => handleMenuCommand('add-object')}
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>Add Object</span>
+                </button>
+              </div>
+
+              <div className="menu-section">
+                <h4>Help</h4>
+                <button 
+                  className="menu-item"
+                  onClick={() => handleMenuCommand('about')}
+                >
+                  <FontAwesomeIcon icon={faInfo} />
+                  <span>About</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
       
       <div className="app-header">
         <h1>Palais de Mémoire</h1>
-        <button 
-          className="voice-toggle"
-          onClick={() => handleVoiceToggle(!voiceEnabled)}
-          aria-label={voiceEnabled ? 'Disable voice' : 'Enable voice'}
-        >
-          <FontAwesomeIcon icon={faMicrophone} />
-        </button>
+        <div className="header-buttons">
+          <button 
+            className="menu-toggle"
+            onClick={handleMenuToggle}
+            aria-label="Toggle menu"
+          >
+            <FontAwesomeIcon icon={faBars} />
+          </button>
+          <button 
+            className="settings-toggle"
+            onClick={handleSettingsToggle}
+            aria-label="Toggle settings"
+          >
+            <FontAwesomeIcon icon={faCog} />
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -8,9 +8,10 @@ const SettingsPanel = ({
   onWireframeToggle, 
   onNippleToggle, 
   wireframeEnabled = false, 
-  nippleEnabled = false 
+  nippleEnabled = false,
+  isOpen = false,
+  onClose
 }) => {
-  const [isOpen, setIsOpen] = useState(false)
   const [settings, setSettings] = useState(settingsManager.getAllSettings())
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -29,8 +30,10 @@ const SettingsPanel = ({
     return () => settingsManager.removeEventListener(handleSettingsChange)
   }, [])
 
-  const togglePanel = () => {
-    setIsOpen(!isOpen)
+  const handleClose = () => {
+    if (onClose) {
+      onClose()
+    }
   }
 
   const handleWireframeToggle = () => {
@@ -79,15 +82,6 @@ const SettingsPanel = ({
 
   return (
     <>
-      {/* Settings Toggle Button */}
-      <button 
-        className="settings-toggle"
-        onClick={togglePanel}
-        aria-label="Toggle settings"
-      >
-        <FontAwesomeIcon icon={faCog} />
-      </button>
-
       {/* Settings Panel */}
       {isOpen && (
         <div className="settings-panel">
@@ -95,7 +89,7 @@ const SettingsPanel = ({
             <h3>Settings</h3>
             <button 
               className="close-settings-btn"
-              onClick={togglePanel}
+              onClick={handleClose}
               aria-label="Close settings"
             >
               <FontAwesomeIcon icon={faTimes} />
@@ -396,7 +390,7 @@ const SettingsPanel = ({
       {isOpen && (
         <div 
           className="settings-backdrop" 
-          onClick={togglePanel}
+          onClick={handleClose}
           aria-hidden="true"
         />
       )}
