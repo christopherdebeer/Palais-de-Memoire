@@ -63,7 +63,7 @@ function App() {
     window.addEventListener('resize', checkMobile)
     
     // Initialize Memory Palace Core - prevent multiple initializations
-    const initializeCore = async () => {
+    const initializeCore = async (isCancelled = { current: false }) => {
       if (coreInitializationRef.current) {
         console.log('[App] Core initialization already in progress, skipping...')
         return
@@ -127,6 +127,12 @@ function App() {
           await core.start()
           console.log('[App] Core started, updating state...')
           
+          // Check if component was unmounted during initialization
+          if (isCancelled.current) {
+            console.log('[App] Component unmounted during initialization, aborting state updates')
+            return
+          }
+          
           // Update state and store core reference
           setMemoryPalaceCore(core)
           setCoreInitialized(true)
@@ -158,14 +164,25 @@ function App() {
       localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
     }
 
+    // Track if component is mounted to prevent state updates after unmount
+    const isCancelled = useRef(false)
+    
     // Initialize core inside useEffect to handle React lifecycle properly
-    initializeCore().then(() => {
-      setTimeout(() => {
-        setIsLoading(false)
-      }, 1000)
+    initializeCore(isCancelled).then(() => {
+      // Only update loading state if component is still mounted
+      if (!isCancelled.current) {
+        setTimeout(() => {
+          if (!isCancelled.current) {
+            setIsLoading(false)
+          }
+        }, 1000)
+      }
     })
     
     return () => {
+      // Mark as cancelled to prevent state updates
+      isCancelled.current = true
+      
       window.removeEventListener('resize', checkMobile)
       if (captionTimeoutRef.current) {
         clearTimeout(captionTimeoutRef.current)
