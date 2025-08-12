@@ -34,32 +34,29 @@ vi.mock('three', () => ({
   AmbientLight: vi.fn()
 }))
 
-// Mock MemoryPalace component to prevent 3D rendering in tests
-vi.mock('../components/MemoryPalace.jsx', () => ({
-  default: ({ onCreationModeTriggered }) => {
+// Mock Scene3D component to prevent 3D rendering in tests
+vi.mock('../components/Scene3D.jsx', () => ({
+  default: ({ objects, onObjectClick, wireframeEnabled, currentRoom, onPositionUpdate }) => {
     return (
       <div 
-        data-testid="memory-palace"
-        onClick={() => onCreationModeTriggered && onCreationModeTriggered({
-          position: { x: 0.5, y: 0.5 },
-          screenPosition: { x: 400, y: 300 },
-          worldPosition: { x: 0, y: 0, z: 0 },
-          timestamp: Date.now()
-        })}
+        data-testid="scene-3d"
+        onClick={() => onObjectClick && onObjectClick({ id: 'test-object' })}
       >
-        Memory Palace Mock
+        Scene3D Mock - Objects: {objects?.length || 0}
       </div>
     )
   }
 }))
 
-// Mock Minimap component to prevent canvas issues
-vi.mock('../components/Minimap.jsx', () => ({
-  default: ({ isVisible, objects, cameraRotation, onLookAt, onToggle }) => {
+// Mock SimpleUI component
+vi.mock('../components/SimpleUI.jsx', () => ({
+  default: ({ isVisible, objects, onToggleWireframe, onToggleVoice, onCreateObject, onSettings }) => {
     if (!isVisible) return null
     return (
-      <div data-testid="minimap">
-        Minimap Mock - Objects: {objects?.length || 0}
+      <div data-testid="simple-ui">
+        SimpleUI Mock - Objects: {objects?.length || 0}
+        <button onClick={() => onToggleWireframe && onToggleWireframe()}>Toggle Wireframe</button>
+        <button onClick={() => onToggleVoice && onToggleVoice()}>Toggle Voice</button>
       </div>
     )
   }
@@ -81,12 +78,12 @@ vi.mock('../components/LoadingScreen.jsx', () => ({
   }
 }))
 
-// Mock VoiceInterface to prevent audio context issues
-vi.mock('../components/VoiceInterface.jsx', () => ({
+// Mock SimpleVoiceInterface to prevent audio context issues
+vi.mock('../components/SimpleVoiceInterface.jsx', () => ({
   default: ({ isVisible, onClose, onTextInput }) => {
     if (!isVisible) return null
     return (
-      <div data-testid="voice-interface">
+      <div data-testid="simple-voice-interface">
         <button onClick={() => onTextInput && onTextInput('test input')}>
           Test Voice Input
         </button>
@@ -123,26 +120,16 @@ vi.mock('../components/CreationModeInterface.jsx', () => ({
   }
 }))
 
-// Mock MemoryPalaceCore
-vi.mock('../core/MemoryPalaceCore.js', () => ({
-  MemoryPalaceCore: vi.fn().mockImplementation(() => ({
-    isInitialized: false,
-    isRunning: false,
-    roomManager: null,
-    objectManager: null,
+// Mock PalaceController
+vi.mock('../PalaceController.js', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    objects: [],
+    isLoading: false,
+    error: null,
     initialize: vi.fn().mockResolvedValue(true),
-    start: vi.fn().mockResolvedValue(true),
-    dispose: vi.fn().mockResolvedValue(true),
-    attemptRecovery: vi.fn().mockResolvedValue(true),
-    on: vi.fn(), // Mock event emitter methods
-    off: vi.fn(),
-    emit: vi.fn(),
-    getCurrentState: vi.fn().mockReturnValue({
-      objects: [],
-      rooms: [],
-      currentRoom: null,
-      cameraPosition: { x: 0, y: 0, z: 0 }
-    })
+    addObject: vi.fn().mockResolvedValue({ id: 'test-object' }),
+    handleVoiceInput: vi.fn().mockResolvedValue(true),
+    cleanup: vi.fn()
   }))
 }))
 
@@ -181,11 +168,11 @@ describe('App Component Rendering', () => {
     
     // Wait for component to finish initial render
     await waitFor(() => {
-      expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+      expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
     })
 
     // Check that main components are rendered
-    expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+    expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
   })
 
   it('should handle component lifecycle without errors', async () => {
@@ -193,7 +180,7 @@ describe('App Component Rendering', () => {
     
     // Wait for initial render and effects
     await waitFor(() => {
-      expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+      expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
     })
 
     // Should unmount without errors (tests cleanup functions)
@@ -209,7 +196,7 @@ describe('App Component Rendering', () => {
     render(<App />)
     
     await waitFor(() => {
-      expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+      expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
     })
 
     // Check that no React hooks errors were logged
@@ -230,7 +217,7 @@ describe('App Component Rendering', () => {
     const { unmount: unmount2 } = render(<App />)
     
     await waitFor(() => {
-      expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+      expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
     })
     
     expect(() => {
@@ -242,12 +229,12 @@ describe('App Component Rendering', () => {
     render(<App />)
     
     await waitFor(() => {
-      expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+      expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
     }, { timeout: 5000 })
 
     // Test that core initialization doesn't cause state inconsistencies
     // This would catch the original issue #37 problem
-    expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+    expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
   })
 })
 
@@ -260,7 +247,7 @@ describe('App Component Error Boundaries', () => {
     
     // Component should render even if some internal operations fail
     await waitFor(() => {
-      expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
+      expect(screen.getByTestId('scene-3d')).toBeInTheDocument()
     })
     
     consoleErrorSpy.mockRestore()

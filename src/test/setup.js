@@ -1,4 +1,50 @@
 import '@testing-library/jest-dom'
+import { vi } from 'vitest'
+
+// Mock Three.js module completely
+vi.mock('three', () => {
+  const createMockClass = (name) => {
+    return class MockThreeClass {
+      constructor(...args) {
+        if (args.length > 0 && typeof args[0] === 'object') {
+          Object.assign(this, args[0])
+        }
+        this.position = { x: 0, y: 0, z: 0, set: () => {} }
+        this.rotation = { x: 0, y: 0, z: 0, set: () => {} }
+        this.children = []
+        this.domElement = document.createElement('canvas')
+        this.shadowMap = { enabled: false, type: null }
+        this.userData = {}
+      }
+      
+      add() { return this }
+      remove() { return this }
+      dispose() { return this }
+      updateProjectionMatrix() { return this }
+      setSize() { return this }
+      render() { return this }
+      lookAt() { return this }
+    }
+  }
+
+  return {
+    Scene: createMockClass('Scene'),
+    Color: createMockClass('Color'),
+    PerspectiveCamera: createMockClass('PerspectiveCamera'),
+    WebGLRenderer: createMockClass('WebGLRenderer'),
+    AmbientLight: createMockClass('AmbientLight'),
+    DirectionalLight: createMockClass('DirectionalLight'),
+    PlaneGeometry: createMockClass('PlaneGeometry'),
+    BoxGeometry: createMockClass('BoxGeometry'),
+    MeshLambertMaterial: createMockClass('MeshLambertMaterial'),
+    MeshBasicMaterial: createMockClass('MeshBasicMaterial'),
+    Mesh: createMockClass('Mesh'),
+    PCFSoftShadowMap: 1,
+    MathUtils: {
+      degToRad: (degrees) => degrees * Math.PI / 180
+    }
+  }
+})
 
 // Mock WebGL context for Three.js tests
 class WebGLRenderingContext {}
