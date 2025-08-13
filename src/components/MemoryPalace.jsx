@@ -779,7 +779,7 @@ const MemoryPalace = forwardRef(({
     window.addEventListener('mousemove', handleMouseMove)
     renderer.domElement.addEventListener('mousedown', handleMouseDown)
     window.addEventListener('mouseup', handleMouseUp)
-    renderer.domElement.addEventListener('click', handleClick)
+    // renderer.domElement.addEventListener('click', handleClick)
     
     // Touch events
     renderer.domElement.addEventListener('touchstart', handleTouchStart, { passive: false })

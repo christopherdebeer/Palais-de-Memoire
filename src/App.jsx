@@ -7,13 +7,12 @@ import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
-import { MemoryPalaceCore } from './core/MemoryPalaceCore.js'
 import { EventTypes } from './core/types.js'
 import MobileMotionController from './utils/MobileMotionController.js'
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 
-function App() {
+function App({core}) {
   const [isLoading, setIsLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
@@ -25,8 +24,7 @@ function App() {
   const [captionText, setCaptionText] = useState('')
   const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
   const [captionsEnabled, setCaptionsEnabled] = useState(true)
-  const [memoryPalaceCore, setMemoryPalaceCore] = useState(null)
-  const [coreInitialized, setCoreInitialized] = useState(false)
+  const [memoryPalaceCore] = useState(core)
   const [currentPalaceState, setCurrentPalaceState] = useState(null)
   const coreInitializationRef = useRef(false)
   const [actionModalOpen, setActionModalOpen] = useState(false)
@@ -76,13 +74,7 @@ function App() {
       console.log('[App] Initializing Memory Palace Core...')
       
       try {
-        const core = new MemoryPalaceCore({
-          apiProvider: 'mock', // Start with mock provider for development
-          persistence: 'localStorage',
-          enableVoice: true,
-          enableSpatialInteraction: true,
-          autopilot: false
-        })
+        
         
         // Set up event listeners for state updates BEFORE initialization
         // This ensures we don't miss any events during the initialization process
@@ -138,7 +130,6 @@ function App() {
           
           // Update state and store core reference
           setMemoryPalaceCore(core)
-          setCoreInitialized(true)
           
           console.log('[App] State updated - core:', !!core, 'initialized: true')
           
@@ -169,6 +160,8 @@ function App() {
 
     // Initialize core inside useEffect to handle React lifecycle properly
     initializeCore(isCancelledRef).then(() => {
+      console.log("----------------------------")
+      setIsLoading(false)
       // Only update loading state if component is still mounted
       if (!isCancelledRef.current) {
         setTimeout(() => {
@@ -187,14 +180,14 @@ function App() {
       if (captionTimeoutRef.current) {
         clearTimeout(captionTimeoutRef.current)
       }
-      // Clean up memory palace core
-      if (memoryPalaceCore) {
-        memoryPalaceCore.dispose()
-      }
-      // Reset initialization ref to allow re-initialization on remount
-      coreInitializationRef.current = false
+      // // Clean up memory palace core
+      // if (memoryPalaceCore) {
+      //   memoryPalaceCore.dispose()
+      // }
+      // // Reset initialization ref to allow re-initialization on remount
+      // coreInitializationRef.current = false
     }
-  }, [])
+  }, [memoryPalaceCore])
 
   // Helper function to update palace state
   const updatePalaceState = (core) => {
@@ -249,7 +242,7 @@ function App() {
     
     // Handle direct actions (no parameters required)
     if (command === 'list-rooms' || command === 'get-room-info' || command === 'regenerate-image') {
-      if (!memoryPalaceCore || !coreInitialized) {
+      if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) {
         console.warn('[App] Memory Palace Core not initialized')
         return
       }
@@ -342,7 +335,7 @@ function App() {
       isCreationMode: isCreationMode
     })
     
-    if (!memoryPalaceCore || !coreInitialized) {
+    if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) {
       console.warn('[App] Memory Palace Core not initialized, cannot process command')
       return
     }
@@ -494,7 +487,7 @@ function App() {
   const handleActionFormSubmit = async (action, formData) => {
     console.log('[App] Action form submitted:', { action, formData })
     
-    if (!memoryPalaceCore || !coreInitialized) {
+    if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) {
       console.warn('[App] Memory Palace Core not initialized')
       alert('Memory Palace not initialized. Please wait for initialization to complete.')
       return
@@ -590,18 +583,18 @@ function App() {
     console.log('[App] Creation mode triggered:', creationData)
     console.log('[App] Current state check:', {
       memoryPalaceCore: !!memoryPalaceCore,
-      coreInitialized,
+      coreInitialized: memoryPalaceCore.isInitialized,
       coreInitializationRef: coreInitializationRef.current,
       memoryPalaceCoreInitialized: memoryPalaceCore?.isInitialized,
       memoryPalaceCoreRunning: memoryPalaceCore?.isRunning
     })
     
     // Check if core initialization is complete using state
-    if (!coreInitialized || !memoryPalaceCore) {
+    if (!memoryPalaceCore.isInitialized || !memoryPalaceCore) {
       console.warn('[App] Memory Palace Core not initialized, cannot enter creation mode')
       console.warn('[App] Debug info:', {
         memoryPalaceCore: !!memoryPalaceCore,
-        coreInitialized,
+        coreInitialized: memoryPalaceCore.isInitialized,
         coreInitializationRef: coreInitializationRef.current,
         memoryPalaceCoreState: memoryPalaceCore ? {
           isInitialized: memoryPalaceCore.isInitialized,
@@ -647,7 +640,7 @@ function App() {
   // Object interaction handlers
   const handleObjectSelected = (objectId) => {
     console.log('[App] Object selected:', objectId)
-    if (!memoryPalaceCore || !coreInitialized) return
+    if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) return
     
     const objects = memoryPalaceCore.getCurrentRoomObjects()
     const object = objects.find(obj => obj.id === objectId)
@@ -660,7 +653,7 @@ function App() {
 
   const handleObjectEdit = async (updatedObject) => {
     console.log('[App] Object edit:', updatedObject)
-    if (!memoryPalaceCore || !coreInitialized) return
+    if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) return
     
     try {
       setIsProcessingObjectAction(true)
@@ -687,7 +680,7 @@ function App() {
 
   const handleObjectDelete = async (objectId) => {
     console.log('[App] Object delete:', objectId)
-    if (!memoryPalaceCore || !coreInitialized) return
+    if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) return
     
     try {
       setIsProcessingObjectAction(true)
