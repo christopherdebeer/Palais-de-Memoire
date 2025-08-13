@@ -218,7 +218,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       }
       speakResponse(response)
     }
-  }, [isCreationMode, enabled, isSupported, isListening, isProcessing, apiConfigured, memoryPalaceCore])
+  }, [isCreationMode, enabled, isSupported, isProcessing, apiConfigured, memoryPalaceCore])
 
   const processCommand = async (command) => {
     console.log('[VoiceInterface] Processing command:', {
