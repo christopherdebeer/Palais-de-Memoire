@@ -18,62 +18,79 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
   const [isInitialized, setIsInitialized] = useState(false)
   const [initializationError, setInitializationError] = useState(null)
 
-  // Anthropic SDK instance with proper browser configuration
-  const anthropic = useMemo(() => {
-    // Don't create instance during settings initialization
-    if (settingsManager.isInitializing) {
-      console.log('[useAnthropicStream] Waiting for settings initialization...')
-      return null
-    }
+  // Anthropic SDK instance - will be created after settings initialization
+  const [anthropic, setAnthropic] = useState(null)
 
-    const apiKey = settingsManager.get('anthropicApiKey')
-    if (!apiKey) {
-      console.log('[useAnthropicStream] No API key available')
-      return null
-    }
-    
-    console.log('[useAnthropicStream] Creating Anthropic SDK instance')
-    return new Anthropic({
-      dangerouslyAllowBrowser: true,
-      apiKey: apiKey,
-      baseURL: 'https://api.anthropic.com',
-      defaultHeaders: {
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-    })
-  }, [settingsManager.get('anthropicApiKey'), settingsManager.isInitializing])
-
-  // Handle settings initialization
+  // Handle settings initialization and create Anthropic SDK instance
   useEffect(() => {
     const initializeHook = async () => {
       try {
         setInitializationError(null)
         console.log('[useAnthropicStream] Waiting for settings initialization...')
         
+        // Wait for settings manager to initialize completely
         await settingsManager.waitForInitialization()
         
-        console.log('[useAnthropicStream] Settings initialized, checking API configuration')
+        console.log('[useAnthropicStream] Settings initialized, creating Anthropic SDK instance')
+        
+        // Now that settings are fully initialized, get the API key
+        const apiKey = settingsManager.get('anthropicApiKey')
+        if (apiKey) {
+          console.log('[useAnthropicStream] Creating Anthropic SDK instance with API key')
+          const anthropicInstance = new Anthropic({
+            dangerouslyAllowBrowser: true,
+            apiKey: apiKey,
+            baseURL: 'https://api.anthropic.com',
+            defaultHeaders: {
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+            },
+          })
+          setAnthropic(anthropicInstance)
+        } else {
+          console.log('[useAnthropicStream] No API key available after settings initialization')
+          setAnthropic(null)
+        }
+        
         setIsInitialized(true)
       } catch (error) {
         console.error('[useAnthropicStream] Initialization error:', error)
         setInitializationError(error)
         setIsInitialized(true) // Still mark as initialized to prevent hanging
+        setAnthropic(null)
       }
     }
 
     initializeHook()
   }, [])
 
-  // Listen for settings changes
+  // Listen for settings changes and recreate Anthropic instance when API key changes
   useEffect(() => {
     const handleSettingsChange = (eventType, data) => {
       if (eventType === 'initialization_complete') {
         console.log('[useAnthropicStream] Settings initialization complete')
         setIsInitialized(true)
       } else if (eventType === 'setting_changed' && data.key === 'anthropicApiKey') {
-        console.log('[useAnthropicStream] Anthropic API key changed')
-        // The useMemo will automatically recreate the anthropic instance
+        console.log('[useAnthropicStream] Anthropic API key changed, recreating SDK instance')
+        
+        // Recreate the Anthropic instance with the new API key
+        const apiKey = settingsManager.get('anthropicApiKey')
+        if (apiKey) {
+          console.log('[useAnthropicStream] Creating new Anthropic SDK instance with updated API key')
+          const anthropicInstance = new Anthropic({
+            dangerouslyAllowBrowser: true,
+            apiKey: apiKey,
+            baseURL: 'https://api.anthropic.com',
+            defaultHeaders: {
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+            },
+          })
+          setAnthropic(anthropicInstance)
+        } else {
+          console.log('[useAnthropicStream] API key removed, clearing Anthropic SDK instance')
+          setAnthropic(null)
+        }
       }
     }
 
