@@ -215,7 +215,7 @@
 .text-input-toggle {
   position: absolute;
   bottom: 0;
-  right: -1.25rem;
+  right: 0;
   width: 2.5rem;
   height: 2.5rem;
   border-radius: var(--radius-full);
@@ -289,7 +289,7 @@
 .caption-toggle {
   position: absolute;
   bottom: 0;
-  left: -1.25rem;
+  left: 0;
   width: 2.5rem;
   height: 2.5rem;
   border-radius: var(--radius-full);
@@ -369,12 +369,6 @@
 
 .app-caption-text.synthesis {
   color: var(--color-white);
-}
-
-/* Karaoke-style highlighting for spoken words */
-.app-caption-text .spoken {
-  opacity: 0.5;
-  color: var(--color-white-70);
 }
 
 /* Status Classes */
@@ -1073,11 +1067,6 @@
   text-shadow: 0 0 0.5rem rgba(255, 149, 0, 0.5);
 }
 
-/* Karaoke-style highlighting for spoken words */
-.app-caption-text.synthesis .spoken {
-  color: #007AFF;
-  font-weight: 600;
-}
 
 /* Object Inspector Styles */
 .object-inspector-backdrop {

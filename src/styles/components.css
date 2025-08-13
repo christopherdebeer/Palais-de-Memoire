@@ -561,18 +561,19 @@
 /* Voice Interface Components */
 .voice-interface {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 1em;
+  right: 5vw;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
   align-items: center;
+  width: 90vw;
 }
 
 /* Enhanced Closed Caption Overlay */
-.caption-overlay {
+.app-caption-overlay {
   position: fixed;
   bottom: 140px; /* Position above voice interface */
   left: 0;
@@ -587,7 +588,7 @@
   padding: 0 var(--space-md);
 }
 
-.caption-content {
+.app-caption-content {
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -598,7 +599,7 @@
   box-shadow: var(--shadow-xl);
 }
 
-.caption-text {
+.app-caption-text {
   margin: 0;
   color: var(--color-white);
   font-size: 1.1rem;
@@ -607,24 +608,31 @@
   font-weight: var(--font-weight-medium);
 }
 
-.caption-text.recognition {
+.app-caption-text.recognition {
   color: var(--color-primary);
 }
 
-.caption-text.synthesis {
+.app-caption-text.synthesis {
   color: var(--color-white);
 }
 
 /* Karaoke-style highlighting for spoken words */
-.caption-text .spoken {
+.app-caption-text .spoken {
+  opacity: 1;
+  color: var(--color-white-70);
+  text-shadow: 0 0 6px black;
+  font-weight: 600;
+}
+
+.app-caption-text .unspoken {
   opacity: 0.5;
   color: var(--color-white-70);
 }
 
 /* Caption Toggle Button */
 .caption-toggle {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   border: none;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(10px);
@@ -659,8 +667,8 @@
 
 /* Text Input Toggle Button */
 .text-input-toggle {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   border: none;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(10px);

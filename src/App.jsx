@@ -39,7 +39,7 @@ function App({core}) {
   const [isProcessingObjectAction, setIsProcessingObjectAction] = useState(false)
   
   // Minimap state
-  const [showMinimap, setShowMinimap] = useState(true)
+  const [showMinimap, setShowMinimap] = useState(false)
   const [minimapCollapsed, setMinimapCollapsed] = useState(true) // Start collapsed by default
   const [minimapPosition, setMinimapPosition] = useState({ x: 20, y: 20 }) // Default position
   const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: 0 })
@@ -115,6 +115,8 @@ function App({core}) {
         
         // Initialize the core
         const initialized = await core.initialize()
+        handleCaptionUpdate(`<span class="spoken">${"Welcome..."}</span><span class="unspoken">${"Whats next"}</span>`, "synthesis", true)
+        console.log("---------------< caption test")
         console.log('[App] Core initialization result:', initialized)
         
         if (initialized) {
@@ -136,7 +138,7 @@ function App({core}) {
           // Initial state update
           updatePalaceState(core)
           
-          console.log('[App] Memory Palace Core initialized successfully')
+          console.log('[App] ❇️ Memory Palace Core initialized successfully')
           
         } else {
           console.error('[App] Failed to initialize Memory Palace Core')
@@ -541,7 +543,7 @@ function App({core}) {
     }
   }
 
-  const handleCaptionUpdate = (text, mode) => {
+  const handleCaptionUpdate = (text, mode, disableTimeout) => {
     console.log('[App] Caption update:', { text, mode, captionsEnabled })
     
     if (!captionsEnabled) {
@@ -558,7 +560,7 @@ function App({core}) {
     
     // Auto-hide after 4 seconds for recognition, longer for synthesis
     const hideDelay = mode === 'synthesis' ? 6000 : 4000
-    captionTimeoutRef.current = setTimeout(() => {
+    if (!disableTimeout) captionTimeoutRef.current = setTimeout(() => {
       console.log('[App] Auto-hiding caption')
       setCaptionText('')
       setCaptionMode(null)
