@@ -113,7 +113,9 @@ export class MemoryPalaceToolManager {
     try {
       this.validateCore()
       const room = await this.core.createRoom(name, description)
-      return `Successfully created room "${name}" with description: ${description}. Room ID: ${room.id}`
+      // Navigate to the newly created room
+      await this.core.navigateToRoom(room.id)
+      return `Successfully created room "${name}" with description: ${description}. You are now in the new room.`
     } catch (error) {
       return `Failed to create room "${name}": ${error.message}`
     }
@@ -221,16 +223,41 @@ export class MemoryPalaceToolManager {
       if (targetRoomName && targetRoomDescription) {
         const newRoom = await this.core.createRoom(targetRoomName, targetRoomDescription)
         
-        // Create bidirectional connection with spatial positioning
-        // This would need to be implemented in the core to handle spatial door creation
-        // For now, we'll create the object as a door marker
-        const doorObject = await this.core.addObject(
-          description || `Door to ${targetRoomName}`,
-          `Door leading to ${targetRoomName}: ${targetRoomDescription}`,
-          position
-        )
+        // Create forward connection from current room to new room
+        const forwardConnection = {
+          id: this.core.stateManager.generateId(),
+          roomId: currentState.currentRoom.id,
+          userId: this.core.stateManager.getUserState().id,
+          targetRoomId: newRoom.id,
+          description: description || `Door to ${targetRoomName}`,
+          bidirectional: true,
+          position,
+          createdAt: new Date().toISOString()
+        }
         
-        return `Successfully created door "${description || `Door to ${targetRoomName}`}" at the clicked location, leading to the new room "${targetRoomName}"`
+        await this.core.stateManager.setConnection(forwardConnection)
+        
+        // Create return door "just behind the user" in the new room
+        const returnPosition = {
+          x: position.x !== undefined ? -position.x : 0, // opposite direction
+          y: position.y !== undefined ? position.y : 1.5, // same height
+          z: position.z !== undefined ? -position.z : -2  // behind user position
+        }
+        
+        const returnConnection = {
+          id: this.core.stateManager.generateId(),
+          roomId: newRoom.id,
+          userId: this.core.stateManager.getUserState().id,
+          targetRoomId: currentState.currentRoom.id,
+          description: `Return to ${currentState.currentRoom.name}`,
+          bidirectional: true,
+          position: returnPosition,
+          createdAt: new Date().toISOString()
+        }
+        
+        await this.core.stateManager.setConnection(returnConnection)
+        
+        return `Successfully created door "${description || `Door to ${targetRoomName}`}" at the clicked location, leading to the new room "${targetRoomName}". A return door has been automatically placed in the new room.`
       } else {
         return `Target room name and description are required for door creation`
       }

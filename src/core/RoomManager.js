@@ -81,7 +81,7 @@ export class RoomManager extends EventEmitter {
 
     // Generate room image if API is available
     if (!options.skipImageGeneration) {
-      this.generateRoomImage(roomId, description)
+      await this.generateRoomImage(roomId, description)
     }
 
     return room
