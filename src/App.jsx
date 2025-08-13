@@ -96,6 +96,34 @@ function App({core}) {
             console.log('[App] Navigated to room:', room)
             updatePalaceState(core)
           }));
+
+          // Listen for ROOM_CHANGED events for TTS/captions
+          unsubscribers.push(core.on(EventTypes.ROOM_CHANGED, (roomChangeData) => {
+            console.log('[App] Room changed:', roomChangeData)
+            updatePalaceState(core)
+            
+            // Play TTS and show captions for new room description
+            if (roomChangeData.currentRoom?.description) {
+              const roomName = roomChangeData.currentRoom.name
+              const roomDescription = roomChangeData.currentRoom.description
+              const ttsText = `Entering ${roomName}. ${roomDescription}`
+              
+              console.log('[App] Playing room TTS:', ttsText)
+              
+              // Show captions
+              handleCaptionUpdate(`Entering: ${roomName}`, 'synthesis')
+              
+              // Play TTS
+              if (window.speechSynthesis) {
+                window.speechSynthesis.cancel()
+                const utterance = new SpeechSynthesisUtterance(ttsText)
+                utterance.rate = 0.9
+                utterance.pitch = 1.0
+                utterance.volume = 0.8
+                window.speechSynthesis.speak(utterance)
+              }
+            }
+          }));
           
           // Add error event listener
           unsubscribers.push(core.on(EventTypes.ERROR_OCCURRED, (error) => {
@@ -111,17 +139,17 @@ function App({core}) {
         };
         
         // Setup event listeners and store cleanup function
-        const cleanupListeners = setupEventListeners(core);
+        const cleanupListeners = setupEventListeners(memoryPalaceCore);
         
         // Initialize the core
-        const initialized = await core.initialize()
+        const initialized = await memoryPalaceCore.initialize()
         // handleCaptionUpdate(`<span class="spoken">${"Welcome..."}</span><span class="unspoken">${"Whats next"}</span>`, "synthesis", true)
         // console.log("---------------< caption test")
         console.log('[App] Core initialization result:', initialized)
         
         if (initialized) {
           console.log('[App] Starting core...')
-          await core.start()
+          await memoryPalaceCore.start()
           console.log('[App] Core started, updating state...')
           
           // Check if component was unmounted during initialization
@@ -131,12 +159,12 @@ function App({core}) {
           }
           
           // Update state and store core reference
-          setMemoryPalaceCore(core)
+          setMemoryPalaceCore(memoryPalaceCore)
           
-          console.log('[App] State updated - core:', !!core, 'initialized: true')
+          console.log('[App] State updated - core:', !!memoryPalaceCore, 'initialized: true')
           
           // Initial state update
-          updatePalaceState(core)
+          updatePalaceState(memoryPalaceCore)
           
           console.log('[App] ❇️ Memory Palace Core initialized successfully')
           
@@ -791,6 +819,7 @@ function App({core}) {
         selectedObjectId={selectedObject?.id}
         cameraRotation={cameraRotation}
         onCameraRotationChange={setCameraRotation}
+        currentRoom={currentPalaceState?.currentRoom}
       />
       
       {/* Show loading overlay while initializing */}

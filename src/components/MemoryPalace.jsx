@@ -7,7 +7,8 @@ const MemoryPalace = forwardRef(({
   nippleEnabled = false,
   onCreationModeTriggered = null,
   onObjectSelected = null,
-  selectedObjectId = null
+  selectedObjectId = null,
+  currentRoom = null
 }, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
@@ -16,9 +17,60 @@ const MemoryPalace = forwardRef(({
   const wireframeSphereRef = useRef(null)
   const nippleManagerRef = useRef(null)
   const nippleContainerRef = useRef(null)
+  const skyboxSphereRef = useRef(null)
+  const skyboxMaterialRef = useRef(null)
   
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
+
+  // Skybox update function for room navigation
+  const updateSkyboxForRoom = (room) => {
+    if (!skyboxMaterialRef.current) {
+      console.warn('[MemoryPalace] Skybox material not ready for room update')
+      return
+    }
+
+    console.log('[MemoryPalace] Updating skybox for room:', room?.name || 'default')
+
+    if (room?.imageUrl) {
+      // Load room-specific texture
+      console.log('[MemoryPalace] Loading room texture:', room.imageUrl)
+      const textureLoader = new THREE.TextureLoader()
+      
+      textureLoader.load(
+        room.imageUrl,
+        (texture) => {
+          console.log('[MemoryPalace] Room texture loaded successfully')
+          texture.mapping = THREE.EquirectangularReflectionMapping
+          texture.wrapS = THREE.RepeatWrapping
+          texture.wrapT = THREE.ClampToEdgeWrapping
+          texture.offset.x = 0.5 // Shift texture by 180 degrees
+          
+          // Dispose previous texture to prevent memory leaks
+          if (skyboxMaterialRef.current.map && skyboxMaterialRef.current.map !== texture) {
+            skyboxMaterialRef.current.map.dispose()
+          }
+          
+          skyboxMaterialRef.current.map = texture
+          skyboxMaterialRef.current.color.setHex(0xffffff)
+          skyboxMaterialRef.current.needsUpdate = true
+          
+          // Hide wireframe when texture loads
+          if (wireframeSphereRef.current && !wireframeEnabled) {
+            wireframeSphereRef.current.visible = false
+          }
+        },
+        undefined,
+        (error) => {
+          console.warn('[MemoryPalace] Failed to load room texture, keeping current:', error)
+        }
+      )
+    } else {
+      // No room-specific image, use default texture logic
+      console.log('[MemoryPalace] No room image, using default skybox')
+      // The default texture loading logic from initialization will be used
+    }
+  }
 
   // Nipple.js functions
   const initializeNipple = () => {
@@ -276,6 +328,10 @@ const MemoryPalace = forwardRef(({
     // Create meshes first so they exist when texture callbacks execute
     const sphere = new THREE.Mesh(geometry, material)
     scene.add(sphere)
+    
+    // Store references for room-based texture updates
+    skyboxSphereRef.current = sphere
+    skyboxMaterialRef.current = material
     
     // Add wireframe version for fallback/debug visualization
     const wireframeSphere = new THREE.Mesh(geometry, wireframeMaterial)
@@ -878,6 +934,14 @@ const MemoryPalace = forwardRef(({
       cleanupNipple()
     }
   }, [nippleEnabled])
+
+  // Handle room changes
+  useEffect(() => {
+    if (currentRoom) {
+      console.log('[MemoryPalace] Room changed, updating skybox:', currentRoom.name)
+      updateSkyboxForRoom(currentRoom)
+    }
+  }, [currentRoom])
 
   return <div ref={mountRef} className="memory-palace-canvas" />
 })
