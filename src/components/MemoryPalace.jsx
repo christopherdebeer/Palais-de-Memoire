@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import * as THREE from 'three'
 import nipplejs from 'nipplejs'
+import SimpleParticleManager from '../utils/SimpleParticleManager'
 
 const MemoryPalace = forwardRef(({ 
   wireframeEnabled = false, 
@@ -8,7 +9,8 @@ const MemoryPalace = forwardRef(({
   onCreationModeTriggered = null,
   onObjectSelected = null,
   selectedObjectId = null,
-  currentRoom = null
+  currentRoom = null,
+  objects = []
 }, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
@@ -19,6 +21,9 @@ const MemoryPalace = forwardRef(({
   const nippleContainerRef = useRef(null)
   const skyboxSphereRef = useRef(null)
   const skyboxMaterialRef = useRef(null)
+  const particleManagerRef = useRef(null)
+  const objectMarkersRef = useRef(new Map())
+  const animationFrameRef = useRef(null)
   
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
@@ -69,6 +74,184 @@ const MemoryPalace = forwardRef(({
       // No room-specific image, use default texture logic
       console.log('[MemoryPalace] No room image, using default skybox')
       // The default texture loading logic from initialization will be used
+    }
+  }
+
+  // Object rendering functions
+  const createObjectMarker = (obj) => {
+    if (!sceneRef.current) return null
+
+    console.log('[MemoryPalace] Creating marker for object:', obj.name, obj.id)
+    
+    // Determine marker type based on object properties
+    const isDoor = obj.targetRoomId !== undefined
+    
+    // Create appropriate geometry for marker type (matching prototype)
+    let markerGeometry, markerMaterial
+    
+    if (isDoor) {
+      // Door markers are larger, rectangular, and golden
+      markerGeometry = new THREE.BoxGeometry(200, 300, 10)
+      markerMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffd700,
+        transparent: true,
+        opacity: 0.0, // Invisible hit area
+        depthTest: false,
+        depthWrite: false,
+        wireframe: true,
+      })
+    } else {
+      // Object markers are smaller, spherical, and blue
+      markerGeometry = new THREE.SphereGeometry(50, 8, 6)
+      markerMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4dabf7,
+        transparent: true,
+        opacity: 0.0, // Invisible hit area
+        depthTest: false,
+        depthWrite: false,
+        wireframe: true,
+      })
+    }
+    
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
+    
+    // Position marker just outside sphere surface (radius 500)
+    const baseRadius = 500
+    
+    if (obj.position?.x !== undefined && obj.position?.y !== undefined && obj.position?.z !== undefined) {
+      // Use stored 3D coordinates but extend them outward
+      const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
+      marker.position.copy(direction.multiplyScalar(baseRadius))
+    } else {
+      // Fallback to default position (facing forward)
+      console.warn('[MemoryPalace] Object has no 3D position, using default:', obj.name)
+      marker.position.set(baseRadius, 0, 0) // Forward facing
+    }
+    
+    // Store object data in userData
+    marker.userData = {
+      objectData: obj,
+      isDoor: isDoor,
+      objectId: obj.id,
+      originalScale: marker.scale.clone()
+    }
+    
+    // Create particle system for this marker
+    if (particleManagerRef.current) {
+      const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id)
+      sceneRef.current.add(particleSystem)
+      
+      // Store particle system reference
+      marker.userData.particleSystem = particleSystem
+    }
+    
+    sceneRef.current.add(marker)
+    console.log('[MemoryPalace] Added object marker to scene:', obj.name, 'at position:', marker.position)
+    
+    return marker
+  }
+
+  const updateObjectMarkers = (newObjects) => {
+    if (!sceneRef.current) return
+    
+    console.log('[MemoryPalace] Updating object markers. New objects:', newObjects.length)
+    
+    // Get current markers
+    const currentMarkers = objectMarkersRef.current
+    const currentObjectIds = new Set(Array.from(currentMarkers.keys()))
+    const newObjectIds = new Set(newObjects.map(obj => obj.id))
+    
+    // Remove markers for objects that no longer exist
+    currentObjectIds.forEach(objectId => {
+      if (!newObjectIds.has(objectId)) {
+        console.log('[MemoryPalace] Removing marker for deleted object:', objectId)
+        const marker = currentMarkers.get(objectId)
+        if (marker) {
+          // Remove particle system
+          if (marker.userData.particleSystem && particleManagerRef.current) {
+            sceneRef.current.remove(marker.userData.particleSystem)
+            particleManagerRef.current.removeParticleSystem(objectId)
+          }
+          
+          // Remove marker from scene
+          sceneRef.current.remove(marker)
+          
+          // Dispose resources
+          if (marker.geometry) marker.geometry.dispose()
+          if (marker.material) marker.material.dispose()
+          
+          currentMarkers.delete(objectId)
+        }
+      }
+    })
+    
+    // Add markers for new objects
+    newObjects.forEach(obj => {
+      if (!currentMarkers.has(obj.id)) {
+        console.log('[MemoryPalace] Adding marker for new object:', obj.name)
+        const marker = createObjectMarker(obj)
+        if (marker) {
+          currentMarkers.set(obj.id, marker)
+        }
+      } else {
+        // Update existing marker if needed (position, properties)
+        const marker = currentMarkers.get(obj.id)
+        if (marker && marker.userData.objectData) {
+          // Check if position changed
+          const oldPos = marker.userData.objectData.position
+          const newPos = obj.position
+          if (oldPos && newPos && 
+              (oldPos.x !== newPos.x || oldPos.y !== newPos.y || oldPos.z !== newPos.z)) {
+            console.log('[MemoryPalace] Updating position for object:', obj.name)
+            
+            // Update marker position
+            const baseRadius = 500
+            const direction = new THREE.Vector3(newPos.x, newPos.y, newPos.z).normalize()
+            marker.position.copy(direction.multiplyScalar(baseRadius))
+            
+            // Update particle system position
+            if (marker.userData.particleSystem) {
+              marker.userData.particleSystem.position.copy(marker.position)
+            }
+          }
+          
+          // Update userData with new object data
+          marker.userData.objectData = obj
+        }
+      }
+    })
+    
+    console.log('[MemoryPalace] Object markers updated. Total active:', currentMarkers.size)
+  }
+
+  const startObjectAnimation = () => {
+    if (animationFrameRef.current) return // Already animating
+    
+    const animate = () => {
+      // Update particle systems
+      if (particleManagerRef.current) {
+        particleManagerRef.current.updateParticleSystems()
+      }
+      
+      // Animate object markers (subtle pulsing)
+      objectMarkersRef.current.forEach(marker => {
+        if (marker.userData.originalScale) {
+          const time = Date.now() * 0.001
+          const scale = 1.0 + Math.sin(time * 2) * 0.1 // Gentle pulsing
+          marker.scale.copy(marker.userData.originalScale).multiplyScalar(scale)
+        }
+      })
+      
+      animationFrameRef.current = requestAnimationFrame(animate)
+    }
+    
+    animate()
+  }
+
+  const stopObjectAnimation = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
   }
 
@@ -385,6 +568,10 @@ const MemoryPalace = forwardRef(({
     rendererRef.current = renderer
     cameraRef.current = camera
 
+    // Initialize particle manager for object markers
+    particleManagerRef.current = new SimpleParticleManager()
+    console.log('[MemoryPalace] Particle manager initialized')
+
     // Set initial camera position
     camera.position.set(0, 0, 0)
 
@@ -556,14 +743,43 @@ const MemoryPalace = forwardRef(({
       // Update the picking ray with the camera and mouse position
       raycaster.setFromCamera(mouse, camera)
 
-      // Calculate objects intersecting the picking ray
-      const intersects = raycaster.intersectObject(sphere)
-
-      if (intersects.length > 0) {
-        const intersectionPoint = intersects[0].point
-        console.log('[MemoryPalace] Single click at point:', intersectionPoint)
+      // First check for object marker intersections
+      const objectMarkers = Array.from(objectMarkersRef.current.values())
+      const objectIntersects = raycaster.intersectObjects(objectMarkers)
+      
+      if (objectIntersects.length > 0) {
+        // Object clicked - get the closest intersection
+        const objectIntersect = objectIntersects[0]
+        const marker = objectIntersect.object
+        const objectData = marker.userData.objectData
         
-        // Add visual feedback for single click
+        console.log('[MemoryPalace] Object clicked:', objectData.name, objectData.id)
+        
+        // Highlight the selected object
+        if (marker.material) {
+          marker.material.opacity = 0.3 // Make visible temporarily
+          setTimeout(() => {
+            if (marker.material) {
+              marker.material.opacity = 0.0 // Back to invisible
+            }
+          }, 500)
+        }
+        
+        // Notify parent component about object selection
+        if (onObjectSelected) {
+          onObjectSelected(objectData.id, objectData)
+        }
+        
+        return // Don't process skybox click if object was clicked
+      }
+
+      // No object clicked, check skybox intersection
+      const skyboxIntersects = raycaster.intersectObject(sphere)
+      if (skyboxIntersects.length > 0) {
+        const intersectionPoint = skyboxIntersects[0].point
+        console.log('[MemoryPalace] Skybox single click at point:', intersectionPoint)
+        
+        // Add visual feedback for skybox click
         const clickIndicator = new THREE.SphereGeometry(1, 8, 6)
         const clickMaterial = new THREE.MeshBasicMaterial({ 
           color: 0x00ff00, 
@@ -870,6 +1086,9 @@ const MemoryPalace = forwardRef(({
       setTimeout(initializeNipple, 100) // Small delay to ensure DOM is ready
     }
 
+    // Start object animation loop
+    startObjectAnimation()
+
     // Cleanup
     return () => {
       console.log('Cleaning up Memory Palace scene...')
@@ -911,6 +1130,18 @@ const MemoryPalace = forwardRef(({
       // Cleanup nipple
       cleanupNipple()
       
+      // Stop object animations
+      stopObjectAnimation()
+      
+      // Cleanup particle manager
+      if (particleManagerRef.current) {
+        particleManagerRef.current.dispose()
+        particleManagerRef.current = null
+      }
+      
+      // Clear object markers
+      objectMarkersRef.current.clear()
+      
       // Clear refs
       sceneRef.current = null
       rendererRef.current = null
@@ -942,6 +1173,14 @@ const MemoryPalace = forwardRef(({
       updateSkyboxForRoom(currentRoom)
     }
   }, [currentRoom])
+
+  // Handle objects changes
+  useEffect(() => {
+    if (sceneRef.current && particleManagerRef.current) {
+      console.log('[MemoryPalace] Objects changed, updating markers:', objects.length)
+      updateObjectMarkers(objects)
+    }
+  }, [objects])
 
   return <div ref={mountRef} className="memory-palace-canvas" />
 })

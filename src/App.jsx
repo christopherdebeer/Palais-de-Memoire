@@ -820,6 +820,7 @@ function App({core}) {
         cameraRotation={cameraRotation}
         onCameraRotationChange={setCameraRotation}
         currentRoom={currentPalaceState?.currentRoom}
+        objects={currentPalaceState?.objects || []}
       />
       
       {/* Show loading overlay while initializing */}
