@@ -34,13 +34,24 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     const initializeVoiceInterface = async () => {
       console.log('[VoiceInterface] Initializing voice interface...')
       
-      // Wait for settings manager to initialize
+      // Wait for settings manager to initialize completely
       try {
         console.log('[VoiceInterface] Waiting for settings initialization...')
         await settingsManager.waitForInitialization()
         console.log('[VoiceInterface] Settings initialization complete')
+        
+        // Now that settings are fully initialized, check API configuration
+        const isConfigured = settingsManager.isAnthropicConfigured()
+        console.log('[VoiceInterface] API configuration check after initialization:', {
+          isConfigured,
+          anthropicKey: settingsManager.get('anthropicApiKey') ? '[SET]' : '[NOT SET]',
+          isInitializing: settingsManager.isInitializing
+        })
+        setApiConfigured(isConfigured)
       } catch (error) {
         console.error('[VoiceInterface] Settings initialization error:', error)
+        // Set API as not configured if initialization fails
+        setApiConfigured(false)
       }
       
       // Check for Web Speech API support
@@ -140,15 +151,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         console.warn('[VoiceInterface] Web Speech API not supported in this browser')
       }
 
-      // Check API configuration after initialization - only need Anthropic API for voice processing
-      const isConfigured = settingsManager.isAnthropicConfigured()
-      console.log('[VoiceInterface] Initial API configuration check:', {
-        isConfigured,
-        anthropicKey: settingsManager.get('anthropicApiKey') ? '[SET]' : '[NOT SET]',
-        isInitializing: settingsManager.isInitializing
-      })
-      setApiConfigured(isConfigured)
-
       // Caption preferences are now managed at App level
       console.log('[VoiceInterface] Caption management moved to App level')
     }
@@ -156,18 +158,12 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     // Initialize asynchronously
     initializeVoiceInterface()
 
-    // Listen for settings changes
+    // Listen only for settings changes that affect the API key
     const handleSettingsChange = (eventType, data) => {
       console.log('[VoiceInterface] Settings event:', eventType, data)
       
-      // Wait for initialization to complete before checking configuration
-      if (eventType === 'initialization_complete') {
-        console.log('[VoiceInterface] Settings initialization complete, checking API configuration')
-        const newConfigured = settingsManager.isAnthropicConfigured()
-        console.log('[VoiceInterface] Post-initialization API configured:', newConfigured)
-        setApiConfigured(newConfigured)
-      } else if (eventType === 'setting_changed' && data?.key === 'anthropicApiKey') {
-        console.log('[VoiceInterface] Anthropic API key changed')
+      if (eventType === 'setting_changed' && data?.key === 'anthropicApiKey') {
+        console.log('[VoiceInterface] Anthropic API key changed, updating configuration')
         const newConfigured = settingsManager.isAnthropicConfigured()
         console.log('[VoiceInterface] API key change - configured:', newConfigured)
         setApiConfigured(newConfigured)
@@ -231,7 +227,15 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     setIsProcessing(true)
     
     try {
-      if (apiConfigured) {
+      // Double-check API configuration at runtime to prevent stale state issues
+      const isCurrentlyConfigured = settingsManager.isAnthropicConfigured()
+      console.log('[VoiceInterface] Runtime API configuration check:', {
+        stateApiConfigured: apiConfigured,
+        runtimeApiConfigured: isCurrentlyConfigured,
+        settingsInitializing: settingsManager.isInitializing
+      })
+      
+      if (isCurrentlyConfigured) {
         console.log('[VoiceInterface] Using useAnthropicStream hook for command processing')
         
   // Build context for memory palace from current state
