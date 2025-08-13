@@ -115,8 +115,8 @@ function App({core}) {
         
         // Initialize the core
         const initialized = await core.initialize()
-        handleCaptionUpdate(`<span class="spoken">${"Welcome..."}</span><span class="unspoken">${"Whats next"}</span>`, "synthesis", true)
-        console.log("---------------< caption test")
+        // handleCaptionUpdate(`<span class="spoken">${"Welcome..."}</span><span class="unspoken">${"Whats next"}</span>`, "synthesis", true)
+        // console.log("---------------< caption test")
         console.log('[App] Core initialization result:', initialized)
         
         if (initialized) {
