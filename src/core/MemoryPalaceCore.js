@@ -425,7 +425,7 @@ export class MemoryPalaceCore extends EventEmitter {
       const defaultRoom = await this.roomManager.createRoom(
         'Welcome Hall',
         'A peaceful starting space for your memory palace. This elegant hall features classical architecture with warm lighting, perfect for beginning your journey of memory organization.',
-        { skipImageGeneration: false } // Allow image generation
+        { imageUrl: '/default_skybox.png' } 
       )
       
       console.log('[MemoryPalaceCore] Default room created:', defaultRoom)
