@@ -13,55 +13,43 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
   const [liveBlocks, setLiveBlocks] = useState(null)
   const [pendingTool, setPendingTool] = useState(null)
   const abortRef = useRef(null)
+  
+  // Cached anthropic client - created lazily when needed
+  const anthropicRef = useRef(null)
+  const lastApiKeyRef = useRef(null)
 
-  // Track initialization state
-  const [isInitialized, setIsInitialized] = useState(false)
-  const [initializationError, setInitializationError] = useState(null)
-
-  // Anthropic SDK instance - will be created after settings initialization
-  const [anthropic, setAnthropic] = useState(null)
-
-  // Handle settings initialization and create Anthropic SDK instance
-  useEffect(() => {
-    const initializeHook = async () => {
-      try {
-        setInitializationError(null)
-        console.log('[useAnthropicStream] Waiting for settings initialization...')
-        
-        // Wait for settings manager to initialize completely
-        await settingsManager.waitForInitialization()
-        
-        console.log('[useAnthropicStream] Settings initialized, creating Anthropic SDK instance')
-        
-        // Now that settings are fully initialized, get the API key
-        const apiKey = settingsManager.get('anthropicApiKey')
-        if (apiKey) {
-          console.log('[useAnthropicStream] Creating Anthropic SDK instance with API key')
-          const anthropicInstance = new Anthropic({
-            dangerouslyAllowBrowser: true,
-            apiKey: apiKey,
-            baseURL: 'https://api.anthropic.com',
-            defaultHeaders: {
-              'anthropic-version': '2023-06-01',
-              'anthropic-dangerous-direct-browser-access': 'true',
-            },
-          })
-          setAnthropic(anthropicInstance)
-        } else {
-          console.log('[useAnthropicStream] No API key available after settings initialization')
-          setAnthropic(null)
-        }
-        
-        setIsInitialized(true)
-      } catch (error) {
-        console.error('[useAnthropicStream] Initialization error:', error)
-        setInitializationError(error)
-        setIsInitialized(true) // Still mark as initialized to prevent hanging
-        setAnthropic(null)
-      }
+  // Get or create Anthropic client on demand
+  const getAnthropicClient = useCallback(() => {
+    // Check if settings manager is available
+    if (!settingsManager.isInitialized()) {
+      throw new Error('Settings not yet initialized. Please try again in a moment.')
     }
 
-    initializeHook()
+    const currentApiKey = settingsManager.get('anthropicApiKey')
+    
+    if (!currentApiKey) {
+      throw new Error('Anthropic API key not configured')
+    }
+
+    // Return cached client if API key hasn't changed
+    if (anthropicRef.current && lastApiKeyRef.current === currentApiKey) {
+      return anthropicRef.current
+    }
+
+    // Create new client
+    console.log('[useAnthropicStream] Creating Anthropic client')
+    anthropicRef.current = new Anthropic({
+      dangerouslyAllowBrowser: true,
+      apiKey: currentApiKey,
+      baseURL: 'https://api.anthropic.com',
+      defaultHeaders: {
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+    })
+    lastApiKeyRef.current = currentApiKey
+
+    return anthropicRef.current
   }, [])
 
   // Merge delta helper for streaming content
@@ -272,15 +260,7 @@ Use these tools actively to help users build and navigate their memory palace.`
 
   // Stream a single message
   const streamMessage = useCallback(async (messages, context = {}) => {
-    if (!anthropic) {
-      const fallbackReason = 'Anthropic API key not configured in useAnthropicStream'
-      console.error('[useAnthropicStream] Stream fallback triggered:', {
-        reason: fallbackReason,
-        hasApiKey: !!settingsManager.get('anthropicApiKey'),
-        timestamp: new Date().toISOString()
-      })
-      throw new Error(fallbackReason)
-    }
+    const anthropic = getAnthropicClient() // Get client on-demand
 
     const body = buildRequestBody(messages, context)
     console.log('[useAnthropicStream] Request body:', body)
@@ -368,20 +348,11 @@ Use these tools actively to help users build and navigate their memory palace.`
       
       throw error
     }
-  }, [anthropic, buildRequestBody, mergeDelta, assembleMessage])
+  }, [getAnthropicClient, buildRequestBody, mergeDelta, assembleMessage])
 
   // Main send function with tool use loop
   const send = useCallback(async (history, userText, context = {}) => {
-    if (!anthropic) {
-      const fallbackReason = 'Anthropic API key not configured in useAnthropicStream send'
-      console.error('[useAnthropicStream] Send fallback triggered:', {
-        reason: fallbackReason,
-        userText,
-        hasApiKey: !!settingsManager.get('anthropicApiKey'),
-        timestamp: new Date().toISOString()
-      })
-      throw new Error(fallbackReason)
-    }
+    // Client availability is checked in streamMessage via getAnthropicClient()
     if (status !== 'idle') {
       const error = 'Stream already in progress'
       console.warn('[useAnthropicStream] Send blocked:', { reason: error, currentStatus: status })
@@ -502,7 +473,7 @@ Use these tools actively to help users build and navigate their memory palace.`
     }
 
     return allNewMessages
-  }, [anthropic, status, streamMessage, executeToolCall, onAddMessage])
+  }, [status, streamMessage, executeToolCall, onAddMessage])
 
   // Abort helper
   const abort = useCallback(() => {
@@ -524,7 +495,14 @@ Use these tools actively to help users build and navigate their memory palace.`
     pendingTool,
     send,
     abort,
-    isConfigured: !!anthropic,
+    isConfigured: () => {
+      try {
+        getAnthropicClient()
+        return true
+      } catch {
+        return false
+      }
+    },
   }
 }
 
