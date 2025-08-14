@@ -9,6 +9,7 @@ import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
 import { EventTypes } from './core/types.js'
 import MobileMotionController from './utils/MobileMotionController.js'
+import settingsManager from './services/SettingsManager.js'
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 
@@ -16,7 +17,7 @@ function App({core}) {
   const [isLoading, setIsLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
-  const [wireframeEnabled, setWireframeEnabled] = useState(true) // Start with wireframe enabled for debugging
+  const [wireframeEnabled, setWireframeEnabled] = useState(settingsManager.get('wireframeMode')) // Read from settings
   const [nippleEnabled, setNippleEnabled] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
