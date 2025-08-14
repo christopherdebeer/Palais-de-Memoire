@@ -594,7 +594,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     }
     // Ensure listening state is updated immediately
     setIsListening(false)
-    if (onListeningChange) {
+    if (false && onListeningChange) {
       onListeningChange(false)
     }
   }
