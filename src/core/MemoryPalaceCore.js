@@ -1,6 +1,5 @@
 import { EventEmitter } from './EventEmitter.js'
 import { StateManager } from './StateManager.js'
-import { APIManager, MockAPIProvider } from './APIManager.js'
 import { RoomManager } from './RoomManager.js'
 import { ObjectManager } from './ObjectManager.js'
 import { InteractionController } from './InteractionController.js'
@@ -16,7 +15,7 @@ export class MemoryPalaceCore extends EventEmitter {
     
     // Configuration
     this.config = {
-      apiProvider: 'replicate', // 'replicate' | 'mock' | 'websim' | custom provider
+      enableImageGeneration: true, // Enable image generation via Replicate
       persistence: 'localStorage', // 'localStorage' | 'indexedDB' | custom adapter
       enableVoice: true,
       enableSpatialInteraction: true,
@@ -26,7 +25,6 @@ export class MemoryPalaceCore extends EventEmitter {
     
     // Core subsystems
     this.stateManager = new StateManager()
-    this.apiManager = new APIManager()
     this.roomManager = null
     this.objectManager = null
     this.interactionController = null
@@ -68,15 +66,10 @@ export class MemoryPalaceCore extends EventEmitter {
       await this.initializeWithRetry(this.initializeStateManager.bind(this), 'StateManager')
       console.log('[MemoryPalaceCore] Step 1: StateManager initialized successfully')
       
-      // Initialize API management with retry mechanism
-      console.log('[MemoryPalaceCore] Step 2: Initializing APIManager...')
-      await this.initializeWithRetry(this.initializeAPIManager.bind(this), 'APIManager')
-      console.log('[MemoryPalaceCore] Step 2: APIManager initialized successfully')
-      
       // Initialize core managers with retry mechanism
-      console.log('[MemoryPalaceCore] Step 3: Initializing core managers...')
+      console.log('[MemoryPalaceCore] Step 2: Initializing core managers...')
       await this.initializeWithRetry(this.initializeCoreManagers.bind(this), 'CoreManagers')
-      console.log('[MemoryPalaceCore] Step 3: Core managers initialized successfully')
+      console.log('[MemoryPalaceCore] Step 2: Core managers initialized successfully')
       
       // Set up event listeners
       console.log('[MemoryPalaceCore] Step 4: Setting up event listeners...')
@@ -95,7 +88,6 @@ export class MemoryPalaceCore extends EventEmitter {
       console.log('[MemoryPalaceCore] Final state:', {
         isInitialized: this.isInitialized,
         hasStateManager: !!this.stateManager,
-        hasAPIManager: !!this.apiManager,
         hasRoomManager: !!this.roomManager,
         hasObjectManager: !!this.objectManager,
         hasInteractionController: !!this.interactionController
@@ -112,7 +104,6 @@ export class MemoryPalaceCore extends EventEmitter {
       console.error('[MemoryPalaceCore] Current state at failure:', {
         isInitialized: this.isInitialized,
         hasStateManager: !!this.stateManager,
-        hasAPIManager: !!this.apiManager,
         hasRoomManager: !!this.roomManager,
         hasObjectManager: !!this.objectManager,
         hasInteractionController: !!this.interactionController
@@ -179,22 +170,9 @@ export class MemoryPalaceCore extends EventEmitter {
     try {
       // Check which components were successfully initialized
       const hasStateManager = !!this.stateManager;
-      const hasAPIManager = !!this.apiManager;
       
-      // If we have state manager but no API manager, try to continue with mock API
-      if (hasStateManager && !hasAPIManager) {
-        console.log('[MemoryPalaceCore] Attempting to recover with mock API provider...');
-        try {
-          this.apiManager = new APIManager();
-          this.apiManager.initialize(APIManager.createMockProvider());
-          console.log('[MemoryPalaceCore] Successfully recovered API manager with mock provider');
-        } catch (error) {
-          console.error('[MemoryPalaceCore] Failed to recover API manager:', error);
-        }
-      }
-      
-      // If we have both state and API but no managers, try to initialize them
-      if (hasStateManager && this.apiManager && (!this.roomManager || !this.objectManager)) {
+      // If we have state manager but no core managers, try to initialize them
+      if (hasStateManager && (!this.roomManager || !this.objectManager)) {
         console.log('[MemoryPalaceCore] Attempting to recover core managers...');
         try {
           await this.initializeCoreManagers();
@@ -205,7 +183,7 @@ export class MemoryPalaceCore extends EventEmitter {
       }
       
       // Set up event listeners if we have the necessary components
-      if (this.stateManager && this.apiManager && this.roomManager && this.objectManager) {
+      if (this.stateManager && this.roomManager && this.objectManager) {
         this.setupEventListeners();
         
         // Mark as partially initialized if we have the minimum required components
@@ -213,7 +191,6 @@ export class MemoryPalaceCore extends EventEmitter {
         console.log('[MemoryPalaceCore] Partial recovery successful, core is usable with limited functionality');
         this.emit('core_recovered', { 
           hasStateManager: !!this.stateManager,
-          hasAPIManager: !!this.apiManager,
           hasRoomManager: !!this.roomManager,
           hasObjectManager: !!this.objectManager,
           hasInteractionController: !!this.interactionController
@@ -339,49 +316,6 @@ export class MemoryPalaceCore extends EventEmitter {
     console.log('[MemoryPalaceCore] StateManager: ✅ StateManager initialized successfully')
   }
 
-  /**
-   * Initialize API management
-   */
-  async initializeAPIManager() {
-    console.log('[MemoryPalaceCore] APIManager: Starting initialization...')
-    console.log('[MemoryPalaceCore] APIManager: Provider config:', this.config.apiProvider)
-    
-    let provider
-    
-    try {
-      switch (this.config.apiProvider) {
-        case 'mock':
-          console.log('[MemoryPalaceCore] APIManager: Creating mock provider...')
-          provider = APIManager.createMockProvider()
-          console.log('[MemoryPalaceCore] APIManager: Mock provider created')
-          break
-        case 'websim':
-          console.log('[MemoryPalaceCore] APIManager: Creating WebSim provider...')
-          provider = APIManager.createWebSimProvider(this.config.websimBaseUrl)
-          console.log('[MemoryPalaceCore] APIManager: WebSim provider created')
-          break
-        case 'replicate':
-          console.log('[MemoryPalaceCore] APIManager: Creating Replicate provider...')
-          provider = APIManager.createReplicateProvider()
-          console.log('[MemoryPalaceCore] APIManager: Replicate provider created')
-          break
-        default:
-          if (typeof this.config.apiProvider === 'object') {
-            console.log('[MemoryPalaceCore] APIManager: Using custom provider object')
-            provider = this.config.apiProvider
-          } else {
-            throw new Error(`Unknown API provider: ${this.config.apiProvider}`)
-          }
-      }
-      
-      console.log('[MemoryPalaceCore] APIManager: Initializing APIManager with provider...')
-      this.apiManager.initialize(provider)
-      console.log(`[MemoryPalaceCore] APIManager: ✅ APIManager initialized with ${provider.constructor.name}`)
-    } catch (error) {
-      console.error('[MemoryPalaceCore] APIManager: ❌ Failed to initialize APIManager:', error)
-      throw error
-    }
-  }
 
   /**
    * Initialize core managers
@@ -392,17 +326,16 @@ export class MemoryPalaceCore extends EventEmitter {
     try {
       // Create manager instances
       console.log('[MemoryPalaceCore] CoreManagers: Creating RoomManager...')
-      this.roomManager = new RoomManager(this.stateManager, this.apiManager)
+      this.roomManager = new RoomManager(this.stateManager)
       console.log('[MemoryPalaceCore] CoreManagers: RoomManager created')
       
       console.log('[MemoryPalaceCore] CoreManagers: Creating ObjectManager...')
-      this.objectManager = new ObjectManager(this.stateManager, this.apiManager)
+      this.objectManager = new ObjectManager(this.stateManager)
       console.log('[MemoryPalaceCore] CoreManagers: ObjectManager created')
       
       console.log('[MemoryPalaceCore] CoreManagers: Creating InteractionController...')
       this.interactionController = new InteractionController(
         this.stateManager,
-        this.apiManager,
         this.roomManager,
         this.objectManager
       )
@@ -437,10 +370,6 @@ export class MemoryPalaceCore extends EventEmitter {
       this.emit(EventTypes.ERROR_OCCURRED, error)
     })
     
-    this.apiManager.on(EventTypes.API_REQUEST, (request) => {
-      this.metrics.apiCallsPerformed++
-      this.emit(EventTypes.API_REQUEST, request)
-    })
     
     this.roomManager.on(EventTypes.ROOM_CREATED, (room) => {
       this.metrics.roomsCreated++
@@ -731,8 +660,7 @@ export class MemoryPalaceCore extends EventEmitter {
     return {
       ...this.metrics,
       uptime: this.isRunning ? performance.now() - this.metrics.initTime : 0,
-      memoryUsage: this.calculateMemoryUsage(),
-      rateLimitStatus: this.apiManager.getRateLimitStatus()
+      memoryUsage: this.calculateMemoryUsage()
     }
   }
 
@@ -762,7 +690,6 @@ export class MemoryPalaceCore extends EventEmitter {
       initialized: this.isInitialized,
       running: this.isRunning,
       stateManager: !!this.stateManager,
-      apiManager: !!this.apiManager,
       roomManager: !!this.roomManager,
       objectManager: !!this.objectManager,
       interactionController: !!this.interactionController,
@@ -802,10 +729,6 @@ export class MemoryPalaceCore extends EventEmitter {
         await this.roomManager.dispose()
       }
       
-      if (this.apiManager?.dispose) {
-        await this.apiManager.dispose()
-      }
-      
       if (this.stateManager?.dispose) {
         await this.stateManager.dispose()
       }
@@ -815,7 +738,6 @@ export class MemoryPalaceCore extends EventEmitter {
       
       // Clear subsystem references
       this.stateManager = null
-      this.apiManager = null
       this.roomManager = null
       this.objectManager = null
       this.interactionController = null

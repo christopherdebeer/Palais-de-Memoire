@@ -6,10 +6,9 @@ import { EventTypes } from './types.js'
  * Manages placement, retrieval, and spatial positioning of memory objects
  */
 export class ObjectManager extends EventEmitter {
-  constructor(stateManager, apiManager) {
+  constructor(stateManager) {
     super()
     this.stateManager = stateManager
-    this.apiManager = apiManager
   }
 
   /**

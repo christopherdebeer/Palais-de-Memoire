@@ -6,7 +6,7 @@ import './styles/components.css'
 import { MemoryPalaceCore } from './core/MemoryPalaceCore.js'
 
 const core = new MemoryPalaceCore({
-  apiProvider: 'mock', // Start with mock provider for development
+  enableImageGeneration: true, // Enable real image generation via Replicate
   persistence: 'localStorage',
   enableVoice: true,
   enableSpatialInteraction: true,

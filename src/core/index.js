@@ -8,7 +8,6 @@ export { MemoryPalaceCore, getMemoryPalaceCore, createMemoryPalaceCore } from '.
 
 // Individual managers
 export { StateManager } from './StateManager.js'
-export { APIManager, MockAPIProvider, BaseAPIProvider, WebSimAPIProvider } from './APIManager.js'
 export { RoomManager } from './RoomManager.js'
 export { ObjectManager } from './ObjectManager.js'
 export { InteractionController } from './InteractionController.js'
@@ -33,7 +32,7 @@ export async function setupMemoryPalace(config = {}) {
   const { createMemoryPalaceCore } = await import('./MemoryPalaceCore.js')
   
   const core = createMemoryPalaceCore({
-    apiProvider: 'mock',
+    enableImageGeneration: true,
     persistence: 'localStorage',
     enableVoice: true,
     enableSpatialInteraction: true,
@@ -70,7 +69,7 @@ export const FEATURES = {
  * Default configuration
  */
 export const DEFAULT_CONFIG = {
-  apiProvider: 'mock',
+  enableImageGeneration: true,
   persistence: 'localStorage',
   enableVoice: FEATURES.VOICE_SYNTHESIS && FEATURES.VOICE_RECOGNITION,
   enableSpatialInteraction: true,
