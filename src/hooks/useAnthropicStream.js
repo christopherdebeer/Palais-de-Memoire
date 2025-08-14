@@ -20,10 +20,6 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
 
   // Get or create Anthropic client on demand
   const getAnthropicClient = useCallback(() => {
-    // Check if settings manager is available
-    if (!settingsManager.isInitialized()) {
-      throw new Error('Settings not yet initialized. Please try again in a moment.')
-    }
 
     const currentApiKey = settingsManager.get('anthropicApiKey')
     

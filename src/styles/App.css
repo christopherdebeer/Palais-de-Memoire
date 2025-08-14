@@ -312,64 +312,6 @@
   border-color: var(--color-primary);
 }
 
-/* Caption Display */
-.caption-container {
-  position: fixed;
-  bottom: 18.75rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: var(--z-popover);
-  background: var(--color-black-80);
-  color: var(--color-white);
-  font-size: var(--font-size-base);
-  padding: var(--space-md);
-  border-radius: var(--radius-base);
-  border: 1px solid var(--color-white-10);
-  max-width: 80vw;
-  text-align: center;
-}
-
-.caption-text {
-  margin: 0;
-  line-height: var(--line-height-relaxed);
-}
-
-/* App-Level Caption Display - Higher z-index for maximum visibility */
-.app-caption-overlay {
-  position: fixed;
-  bottom: 140px;
-  left: 0;
-  right: 0;
-  width: 100%;
-  max-height: 30%;
-  z-index: 9999; /* Maximum z-index to ensure visibility */
-  pointer-events: none;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  padding: 0 var(--space-md);
-}
-
-.app-caption-content {
-  max-width: 90%;
-}
-
-.app-caption-text {
-  margin: 0;
-  color: var(--color-white);
-  font-size: 1.1rem;
-  line-height: var(--line-height-relaxed);
-  text-align: center;
-  font-weight: var(--font-weight-medium);
-}
-
-.app-caption-text.recognition {
-  color: var(--color-primary);
-}
-
-.app-caption-text.synthesis {
-  color: var(--color-white);
-}
 
 /* Status Classes */
 .status-supported {
@@ -1007,12 +949,6 @@
   
   .api-key-input, .settings-textarea, .settings-select {
     font-size: 1rem; /* Prevent zoom on iOS */
-  }
-
-  /* App-level caption mobile adjustments */
-  .app-caption-overlay {
-    bottom: 160px; /* More space above voice interface on mobile */
-    padding: 0 var(--space-md);
   }
 
   

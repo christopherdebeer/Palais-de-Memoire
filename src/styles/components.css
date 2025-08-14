@@ -575,7 +575,7 @@
 /* Enhanced Closed Caption Overlay */
 .app-caption-overlay {
   position: fixed;
-  bottom: 140px; /* Position above voice interface */
+  bottom: 11rem;
   left: 0;
   right: 0;
   width: 100%;
@@ -601,7 +601,7 @@
 
 .app-caption-text {
   margin: 0;
-  color: var(--color-white);
+  color: var(--color-white-70);
   font-size: 1.1rem;
   line-height: var(--line-height-relaxed);
   text-align: center;
@@ -609,19 +609,19 @@
 }
 
 .app-caption-text.recognition {
-  color: var(--color-primary);
+  color: var(--color-primary-70);
 }
 
 .app-caption-text.synthesis {
-  color: var(--color-white);
+  color: var(--color-white-70);
 }
 
 /* Karaoke-style highlighting for spoken words */
 .app-caption-text .spoken {
   opacity: 1;
-  color: var(--color-white-70);
+  color: var(--color-white);
   text-shadow: 0 0 6px black;
-  font-weight: 600;
+  
 }
 
 .app-caption-text .unspoken {
