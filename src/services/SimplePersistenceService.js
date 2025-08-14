@@ -21,29 +21,37 @@ export class PersistenceService {
    * Initialize persistence service with automatic adapter selection
    */
   async initialize() {
+    console.log('[PersistenceService] Starting initialization...')
     if (this.isInitialized) {
+      console.log('[PersistenceService] Already initialized, returning early')
       return true
     }
 
+    console.log('[PersistenceService] Checking IndexedDB availability...')
     // Try IndexedDB first
     if (this.isIndexedDBAvailable()) {
+      console.log('[PersistenceService] IndexedDB available, attempting initialization...')
       try {
         await this.initializeIndexedDB()
         this.useIndexedDB = true
-        console.log('PersistenceService: Using IndexedDB')
+        console.log('[PersistenceService] Using IndexedDB')
       } catch (error) {
-        console.warn('Failed to initialize IndexedDB, falling back to localStorage:', error)
+        console.warn('[PersistenceService] Failed to initialize IndexedDB, falling back to localStorage:', error)
         this.useIndexedDB = false
       }
     } else {
+      console.log('[PersistenceService] IndexedDB not available')
       this.useIndexedDB = false
-      console.log('PersistenceService: Using localStorage')
+      console.log('[PersistenceService] Using localStorage')
     }
 
+    console.log('[PersistenceService] Migrating legacy data...')
     // Migrate legacy data if needed
     await this.migrateLegacyData()
+    console.log('[PersistenceService] Legacy data migration completed')
 
     this.isInitialized = true
+    console.log('[PersistenceService] ✅ Initialization completed successfully')
     return true
   }
 
@@ -58,28 +66,35 @@ export class PersistenceService {
    * Initialize IndexedDB
    */
   async initializeIndexedDB() {
+    console.log('[PersistenceService] Starting IndexedDB initialization...')
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, 1)
+      console.log('[PersistenceService] IndexedDB open request created')
       
       // Add timeout to prevent hanging
       const timeout = setTimeout(() => {
+        console.warn('[PersistenceService] IndexedDB initialization timeout after 5 seconds')
         reject(new Error('IndexedDB initialization timeout'))
       }, 5000)
       
       request.onerror = () => {
+        console.error('[PersistenceService] IndexedDB request error:', request.error)
         clearTimeout(timeout)
         reject(request.error)
       }
       request.onsuccess = () => {
+        console.log('[PersistenceService] IndexedDB initialization successful')
         clearTimeout(timeout)
         this.db = request.result
         resolve()
       }
       
       request.onupgradeneeded = (event) => {
+        console.log('[PersistenceService] IndexedDB upgrade needed')
         const db = event.target.result
         if (!db.objectStoreNames.contains(this.storeName)) {
           db.createObjectStore(this.storeName)
+          console.log('[PersistenceService] Created object store:', this.storeName)
         }
       }
     })

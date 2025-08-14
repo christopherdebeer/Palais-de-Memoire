@@ -76,10 +76,13 @@ function App({core}) {
       
       coreInitializationRef.current = true
       console.log('[App] Initializing Memory Palace Core...')
+      console.log('[App] Core state before initialization:', {
+        memoryPalaceCore: !!memoryPalaceCore,
+        coreIsInitialized: memoryPalaceCore?.isInitialized,
+        coreIsRunning: memoryPalaceCore?.isRunning
+      })
       
       try {
-        
-        
         // Set up event listeners for state updates BEFORE initialization
         // This ensures we don't miss any events during the initialization process
         const setupEventListeners = (core) => {
@@ -146,15 +149,24 @@ function App({core}) {
         const cleanupListeners = setupEventListeners(memoryPalaceCore);
         
         // Initialize the core
+        console.log('[App] About to call memoryPalaceCore.initialize()...')
         const initialized = await memoryPalaceCore.initialize()
-        // handleCaptionUpdate(`<span class="spoken">${"Welcome..."}</span><span class="unspoken">${"Whats next"}</span>`, "synthesis", true)
-        // console.log("---------------< caption test")
         console.log('[App] Core initialization result:', initialized)
+        console.log('[App] Core state after initialization:', {
+          isInitialized: memoryPalaceCore?.isInitialized,
+          isRunning: memoryPalaceCore?.isRunning,
+          hasRoomManager: !!memoryPalaceCore?.roomManager,
+          hasObjectManager: !!memoryPalaceCore?.objectManager
+        })
         
         if (initialized) {
           console.log('[App] Starting core...')
           await memoryPalaceCore.start()
           console.log('[App] Core started, updating state...')
+          console.log('[App] Core state after start:', {
+            isInitialized: memoryPalaceCore?.isInitialized,
+            isRunning: memoryPalaceCore?.isRunning
+          })
           
           // Check if component was unmounted during initialization
           if (isCancelledParam.current) {
@@ -192,21 +204,34 @@ function App({core}) {
       localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
     }
 
-    // Initialize core inside useEffect to handle React lifecycle properly
-    initializeCore(isCancelledRef).then(() => {
-      console.log('[App] Core initialization completed')
-      // Only update loading state if component is still mounted
-      if (!isCancelledRef.current) {
-        setIsLoading(false)
+    // Initialize core with timeout protection
+    const initWithTimeout = async () => {
+      const initTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Initialization timeout - taking too long')), 10000)
+      )
+      
+      try {
+        await Promise.race([initializeCore(isCancelledRef), initTimeout])
+        console.log('[App] Core initialization completed successfully')
+        if (!isCancelledRef.current) {
+          console.log('[App] Setting loading to false after successful initialization')
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.error('[App] Core initialization failed or timed out:', error)
+        if (!isCancelledRef.current) {
+          console.log('[App] Setting loading to false after failed/timed out initialization')
+          setIsLoading(false)
+          if (error.message.includes('timeout')) {
+            alert('Initialization is taking too long. Please refresh the page.')
+          } else {
+            alert('Failed to initialize Memory Palace. Please refresh the page.')
+          }
+        }
       }
-    }).catch((error) => {
-      console.error('[App] Core initialization failed:', error)
-      if (!isCancelledRef.current) {
-        setIsLoading(false)
-        // Show error message to user
-        alert('Failed to initialize Memory Palace. Please refresh the page.')
-      }
-    })
+    }
+    
+    initWithTimeout()
     
     return () => {
       // Mark as cancelled to prevent state updates
