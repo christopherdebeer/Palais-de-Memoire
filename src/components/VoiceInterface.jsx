@@ -77,7 +77,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           setIsListening(true)
           setTranscript('')
           // Notify parent component about listening state change
-          if (onListeningChange) {
+          if (false && onListeningChange) {
             onListeningChange(true)
           }
         }
@@ -102,7 +102,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           
           console.log('[VoiceInterface] Processing captured voice input:', transcript)
           setTranscript(transcript)
-          if (onCaptionUpdate) {
+          if (false && onCaptionUpdate) {
             onCaptionUpdate(`You said: "${transcript}"`, 'recognition')
           }
           processCommand(transcript)
