@@ -29,6 +29,12 @@ export class SettingsManager {
       touchJoystick: false,
       debugMode: false,
       
+      // Camera Settings
+      cameraFov: 75, // Field of view in degrees
+      mouseSensitivity: 0.003,
+      touchSensitivity: 0.004,
+      keyboardSensitivity: 0.02,
+      
       // Performance Settings
       renderQuality: 'high', // 'low', 'medium', 'high'
       particleEffects: true,
