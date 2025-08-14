@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash, faPlay, faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash, faPlay, faSpinner, faCamera } from '@fortawesome/free-solid-svg-icons'
 import { faBorderAll } from '@fortawesome/free-solid-svg-icons'
 import SettingsManager from '../services/SettingsManager.js'
 
@@ -504,6 +504,90 @@ const SettingsPanel = ({
                 >
                   <span className="toggle-slider"></span>
                 </button>
+              </div>
+            </div>
+
+            {/* Camera Settings */}
+            <div className="setting-group">
+              <h4>
+                <FontAwesomeIcon icon={faCamera} />
+                Camera Settings
+              </h4>
+              
+              <div className="setting-item">
+                <div className="setting-info">
+                  <label htmlFor="camera-fov">
+                    Field of View: <span className="range-value">{settings.cameraFov}°</span>
+                  </label>
+                  <p>Camera viewing angle (lower values zoom in, higher values show more area)</p>
+                </div>
+                <input
+                  type="range"
+                  id="camera-fov"
+                  min="30"
+                  max="120"
+                  step="5"
+                  value={settings.cameraFov || 75}
+                  onChange={(e) => handleSettingChange('cameraFov', parseInt(e.target.value))}
+                  className="range-input"
+                />
+              </div>
+
+              <div className="setting-item">
+                <div className="setting-info">
+                  <label htmlFor="mouse-sensitivity">
+                    Mouse Sensitivity: <span className="range-value">{(settings.mouseSensitivity * 1000).toFixed(1)}</span>
+                  </label>
+                  <p>How fast the camera rotates with mouse movement</p>
+                </div>
+                <input
+                  type="range"
+                  id="mouse-sensitivity"
+                  min="0.5"
+                  max="10.0"
+                  step="0.1"
+                  value={(settings.mouseSensitivity || 0.003) * 1000}
+                  onChange={(e) => handleSettingChange('mouseSensitivity', parseFloat(e.target.value) / 1000)}
+                  className="range-input"
+                />
+              </div>
+
+              <div className="setting-item">
+                <div className="setting-info">
+                  <label htmlFor="touch-sensitivity">
+                    Touch Sensitivity: <span className="range-value">{(settings.touchSensitivity * 1000).toFixed(1)}</span>
+                  </label>
+                  <p>How fast the camera rotates with touch gestures</p>
+                </div>
+                <input
+                  type="range"
+                  id="touch-sensitivity"
+                  min="0.5"
+                  max="10.0"
+                  step="0.1"
+                  value={(settings.touchSensitivity || 0.004) * 1000}
+                  onChange={(e) => handleSettingChange('touchSensitivity', parseFloat(e.target.value) / 1000)}
+                  className="range-input"
+                />
+              </div>
+
+              <div className="setting-item">
+                <div className="setting-info">
+                  <label htmlFor="keyboard-sensitivity">
+                    Keyboard Sensitivity: <span className="range-value">{(settings.keyboardSensitivity * 50).toFixed(1)}</span>
+                  </label>
+                  <p>How fast the camera rotates with arrow keys and WASD</p>
+                </div>
+                <input
+                  type="range"
+                  id="keyboard-sensitivity"
+                  min="0.5"
+                  max="5.0"
+                  step="0.1"
+                  value={(settings.keyboardSensitivity || 0.02) * 50}
+                  onChange={(e) => handleSettingChange('keyboardSensitivity', parseFloat(e.target.value) / 50)}
+                  className="range-input"
+                />
               </div>
             </div>
 

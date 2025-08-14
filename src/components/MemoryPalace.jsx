@@ -2,6 +2,7 @@ import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react
 import * as THREE from 'three'
 import nipplejs from 'nipplejs'
 import SimpleParticleManager from '../utils/SimpleParticleManager'
+import SettingsManager from '../services/SettingsManager'
 
 const MemoryPalace = forwardRef(({ 
   wireframeEnabled = false, 
@@ -24,6 +25,7 @@ const MemoryPalace = forwardRef(({
   const particleManagerRef = useRef(null)
   const objectMarkersRef = useRef(new Map())
   const animationFrameRef = useRef(null)
+  const settingsManagerRef = useRef(new SettingsManager())
   
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
@@ -335,6 +337,15 @@ const MemoryPalace = forwardRef(({
     }
   }
 
+  // Update camera FOV dynamically
+  const updateCameraFov = (newFov) => {
+    if (cameraRef.current) {
+      cameraRef.current.fov = newFov
+      cameraRef.current.updateProjectionMatrix()
+      console.log('[MemoryPalace] Updated camera FOV to:', newFov)
+    }
+  }
+
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     toggleWireframe: (enabled) => {
@@ -348,7 +359,8 @@ const MemoryPalace = forwardRef(({
       } else {
         cleanupNipple()
       }
-    }
+    },
+    updateCameraFov: updateCameraFov
   }))
 
   useEffect(() => {
@@ -360,8 +372,11 @@ const MemoryPalace = forwardRef(({
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x000000) // Ensure black background as fallback
     
+    // Get camera settings
+    const cameraFov = settingsManagerRef.current.get('cameraFov') || 75
+    
     const camera = new THREE.PerspectiveCamera(
-      75,
+      cameraFov,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
@@ -609,10 +624,10 @@ const MemoryPalace = forwardRef(({
     const DOUBLE_CLICK_THRESHOLD = 300 // ms
     const DOUBLE_CLICK_DISTANCE_THRESHOLD = 10 // pixels
     
-    // Camera control settings
-    const mouseSensitivity = 0.003
-    const touchSensitivity = 0.004
-    const keyboardSensitivity = 0.02
+    // Camera control settings from SettingsManager
+    const mouseSensitivity = settingsManagerRef.current.get('mouseSensitivity') || 0.003
+    const touchSensitivity = settingsManagerRef.current.get('touchSensitivity') || 0.004
+    const keyboardSensitivity = settingsManagerRef.current.get('keyboardSensitivity') || 0.02
     const dampingFactor = 0.85
     const maxVerticalAngle = Math.PI / 2 - 0.1 // Slight margin from straight up/down
     
@@ -892,8 +907,8 @@ const MemoryPalace = forwardRef(({
     const handleTouchMove = (event) => {
       event.preventDefault()
       if (event.touches.length === 1 && isDragging) {
-        const deltaX = (event.touches[0].clientX - lastMouseX) * mouseSensitivity  // Changed to use mouseSensitivity for consistency
-        const deltaY = (event.touches[0].clientY - lastMouseY) * mouseSensitivity  // Changed to use mouseSensitivity for consistency
+        const deltaX = (event.touches[0].clientX - lastMouseX) * touchSensitivity
+        const deltaY = (event.touches[0].clientY - lastMouseY) * touchSensitivity
         
         // Update yaw and pitch using prototype's approach
         yaw -= deltaX * 50   // Horizontal rotation (left/right) - fixed direction and scaling
@@ -1249,6 +1264,29 @@ const MemoryPalace = forwardRef(({
       updateObjectMarkers(objects)
     }
   }, [objects])
+
+  // Listen for camera settings changes
+  useEffect(() => {
+    const settingsManager = settingsManagerRef.current
+    
+    const handleSettingsChange = (type, data) => {
+      if (type === 'setting_changed' || type === 'settings_updated') {
+        // Handle FOV changes
+        if (data.key === 'cameraFov' || (data.cameraFov !== undefined)) {
+          const newFov = data.key === 'cameraFov' ? data.value : data.cameraFov
+          updateCameraFov(newFov)
+        }
+        // Note: Sensitivity changes will be applied on the next user interaction
+        // since they're read dynamically from settings in the event handlers
+      }
+    }
+    
+    settingsManager.addEventListener(handleSettingsChange)
+    
+    return () => {
+      settingsManager.removeEventListener(handleSettingsChange)
+    }
+  }, [])
 
   return <div ref={mountRef} className="memory-palace-canvas" />
 })
