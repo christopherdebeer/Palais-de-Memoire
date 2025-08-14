@@ -9,7 +9,10 @@ import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
 import { EventTypes } from './core/types.js'
 import MobileMotionController from './utils/MobileMotionController.js'
-import settingsManager from './services/SettingsManager.js'
+import SettingsManager from './services/SettingsManager.js'
+
+// Create settings manager instance
+const settingsManager = new SettingsManager()
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 

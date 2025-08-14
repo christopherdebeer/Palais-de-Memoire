@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash, faPlay, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import { faBorderAll } from '@fortawesome/free-solid-svg-icons'
-import settingsManager from '../services/SettingsManager.js'
+import SettingsManager from '../services/SettingsManager.js'
+
+// Create settings manager instance
+const settingsManager = new SettingsManager()
 import voiceManager from '../utils/VoiceManager.js'
 
 const SettingsPanel = ({ 
