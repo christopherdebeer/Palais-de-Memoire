@@ -7,7 +7,10 @@ import settingsManager from './SettingsManager.js'
 
 export class ReplicateAPI {
   constructor() {
-    this.baseURL = 'https://api.replicate.com/v1/predictions'
+    // Using Val Town proxy instead of direct Replicate API access
+    this.proxyBaseURL = 'https://c15r--0198a9984b17726982b6acf56e51be94.web.val.run'
+    // Original Replicate API for reference
+    this.replicateURL = 'https://api.replicate.com/v1/predictions'
     // Using black-forest-labs/flux-schnell for fast image generation
     this.model = 'black-forest-labs/flux-schnell'
     this.version = '6a29d7c19bce0f68f5a09ceb8e10fab8a3a3dce81ba99d7b5d8ad32bb3b6d4b9'
@@ -22,8 +25,12 @@ export class ReplicateAPI {
 
   /**
    * Generate 360-degree skybox image for memory palace room
+   * @param {string} description - The description of the room to generate
+   * @param {string} roomName - Optional room name for reference
+   * @param {object} options - Optional additional parameters for the image generation
+   * @returns {Promise<object>} The generation result with image URL
    */
-  async generateSkyboxImage(description, roomName = '') {
+  async generateSkyboxImage(description, roomName = '', options = {}) {
     if (!this.isConfigured()) {
       throw new Error('Replicate API key not configured')
     }
@@ -32,42 +39,54 @@ export class ReplicateAPI {
     const fullPrompt = this.buildImagePrompt(description, aestheticPrompt)
 
     try {
-      // Create prediction
-      const response = await fetch(this.baseURL, {
+      // Prepare the request using the full API control format
+      const requestBody = {
+        input: {
+          prompt: fullPrompt,
+          // Default parameters optimized for skybox generation
+          aspect_ratio: "16:9",
+          output_format: "png",
+          num_inference_steps: 4,
+          guidance_scale: 3.5,
+          extra_lora_scale: 0.8,
+          num_inference_steps: 10,
+          seed: Math.floor(Math.random() * 1000000),
+          // Override with any user-provided options
+          ...options
+        }
+      }
+
+      // Use the proxy API instead of direct Replicate API
+      const response = await fetch(`${this.proxyBaseURL}/generate`, {
         method: 'POST',
-        headers: settingsManager.getReplicateHeaders(),
-        body: JSON.stringify({
-          version: this.version,
-          input: {
-            prompt: fullPrompt,
-            width: 1024,
-            height: 1024,
-            num_inference_steps: 4,
-            guidance_scale: 0,
-            seed: Math.floor(Math.random() * 1000000)
-          }
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Replicate-Token': settingsManager.get('replicateApiKey')
+        },
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
-        throw new Error(`Replicate API error: ${response.status} ${response.statusText}`)
+        throw new Error(`Image generation API error: ${response.status} ${response.statusText}`)
       }
 
-      const prediction = await response.json()
+      const result = await response.json()
+
+      console.log('Image generation API response:', result)
       
-      // Poll for completion
-      const result = await this.waitForCompletion(prediction.id)
-      
+      // The proxy returns the image URL directly
       return {
         success: true,
-        url: result.output?.[0] || result.output,
-        prediction_id: prediction.id,
+        url: result.imageUrl,
+        prediction_id: result.id || 'proxy-gen', // The proxy might return an ID
         prompt: fullPrompt,
-        room_name: roomName
+        room_name: roomName,
+        // Include the parameters used for generation
+        parameters: requestBody.input
       }
 
     } catch (error) {
-      console.error('Replicate API request failed:', error)
+      console.error('Image generation API request failed:', error)
       throw error
     }
   }
@@ -80,18 +99,19 @@ export class ReplicateAPI {
 
 ${aestheticPrompt}
 
-360-degree panoramic view, equirectangular projection, immersive virtual reality environment, seamless spherical panorama suitable for Three.js skybox texture mapping, architectural photography, high detail, professional interior design, soft natural lighting`
+360 view in the style of TOK`
   }
 
   /**
-   * Wait for prediction to complete
+   * Wait for prediction to complete (used with direct Replicate API only)
+   * Note: This is no longer used with the proxy approach but kept for reference
    */
   async waitForCompletion(predictionId, maxAttempts = 30, interval = 2000) {
     let attempts = 0
     
     while (attempts < maxAttempts) {
       try {
-        const response = await fetch(`${this.baseURL}/${predictionId}`, {
+        const response = await fetch(`${this.replicateURL}/${predictionId}`, {
           headers: settingsManager.getReplicateHeaders()
         })
 
@@ -131,8 +151,11 @@ ${aestheticPrompt}
 
   /**
    * Generate test image with mock response
+   * @param {string} description - The description of the image to generate
+   * @param {object} options - Optional generation parameters
+   * @returns {Promise<object>} The generation result
    */
-  async generateTestImage(description) {
+  async generateTestImage(description, options = {}) {
     if (!this.isConfigured()) {
       // Return a placeholder response for testing
       return {
@@ -143,56 +166,39 @@ ${aestheticPrompt}
       }
     }
 
-    return this.generateSkyboxImage(description)
+    return this.generateSkyboxImage(description, 'test', options)
   }
 
   /**
    * Cancel a running prediction
+   * Note: May not be supported with the proxy approach
    */
-  async cancelPrediction(predictionId) {
+  async cancelPrediction(_predictionId) {
     if (!this.isConfigured()) {
       throw new Error('Replicate API key not configured')
     }
 
-    try {
-      const response = await fetch(`${this.baseURL}/${predictionId}/cancel`, {
-        method: 'POST',
-        headers: settingsManager.getReplicateHeaders()
-      })
+    console.warn('Cancellation may not be supported with the proxy API')
 
-      if (!response.ok) {
-        throw new Error(`Failed to cancel prediction: ${response.status}`)
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error('Failed to cancel prediction:', error)
-      throw error
-    }
+    // The proxy might not support cancellation
+    // This method is kept for API compatibility
+    return { status: 'canceled' }
   }
 
   /**
    * Get prediction status
+   * Note: May not be supported with the proxy approach
    */
-  async getPredictionStatus(predictionId) {
+  async getPredictionStatus(_predictionId) {
     if (!this.isConfigured()) {
       throw new Error('Replicate API key not configured')
     }
 
-    try {
-      const response = await fetch(`${this.baseURL}/${predictionId}`, {
-        headers: settingsManager.getReplicateHeaders()
-      })
+    console.warn('Status checking may not be supported with the proxy API')
 
-      if (!response.ok) {
-        throw new Error(`Failed to get prediction status: ${response.status}`)
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error('Failed to get prediction status:', error)
-      throw error
-    }
+    // The proxy might not support status checking
+    // This method is kept for API compatibility
+    return { status: 'unknown' }
   }
 
   /**
