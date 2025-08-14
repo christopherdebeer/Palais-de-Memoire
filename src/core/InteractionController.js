@@ -6,10 +6,9 @@ import { EventTypes, CommandActions } from './types.js'
  * Central hub for processing voice, text, and spatial interactions
  */
 export class InteractionController extends EventEmitter {
-  constructor(stateManager, apiManager, roomManager, objectManager) {
+  constructor(stateManager, roomManager, objectManager) {
     super()
     this.stateManager = stateManager
-    this.apiManager = apiManager
     this.roomManager = roomManager
     this.objectManager = objectManager
     
@@ -54,15 +53,8 @@ export class InteractionController extends EventEmitter {
       // Get current context
       const context = this.getCurrentContext()
       
-      // Parse command using AI
-      const parseResult = await this.apiManager.parseCommand(input, context)
-      
-      if (!parseResult.success) {
-        this.isProcessingCommand = false
-        return parseResult
-      }
-      
-      const command = parseResult.data
+      // Parse command using simple pattern matching
+      const command = this.parseCommandSimple(input, context)
       this.emit(EventTypes.COMMAND_PROCESSED, { input, command })
       
       // Execute command
@@ -454,22 +446,10 @@ export class InteractionController extends EventEmitter {
    * Handle general chat
    */
   async handleChat(command) {
-    // Generate contextual response
-    const context = this.getCurrentContext()
-    const prompt = `
-You are a helpful memory palace assistant. Respond conversationally to the user's message.
-Current context: ${JSON.stringify(context)}
-Recent conversation: ${this.conversationHistory.slice(-3).map(entry => `${entry.role}: ${entry.content}`).join('\n')}
-User message: "${command.originalText}"
-`
-    
-    const result = await this.apiManager.generateText(prompt, { temperature: 0.8 })
-    
+    // Use simple fallback response for chat
     return {
       success: true,
-      response: result.success 
-        ? result.data 
-        : command.response || 'I\'m here to help you build and navigate your memory palace!'
+      response: command.response || 'I\'m here to help you build and navigate your memory palace!'
     }
   }
 
@@ -672,5 +652,133 @@ User message: "${command.originalText}"
         await this.processInput(`Go to ${randomConnection.name}`)
       }
     }
+  }
+
+  /**
+   * Simple command parser - replaces API-based parsing
+   * @param {string} input - User input text
+   * @param {Object} context - Current context
+   * @returns {Object} Parsed command
+   */
+  parseCommandSimple(input, context = {}) {
+    const lower = input.toLowerCase()
+    const words = lower.split(' ')
+    
+    // CREATE_ROOM patterns
+    if (words.some(w => ['create', 'make', 'build'].includes(w)) && 
+        words.some(w => ['room', 'space', 'place', 'area'].includes(w))) {
+      return {
+        action: 'CREATE_ROOM',
+        parameters: {
+          description: this.extractDescription(input, 'room'),
+          name: this.extractName(input) || 'New Room'
+        },
+        originalText: input,
+        response: 'Creating a new room in your memory palace...',
+        confidence: 0.8
+      }
+    }
+    
+    // ADD_OBJECT patterns
+    if (words.some(w => ['add', 'place', 'put', 'remember'].includes(w)) && 
+        words.some(w => ['object', 'item', 'thing', 'memory'].includes(w))) {
+      return {
+        action: 'ADD_OBJECT',
+        parameters: {
+          name: this.extractName(input) || 'Memory Object',
+          information: this.extractDescription(input, 'object'),
+          position: { x: 0, y: 0, z: -400 } // Default position
+        },
+        originalText: input,
+        response: 'Adding a memory object to this location...',
+        confidence: 0.8
+      }
+    }
+    
+    // NAVIGATE patterns
+    if (words.some(w => ['go', 'move', 'navigate', 'travel'].includes(w))) {
+      return {
+        action: 'NAVIGATE',
+        parameters: {
+          target: this.extractTarget(input, context)
+        },
+        originalText: input,
+        response: 'Moving to the requested location...',
+        confidence: 0.7
+      }
+    }
+    
+    // CREATE_DOOR patterns
+    if (words.some(w => ['door', 'entrance', 'exit', 'connection'].includes(w))) {
+      return {
+        action: 'CREATE_DOOR',
+        parameters: {
+          description: this.extractDescription(input, 'door'),
+          target: this.extractTarget(input, context)
+        },
+        originalText: input,
+        response: 'Creating a new door connection...',
+        confidence: 0.7
+      }
+    }
+    
+    // Default CHAT response
+    return {
+      action: 'CHAT',
+      parameters: {},
+      originalText: input,
+      response: 'I\'m here to help you build and navigate your memory palace.',
+      confidence: 0.5
+    }
+  }
+
+  /**
+   * Extract description from input for different types
+   */
+  extractDescription(input, type) {
+    const patterns = {
+      room: /(?:room|space|area)\s+(?:like|with|of|that)\s+(.+?)(?:\.|$)/i,
+      object: /(?:object|item|thing)\s+(?:called|named|with|that)\s+(.+?)(?:\.|$)/i,
+      door: /(?:door|entrance)\s+(?:to|leading|that)\s+(.+?)(?:\.|$)/i
+    }
+    
+    const pattern = patterns[type]
+    if (pattern) {
+      const match = input.match(pattern)
+      if (match) return match[1].trim()
+    }
+    
+    // Fallback: return part of the input
+    return input.replace(/^(create|add|make|build)\s+/i, '').trim()
+  }
+
+  /**
+   * Extract name from input
+   */
+  extractName(input) {
+    // Look for quoted names or names after "called/named"
+    const quotedMatch = input.match(/"([^"]+)"/i)
+    if (quotedMatch) return quotedMatch[1]
+    
+    const namedMatch = input.match(/(?:called|named)\s+([a-zA-Z\s]+)/i)
+    if (namedMatch) return namedMatch[1].trim()
+    
+    return null
+  }
+
+  /**
+   * Extract target from input
+   */
+  extractTarget(input, context) {
+    // Look for room names or connections in the input
+    if (context.connections) {
+      for (const conn of context.connections) {
+        if (input.toLowerCase().includes(conn.description.toLowerCase())) {
+          return conn.targetRoomId
+        }
+      }
+    }
+    
+    return null
   }
 }

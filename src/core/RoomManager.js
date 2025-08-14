@@ -1,15 +1,15 @@
 import { EventEmitter } from './EventEmitter.js'
 import { EventTypes, CommandActions } from './types.js'
+import replicateAPI from '../services/ReplicateAPI.js'
 
 /**
  * Room Manager - Handles room lifecycle, navigation, and room-related operations
  * Manages the creation, editing, deletion, and navigation between rooms
  */
 export class RoomManager extends EventEmitter {
-  constructor(stateManager, apiManager) {
+  constructor(stateManager) {
     super()
     this.stateManager = stateManager
-    this.apiManager = apiManager
     this.currentRoomId = null
     this.isGeneratingImage = false
   }
@@ -194,41 +194,26 @@ export class RoomManager extends EventEmitter {
     this.isGeneratingImage = true
 
     try {
-      // Get user settings for aesthetic prompt
-      const userState = this.stateManager.getUserState()
-      const aestheticPrompt = userState.settings?.ai?.aestheticPrompt || 'photorealistic, high quality, immersive'
-      
-      // Combine description with aesthetic prompt
-      const fullPrompt = `Create a 360 degree equirectangular panoramic image in 21:9 aspect ratio showing: ${description}. ${aestheticPrompt}`
-
-      const result = await this.apiManager.generateImage(fullPrompt, {
-        width: 2048,
-        height: 1024,
-        format: 'jpg'
-      })
-
-      if (result.success) {
-        // Update room with image URL
-        await this.editRoom(roomId, {
-          imageUrl: result.data
-        })
-        
-        this.emit('room_image_generated', {
-          roomId,
-          imageUrl: result.data,
-          description
-        })
-        
-        return true
-      } else {
-        console.error('Failed to generate room image:', result.error)
-        this.emit(EventTypes.ERROR_OCCURRED, {
-          type: 'image_generation_error',
-          roomId,
-          error: result.error
-        })
-        return false
+      // Check if Replicate API is configured
+      if (!replicateAPI.isConfigured()) {
+        throw new Error('Replicate API is not configured. Please add your API key in settings.')
       }
+
+      // Generate image using Replicate API directly
+      const result = await replicateAPI.generateSkyboxImage(description, room.name)
+
+      // Update room with image URL
+      await this.editRoom(roomId, {
+        imageUrl: result.url
+      })
+        
+      this.emit('room_image_generated', {
+        roomId,
+        imageUrl: result.url,
+        description
+      })
+        
+      return true
     } catch (error) {
       console.error('Error generating room image:', error)
       this.emit(EventTypes.ERROR_OCCURRED, {
