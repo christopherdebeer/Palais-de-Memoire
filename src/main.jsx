@@ -7,7 +7,7 @@ import { MemoryPalaceCore } from './core/MemoryPalaceCore.js'
 
 const core = new MemoryPalaceCore({
   enableImageGeneration: true, // Enable real image generation via Replicate
-  persistence: 'localStorage',
+  persistence: 'localStorage', // Force localStorage to avoid IndexedDB issues
   enableVoice: true,
   enableSpatialInteraction: true,
   autopilot: false

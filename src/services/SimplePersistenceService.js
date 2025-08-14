@@ -27,23 +27,27 @@ export class PersistenceService {
       return true
     }
 
-    console.log('[PersistenceService] Checking IndexedDB availability...')
-    // Try IndexedDB first
-    if (this.isIndexedDBAvailable()) {
-      console.log('[PersistenceService] IndexedDB available, attempting initialization...')
-      try {
-        await this.initializeIndexedDB()
-        this.useIndexedDB = true
-        console.log('[PersistenceService] Using IndexedDB')
-      } catch (error) {
-        console.warn('[PersistenceService] Failed to initialize IndexedDB, falling back to localStorage:', error)
-        this.useIndexedDB = false
-      }
-    } else {
-      console.log('[PersistenceService] IndexedDB not available')
-      this.useIndexedDB = false
-      console.log('[PersistenceService] Using localStorage')
-    }
+    console.log('[PersistenceService] Forcing localStorage usage to avoid IndexedDB hang issues...')
+    // Force localStorage usage to avoid potential IndexedDB hanging issues
+    this.useIndexedDB = false
+    console.log('[PersistenceService] Using localStorage (forced)')
+    
+    // Previous IndexedDB code commented out to debug hanging issues
+    // if (this.isIndexedDBAvailable()) {
+    //   console.log('[PersistenceService] IndexedDB available, attempting initialization...')
+    //   try {
+    //     await this.initializeIndexedDB()
+    //     this.useIndexedDB = true
+    //     console.log('[PersistenceService] Using IndexedDB')
+    //   } catch (error) {
+    //     console.warn('[PersistenceService] Failed to initialize IndexedDB, falling back to localStorage:', error)
+    //     this.useIndexedDB = false
+    //   }
+    // } else {
+    //   console.log('[PersistenceService] IndexedDB not available')
+    //   this.useIndexedDB = false
+    //   console.log('[PersistenceService] Using localStorage')
+    // }
 
     console.log('[PersistenceService] Migrating legacy data...')
     // Migrate legacy data if needed

@@ -59,6 +59,13 @@ function App({core}) {
   const isCancelledRef = useRef(false)
 
   useEffect(() => {
+    console.log('[App] useEffect triggered, checking initialization state:', {
+      isLoading,
+      coreInitializationRef: coreInitializationRef.current,
+      isCancelled: isCancelledRef.current,
+      memoryPalaceCore: !!memoryPalaceCore
+    })
+    
     // Check if running on mobile
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
@@ -204,10 +211,10 @@ function App({core}) {
       localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
     }
 
-    // Initialize core with timeout protection
+    // Simplified initialization with faster fallback
     const initWithTimeout = async () => {
       const initTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Initialization timeout - taking too long')), 10000)
+        setTimeout(() => reject(new Error('Initialization timeout - taking too long')), 3000) // Reduced to 3 seconds
       )
       
       try {
@@ -219,13 +226,19 @@ function App({core}) {
         }
       } catch (error) {
         console.error('[App] Core initialization failed or timed out:', error)
+        console.log('[App] Attempting emergency fallback - setting loading to false immediately')
+        
+        // Emergency fallback - just show the UI even if core isn't fully ready
         if (!isCancelledRef.current) {
-          console.log('[App] Setting loading to false after failed/timed out initialization')
           setIsLoading(false)
+          
           if (error.message.includes('timeout')) {
-            alert('Initialization is taking too long. Please refresh the page.')
+            console.warn('[App] Using emergency mode due to timeout')
+            // Show simple alert instead of caption since caption system might not be ready
+            setTimeout(() => alert('Loading took too long. App is in emergency mode - some features may not work.'), 100)
           } else {
-            alert('Failed to initialize Memory Palace. Please refresh the page.')
+            console.warn('[App] Using emergency mode due to initialization error')  
+            setTimeout(() => alert('Initialization failed. App is in emergency mode - please refresh if issues persist.'), 100)
           }
         }
       }
