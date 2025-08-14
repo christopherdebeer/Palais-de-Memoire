@@ -37,6 +37,12 @@ const MemoryPalace = forwardRef(({
 
     console.log('[MemoryPalace] Updating skybox for room:', room?.name || 'default')
 
+    // Skip texture loading if wireframe is enabled
+    if (wireframeEnabled) {
+      console.log('[MemoryPalace] Wireframe enabled, skipping room texture loading')
+      return
+    }
+
     if (room?.imageUrl) {
       // Load room-specific texture
       console.log('[MemoryPalace] Loading room texture:', room.imageUrl)
@@ -522,12 +528,16 @@ const MemoryPalace = forwardRef(({
     wireframeSphereRef.current = wireframeSphere
     scene.add(wireframeSphere)
 
-    // Now load textures - callbacks can safely reference wireframeSphere
-    try {
-      tryLoadSkybox()
-    } catch (error) {
-      console.error('Error initializing skybox:', error)
-      createProceduralSkybox()
+    // Only load textures if wireframe is disabled
+    if (!wireframeEnabled) {
+      try {
+        tryLoadSkybox()
+      } catch (error) {
+        console.error('Error initializing skybox:', error)
+        createProceduralSkybox()
+      }
+    } else {
+      console.log('[MemoryPalace] Wireframe enabled, skipping texture loading')
     }
 
     // Add ambient lighting
@@ -1154,6 +1164,64 @@ const MemoryPalace = forwardRef(({
   useEffect(() => {
     if (wireframeSphereRef.current) {
       wireframeSphereRef.current.visible = wireframeEnabled
+    }
+
+    // Handle texture loading/unloading based on wireframe state
+    if (!wireframeEnabled && skyboxMaterialRef.current) {
+      // Switching to textured mode - load textures if not already loaded
+      if (!skyboxMaterialRef.current.map) {
+        console.log('[MemoryPalace] Switching to textured mode, loading textures')
+        // Load default texture
+        const textureLoader = new THREE.TextureLoader()
+        const localSkyboxPath = '/default_skybox.png'
+        
+        textureLoader.load(
+          localSkyboxPath,
+          (texture) => {
+            console.log('[MemoryPalace] Default texture loaded for textured mode')
+            texture.mapping = THREE.EquirectangularReflectionMapping
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.ClampToEdgeWrapping
+            texture.offset.x = 0.5
+            skyboxMaterialRef.current.map = texture
+            skyboxMaterialRef.current.color.setHex(0xffffff)
+            skyboxMaterialRef.current.needsUpdate = true
+            wireframeSphereRef.current.visible = false
+          },
+          undefined,
+          (error) => {
+            console.warn('[MemoryPalace] Local texture failed, trying remote:', error)
+            // Fallback to remote texture
+            textureLoader.load(
+              'https://page-images.websim.com/Create_a_360_degree_equirectangular_panoramic_image_in_21_9_aspect_ratio_showing__scene_____TECHNICA_694056a68c0178.jpg',
+              (texture) => {
+                console.log('[MemoryPalace] Remote texture loaded for textured mode')
+                texture.mapping = THREE.EquirectangularReflectionMapping
+                texture.wrapS = THREE.RepeatWrapping
+                texture.wrapT = THREE.ClampToEdgeWrapping
+                texture.offset.x = 0.5
+                skyboxMaterialRef.current.map = texture
+                skyboxMaterialRef.current.color.setHex(0xffffff)
+                skyboxMaterialRef.current.needsUpdate = true
+                wireframeSphereRef.current.visible = false
+              },
+              undefined,
+              (remoteError) => {
+                console.error('[MemoryPalace] Both textures failed in wireframe toggle:', remoteError)
+              }
+            )
+          }
+        )
+      }
+    } else if (wireframeEnabled && skyboxMaterialRef.current) {
+      // Switching to wireframe mode - clear textures to save memory
+      console.log('[MemoryPalace] Switching to wireframe mode, disposing textures')
+      if (skyboxMaterialRef.current.map) {
+        skyboxMaterialRef.current.map.dispose()
+        skyboxMaterialRef.current.map = null
+        skyboxMaterialRef.current.color.setHex(0x000000) // Black background for wireframe
+        skyboxMaterialRef.current.needsUpdate = true
+      }
     }
   }, [wireframeEnabled])
 
