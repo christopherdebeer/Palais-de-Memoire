@@ -9,6 +9,8 @@ import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
 import { EventTypes } from './core/types.js'
 import MobileMotionController from './utils/MobileMotionController.js'
+import useSpeechRecognition from './hooks/useSpeechRecognition.js'
+import { useAnthropicStream } from './hooks/useAnthropicStream.js'
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 
@@ -18,7 +20,6 @@ function App({core}) {
   const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
   const [wireframeEnabled, setWireframeEnabled] = useState(true) // Start with wireframe enabled for debugging
   const [nippleEnabled, setNippleEnabled] = useState(false)
-  const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [captionText, setCaptionText] = useState('')
@@ -26,6 +27,7 @@ function App({core}) {
   const [captionsEnabled, setCaptionsEnabled] = useState(true)
   const [memoryPalaceCore, setMemoryPalaceCore] = useState(core)
   const [currentPalaceState, setCurrentPalaceState] = useState(null)
+  const [conversationHistory, setConversationHistory] = useState([])
   const coreInitializationRef = useRef(false)
   const [actionModalOpen, setActionModalOpen] = useState(false)
   const [currentAction, setCurrentAction] = useState(null)
@@ -53,6 +55,21 @@ function App({core}) {
   
   // Cancellation ref for preventing state updates after unmount - MUST be at top level
   const isCancelledRef = useRef(false)
+
+  // Initialize speech recognition hook with lifted state
+  const speechRecognition = useSpeechRecognition(
+    (transcript) => handleVoiceTranscript(transcript), // onTranscript
+    (listening) => setIsListening(listening), // onListeningChange (now using App state)
+    (text, mode) => handleCaptionUpdate(text, mode) // onCaptionUpdate
+  )
+
+  // Initialize Anthropic streaming hook with memory palace core
+  const { send, status, liveBlocks } = useAnthropicStream(
+    (message) => {
+      console.log('[App] Received streaming message:', message)
+    },
+    memoryPalaceCore
+  )
 
   useEffect(() => {
     // Check if running on mobile
@@ -236,8 +253,115 @@ function App({core}) {
     setVoiceEnabled(enabled)
   }
 
-  const handleListeningChange = (listening) => {
-    setIsListening(listening)
+  // Process voice transcript using the lifted speech processing logic
+  const handleVoiceTranscript = async (transcript) => {
+    console.log('[App] Processing voice transcript:', transcript)
+    
+    if (!transcript || transcript.trim().length === 0) {
+      console.warn('[App] Empty transcript received')
+      return
+    }
+    
+    speechRecognition.setIsProcessing(true)
+    
+    try {
+      // Check if API is configured
+      if (!speechRecognition.apiConfigured) {
+        const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
+        handleCaptionUpdate(response, 'synthesis')
+        speechRecognition.speakResponse(response)
+        return
+      }
+      
+      // Build context for memory palace from current state
+      const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning
+      
+      const context = {
+        currentRoom: currentPalaceState?.currentRoom || null,
+        rooms: isCoreReady ? memoryPalaceCore.getAllRooms() : [],
+        objects: isCoreReady ? memoryPalaceCore.getCurrentRoomObjects() : [],
+        isCreationMode: isCreationMode || false,
+        creationPosition: pendingCreationPosition || null,
+        coreStatus: {
+          isInitialized: memoryPalaceCore?.isInitialized || false,
+          isRunning: memoryPalaceCore?.isRunning || false
+        }
+      }
+      
+      console.log('[App] Sending message with context:', { transcript, context })
+      
+      // Stream response from Anthropic using send function
+      const newMessages = await send(conversationHistory, transcript, context)
+      
+      console.log('[App] Send response received:', {
+        newMessageCount: newMessages.length,
+        messageTypes: newMessages.map(m => m.role)
+      })
+      
+      // Process the assistant messages from the response
+      let responseText = ''
+      let toolCalls = []
+      
+      for (const message of newMessages) {
+        if (message.role === 'assistant' && message.content) {
+          for (const block of message.content) {
+            if (block.type === 'text') {
+              responseText += block.text
+            } else if (block.type === 'tool_use') {
+              toolCalls.push(block)
+            }
+          }
+        }
+      }
+      
+      console.log('[App] Parsed send response:', {
+        responseText: responseText.substring(0, 100) + '...',
+        toolCallCount: toolCalls.length
+      })
+      
+      // Update conversation history
+      setConversationHistory([
+        ...conversationHistory,
+        { role: 'user', content: transcript },
+        ...newMessages
+      ])
+      
+      // Set response for TTS
+      if (responseText) {
+        speechRecognition.speakResponse(responseText)
+      }
+      
+      // Handle tool calls as commands
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          console.log('[App] Executing tool call:', toolCall.name)
+          
+          await handleVoiceCommand({
+            type: toolCall.name.toUpperCase(),
+            parameters: toolCall.input,
+            originalInput: transcript,
+            aiResponse: responseText,
+            toolCallId: toolCall.id
+          })
+        }
+      } else if (!toolCalls.length && responseText) {
+        // Send general response as info command
+        await handleVoiceCommand({
+          type: 'RESPONSE',
+          parameters: { text: responseText },
+          originalInput: transcript,
+          aiResponse: responseText
+        })
+      }
+      
+    } catch (error) {
+      console.error('[App] Error processing voice transcript:', error)
+      const errorResponse = `I encountered an error processing your request: ${error.message}. Please check your API configuration and try again.`
+      handleCaptionUpdate(errorResponse, 'synthesis')
+      speechRecognition.speakResponse(errorResponse)
+    } finally {
+      speechRecognition.setIsProcessing(false)
+    }
   }
 
   const handleWireframeToggle = (enabled) => {
@@ -645,10 +769,17 @@ function App({core}) {
     // Show visual feedback
     handleCaptionUpdate('Double-click detected! Describe what you want to create at this location.', 'synthesis')
     
-    // Auto-start voice listening for creation mode
-    if (voiceEnabled) {
+    // Auto-start voice listening for creation mode using lifted speech recognition
+    if (voiceEnabled && speechRecognition.isSupported && !speechRecognition.isListening && !speechRecognition.isProcessing && speechRecognition.apiConfigured) {
       console.log('[App] Auto-starting voice input for creation mode')
-      // The VoiceInterface will detect creation mode and auto-start listening
+      setTimeout(() => {
+        speechRecognition.startListening()
+      }, 500)
+    } else if (!speechRecognition.apiConfigured) {
+      console.warn('[App] Creation mode triggered but API not configured')
+      const response = 'Please configure your Anthropic API key in the settings panel to use voice creation mode.'
+      handleCaptionUpdate(response, 'synthesis')
+      speechRecognition.speakResponse(response)
     }
     
     // Auto-exit creation mode after 10 seconds if no voice input
@@ -808,7 +939,7 @@ function App({core}) {
   }
 
   return (
-    <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${isListening ? 'listening' : ''}`}>
+    <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${speechRecognition.isListening ? 'listening' : ''}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
       <MemoryPalace 
         ref={memoryPalaceRef}
@@ -838,19 +969,20 @@ function App({core}) {
       <VoiceInterface 
         enabled={voiceEnabled}
         isMobile={isMobile}
-        onCommand={handleVoiceCommand}
-        onListeningChange={handleListeningChange}
+        isListening={speechRecognition.isListening}
+        isSupported={speechRecognition.isSupported}
+        isProcessing={speechRecognition.isProcessing}
+        apiConfigured={speechRecognition.apiConfigured}
+        onStartListening={speechRecognition.startListening}
+        onStopListening={speechRecognition.stopListening}
         onCaptionUpdate={handleCaptionUpdate}
         onCaptionToggle={handleCaptionToggle}
         captionsEnabled={captionsEnabled}
-        memoryPalaceCore={memoryPalaceCore}
-        currentPalaceState={currentPalaceState}
         isCreationMode={isCreationMode}
-        pendingCreationPosition={pendingCreationPosition}
       />
       
       {/* Voice Status Indicator - only shown when listening */}
-      {isListening && (
+      {speechRecognition.isListening && (
         <div className="voice-status">
           <div className="voice-indicator">
             <div className="pulse"></div>
