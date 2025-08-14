@@ -476,6 +476,47 @@ export class MemoryPalaceCore extends EventEmitter {
     const settings = { ...DefaultSettings, ...(userState.settings || {}) }
     
     await this.stateManager.updateUserState({ settings })
+    
+    // Ensure a default room exists if no rooms are present
+    await this.ensureDefaultRoom()
+  }
+
+  /**
+   * Ensure a default room exists when starting with an empty palace
+   */
+  async ensureDefaultRoom() {
+    const rooms = this.stateManager.getRooms()
+    const userState = this.stateManager.getUserState()
+    
+    // If no rooms exist, create a default room
+    if (rooms.size === 0) {
+      console.log('[MemoryPalaceCore] No rooms found, creating default room...')
+      
+      // Create the default room with the same description as the default skybox
+      const defaultRoom = await this.roomManager.createRoom(
+        'Welcome Hall',
+        'A peaceful starting space for your memory palace. This elegant hall features classical architecture with warm lighting, perfect for beginning your journey of memory organization.',
+        { skipImageGeneration: false } // Allow image generation
+      )
+      
+      console.log('[MemoryPalaceCore] Default room created:', defaultRoom)
+      
+      // Navigate to the default room
+      await this.roomManager.navigateToRoom(defaultRoom.id)
+      console.log('[MemoryPalaceCore] Navigated to default room')
+      
+      return defaultRoom
+    }
+    
+    // If rooms exist but no current room is set, navigate to the first room
+    if (!userState.currentRoomId && rooms.size > 0) {
+      const firstRoom = Array.from(rooms.values())[0]
+      console.log('[MemoryPalaceCore] No current room set, navigating to first room:', firstRoom.name)
+      await this.roomManager.navigateToRoom(firstRoom.id)
+      return firstRoom
+    }
+    
+    return null
   }
 
   // Public API Methods
