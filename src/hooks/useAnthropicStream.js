@@ -64,40 +64,6 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
     initializeHook()
   }, [])
 
-  // Listen for settings changes and recreate Anthropic instance when API key changes
-  useEffect(() => {
-    const handleSettingsChange = (eventType, data) => {
-      if (eventType === 'initialization_complete') {
-        console.log('[useAnthropicStream] Settings initialization complete')
-        setIsInitialized(true)
-      } else if (eventType === 'setting_changed' && data.key === 'anthropicApiKey') {
-        console.log('[useAnthropicStream] Anthropic API key changed, recreating SDK instance')
-        
-        // Recreate the Anthropic instance with the new API key
-        const apiKey = settingsManager.get('anthropicApiKey')
-        if (apiKey) {
-          console.log('[useAnthropicStream] Creating new Anthropic SDK instance with updated API key')
-          const anthropicInstance = new Anthropic({
-            dangerouslyAllowBrowser: true,
-            apiKey: apiKey,
-            baseURL: 'https://api.anthropic.com',
-            defaultHeaders: {
-              'anthropic-version': '2023-06-01',
-              'anthropic-dangerous-direct-browser-access': 'true',
-            },
-          })
-          setAnthropic(anthropicInstance)
-        } else {
-          console.log('[useAnthropicStream] API key removed, clearing Anthropic SDK instance')
-          setAnthropic(null)
-        }
-      }
-    }
-
-    settingsManager.addEventListener(handleSettingsChange)
-    return () => settingsManager.removeEventListener(handleSettingsChange)
-  }, [])
-
   // Merge delta helper for streaming content
   const mergeDelta = useCallback((block, delta) => {
     if (!delta) return
@@ -254,6 +220,7 @@ Use these tools actively to help users build and navigate their memory palace.`
       return await onDemandToolManager.executeTool(toolName, input, toolUseId)
     } else {
       // Fallback responses when memory palace core is not available
+      console.log('[useAnthropicStream] Fallback responses when memory palace core is not available')
       switch (toolName) {
         case 'create_room':
           return `Room creation scheduled: "${input.name}" with description: ${input.description}. Memory Palace core not connected.`

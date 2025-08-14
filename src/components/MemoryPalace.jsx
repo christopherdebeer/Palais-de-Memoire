@@ -154,7 +154,7 @@ const MemoryPalace = forwardRef(({
   const updateObjectMarkers = (newObjects) => {
     if (!sceneRef.current) return
     
-    console.log('[MemoryPalace] Updating object markers. New objects:', newObjects.length)
+    // console.log('[MemoryPalace] Updating object markers. New objects:', newObjects.length)
     
     // Get current markers
     const currentMarkers = objectMarkersRef.current
@@ -221,7 +221,7 @@ const MemoryPalace = forwardRef(({
       }
     })
     
-    console.log('[MemoryPalace] Object markers updated. Total active:', currentMarkers.size)
+    // console.log('[MemoryPalace] Object markers updated. Total active:', currentMarkers.size)
   }
 
   const startObjectAnimation = () => {
@@ -1177,7 +1177,7 @@ const MemoryPalace = forwardRef(({
   // Handle objects changes
   useEffect(() => {
     if (sceneRef.current && particleManagerRef.current) {
-      console.log('[MemoryPalace] Objects changed, updating markers:', objects.length)
+      // console.log('[MemoryPalace] Objects changed, updating markers:', objects.length)
       updateObjectMarkers(objects)
     }
   }, [objects])

@@ -26,8 +26,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       // Handle incoming messages from stream
       console.log('[VoiceInterface] Received streaming message:', message)
     },
-    // Only pass the core if it's initialized and running
-    memoryPalaceCore?.isInitialized && memoryPalaceCore?.isRunning ? memoryPalaceCore : null
+    memoryPalaceCore
   )
 
   useEffect(() => {
@@ -238,23 +237,23 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       if (isCurrentlyConfigured) {
         console.log('[VoiceInterface] Using useAnthropicStream hook for command processing')
         
-  // Build context for memory palace from current state
-  // First check if memoryPalaceCore is initialized and running
-  const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
-  
-  const context = {
-    currentRoom: currentPalaceState?.currentRoom || null,
-    rooms: isCoreReady ? memoryPalaceCore.getAllRooms() : [],
-    objects: isCoreReady ? memoryPalaceCore.getCurrentRoomObjects() : [],
-    // Add creation mode context
-    isCreationMode: isCreationMode || false,
-    creationPosition: pendingCreationPosition || null,
-    // Add core status for better error handling
-    coreStatus: {
-      isInitialized: memoryPalaceCore?.isInitialized || false,
-      isRunning: memoryPalaceCore?.isRunning || false
-    }
-  }
+        // Build context for memory palace from current state
+        // First check if memoryPalaceCore is initialized and running
+        const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
+        
+        const context = {
+          currentRoom: currentPalaceState?.currentRoom || null,
+          rooms: isCoreReady ? memoryPalaceCore.getAllRooms() : [],
+          objects: isCoreReady ? memoryPalaceCore.getCurrentRoomObjects() : [],
+          // Add creation mode context
+          isCreationMode: isCreationMode || false,
+          creationPosition: pendingCreationPosition || null,
+          // Add core status for better error handling
+          coreStatus: {
+            isInitialized: memoryPalaceCore?.isInitialized || false,
+            isRunning: memoryPalaceCore?.isRunning || false
+          }
+        }
         
         console.log('[VoiceInterface] Sending message with context:', {
           command,
@@ -542,7 +541,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     }
   }
 
-  const startListening = () => {
+  const startListening = async () => {
+    // console.log("Testing")
+    // const resp = await processCommand("testing voice")
+    // console.log(resp)
+    // return;
     console.log('[VoiceInterface] Attempting to start listening:', {
       hasRecognition: !!recognitionRef.current,
       enabled,
@@ -552,20 +555,20 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       apiConfigured
     })
     
-    // Check if API is configured before starting voice recognition
-    if (!apiConfigured) {
-      console.warn('[VoiceInterface] API not configured - providing feedback instead of starting recognition')
-      const fallbackReason = 'Anthropic API key not configured or invalid'
-      const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
+    // // Check if API is configured before starting voice recognition
+    // if (!apiConfigured) {
+    //   console.warn('[VoiceInterface] API not configured - providing feedback instead of starting recognition')
+    //   const fallbackReason = 'Anthropic API key not configured or invalid'
+    //   const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
       
-      // Provide the same feedback as text input would
-      if (onCaptionUpdate) {
-        onCaptionUpdate(response, 'synthesis')
-      }
-      speakResponse(response)
+    //   // Provide the same feedback as text input would
+    //   if (onCaptionUpdate) {
+    //     onCaptionUpdate(response, 'synthesis')
+    //   }
+    //   speakResponse(response)
       
-      return
-    }
+    //   return
+    // }
     
     if (recognitionRef.current && enabled && isSupported && !isListening) {
       try {
