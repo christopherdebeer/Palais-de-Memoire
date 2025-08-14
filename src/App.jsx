@@ -448,7 +448,7 @@ function App({core}) {
           console.log('[App] Processing EDIT_ROOM command:', command.parameters)
           if (command.parameters.description && currentPalaceState?.currentRoom) {
             // Update room description through core
-            await memoryPalaceCore.roomManager.updateRoom(
+            await memoryPalaceCore.roomManager.editRoom(
               currentPalaceState.currentRoom.id,
               { description: command.parameters.description }
             )

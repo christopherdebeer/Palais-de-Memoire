@@ -1,5 +1,6 @@
 import { EventEmitter } from './EventEmitter.js'
 import { EventTypes } from './types.js'
+import replicateAPI from '../services/ReplicateAPI.js'
 
 /**
  * Abstract base class for API providers
@@ -249,6 +250,58 @@ export class MockAPIProvider extends BaseAPIProvider {
     }
     
     return null
+  }
+}
+
+/**
+ * Replicate API provider
+ * Integrates with Replicate service for image generation
+ */
+export class ReplicateAPIProvider extends BaseAPIProvider {
+  constructor() {
+    super()
+    this.replicateService = replicateAPI
+  }
+
+  async generateImage(description, options = {}) {
+    try {
+      // Use the Replicate API service directly
+      const result = await this.replicateService.generateSkyboxImage(
+        description, 
+        options.roomName || '', 
+        options
+      )
+      
+      if (result.success) {
+        return {
+          success: true,
+          data: result.url,
+          metadata: result
+        }
+      } else {
+        return {
+          success: false,
+          error: result.error || 'Image generation failed'
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  }
+
+  async generateText(prompt, options = {}) {
+    // Replicate doesn't have direct text generation, use mock for now
+    const mockProvider = new MockAPIProvider()
+    return mockProvider.generateText(prompt, options)
+  }
+
+  async parseCommand(input, context = {}) {
+    // Replicate doesn't have command parsing, use mock for now
+    const mockProvider = new MockAPIProvider()
+    return mockProvider.parseCommand(input, context)
   }
 }
 
@@ -532,5 +585,13 @@ export class APIManager extends EventEmitter {
    */
   static createWebSimProvider(baseUrl) {
     return new WebSimAPIProvider(baseUrl)
+  }
+
+  /**
+   * Create a Replicate provider instance
+   * @returns {ReplicateAPIProvider} Replicate provider
+   */
+  static createReplicateProvider() {
+    return new ReplicateAPIProvider()
   }
 }

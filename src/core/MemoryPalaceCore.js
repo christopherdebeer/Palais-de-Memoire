@@ -16,7 +16,7 @@ export class MemoryPalaceCore extends EventEmitter {
     
     // Configuration
     this.config = {
-      apiProvider: 'mock', // 'mock' | 'websim' | custom provider
+      apiProvider: 'replicate', // 'replicate' | 'mock' | 'websim' | custom provider
       persistence: 'localStorage', // 'localStorage' | 'indexedDB' | custom adapter
       enableVoice: true,
       enableSpatialInteraction: true,
@@ -359,6 +359,11 @@ export class MemoryPalaceCore extends EventEmitter {
           console.log('[MemoryPalaceCore] APIManager: Creating WebSim provider...')
           provider = APIManager.createWebSimProvider(this.config.websimBaseUrl)
           console.log('[MemoryPalaceCore] APIManager: WebSim provider created')
+          break
+        case 'replicate':
+          console.log('[MemoryPalaceCore] APIManager: Creating Replicate provider...')
+          provider = APIManager.createReplicateProvider()
+          console.log('[MemoryPalaceCore] APIManager: Replicate provider created')
           break
         default:
           if (typeof this.config.apiProvider === 'object') {

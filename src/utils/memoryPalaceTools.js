@@ -387,7 +387,7 @@ export class MemoryPalaceToolManager {
         // Update room with new image URL if the core supports it
         if (this.roomManager && result.url) {
           try {
-            await this.roomManager.updateRoom(currentRoom.id, { 
+            await this.roomManager.editRoom(currentRoom.id, { 
               imageUrl: result.url,
               lastImageGenerated: new Date().toISOString(),
               imagePrompt: result.prompt
