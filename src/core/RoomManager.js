@@ -61,7 +61,7 @@ export class RoomManager extends EventEmitter {
       userId: userState.id,
       name: name || `Room ${roomCounter}`,
       description,
-      imageUrl: null,
+      imageUrl: options.imageUrl || null,
       roomCounter,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -80,7 +80,7 @@ export class RoomManager extends EventEmitter {
     this.emit(EventTypes.ROOM_CREATED, room)
 
     // Generate room image if API is available
-    if (!options.skipImageGeneration) {
+    if (!room.imageUrl || !options.skipImageGeneration) {
       await this.generateRoomImage(roomId, description)
     }
 
