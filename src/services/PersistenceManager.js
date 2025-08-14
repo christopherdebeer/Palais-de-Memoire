@@ -3,7 +3,6 @@
  * Integrates IndexedDB with settings and provides unified persistence interface
  */
 
-import { SettingsManager } from './SettingsManager.js'
 import { PersistenceFactory } from './PersistenceInterface.js'
 import './IndexedDBAdapter.js' // Register IndexedDB adapter
 
