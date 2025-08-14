@@ -61,8 +61,17 @@ export class PersistenceService {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, 1)
       
-      request.onerror = () => reject(request.error)
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        reject(new Error('IndexedDB initialization timeout'))
+      }, 5000)
+      
+      request.onerror = () => {
+        clearTimeout(timeout)
+        reject(request.error)
+      }
       request.onsuccess = () => {
+        clearTimeout(timeout)
         this.db = request.result
         resolve()
       }

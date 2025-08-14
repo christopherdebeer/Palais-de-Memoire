@@ -194,15 +194,17 @@ function App({core}) {
 
     // Initialize core inside useEffect to handle React lifecycle properly
     initializeCore(isCancelledRef).then(() => {
-      console.log("----------------------------")
-      setIsLoading(false)
+      console.log('[App] Core initialization completed')
       // Only update loading state if component is still mounted
       if (!isCancelledRef.current) {
-        setTimeout(() => {
-          if (!isCancelledRef.current) {
-            setIsLoading(false)
-          }
-        }, 1000)
+        setIsLoading(false)
+      }
+    }).catch((error) => {
+      console.error('[App] Core initialization failed:', error)
+      if (!isCancelledRef.current) {
+        setIsLoading(false)
+        // Show error message to user
+        alert('Failed to initialize Memory Palace. Please refresh the page.')
       }
     })
     
