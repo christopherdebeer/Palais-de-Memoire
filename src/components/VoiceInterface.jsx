@@ -142,7 +142,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           console.log('[VoiceInterface] Speech recognition ended')
           setIsListening(false)
           // Notify parent component about listening state change
-          if (onListeningChange) {
+          if (false && onListeningChange) {
             onListeningChange(false)
           }
         }
