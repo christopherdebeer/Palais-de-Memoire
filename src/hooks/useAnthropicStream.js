@@ -224,6 +224,18 @@ Use these tools actively to help users build and navigate their memory palace.`
         case 'list_rooms':
           return 'Room listing not available - Memory Palace core not connected.'
         
+        case 'get_room_info':
+          return 'Room information not available - Memory Palace core not connected.'
+        
+        case 'add_object_at_position':
+          return `Spatial object creation scheduled: "${input.name}" with info: ${input.info} at position (${input.position?.x}, ${input.position?.y}, ${input.position?.z}). Memory Palace core not connected.`
+        
+        case 'create_door_at_position':
+          return `Spatial door creation scheduled: "${input.description || input.targetRoomName}" leading to "${input.targetRoomName}" at position (${input.position?.x}, ${input.position?.y}, ${input.position?.z}). Memory Palace core not connected.`
+        
+        case 'regenerate_room_image':
+          return 'Room image regeneration not available - Memory Palace core not connected.'
+        
         default:
           return `Unknown tool: ${toolName}`
       }
