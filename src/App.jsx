@@ -24,7 +24,7 @@ function App({core}) {
   const [captionText, setCaptionText] = useState('')
   const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
   const [captionsEnabled, setCaptionsEnabled] = useState(true)
-  const [memoryPalaceCore] = useState(core)
+  const [memoryPalaceCore, setMemoryPalaceCore] = useState(core)
   const [currentPalaceState, setCurrentPalaceState] = useState(null)
   const coreInitializationRef = useRef(false)
   const [actionModalOpen, setActionModalOpen] = useState(false)
