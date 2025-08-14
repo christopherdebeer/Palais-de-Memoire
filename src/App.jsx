@@ -9,7 +9,10 @@ import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
 import { EventTypes } from './core/types.js'
 import MobileMotionController from './utils/MobileMotionController.js'
-import settingsManager from './services/SettingsManager.js'
+import SettingsManager from './services/SettingsManager.js'
+
+// Create settings manager instance
+const settingsManager = new SettingsManager()
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 
@@ -56,6 +59,13 @@ function App({core}) {
   const isCancelledRef = useRef(false)
 
   useEffect(() => {
+    console.log('[App] useEffect triggered, checking initialization state:', {
+      isLoading,
+      coreInitializationRef: coreInitializationRef.current,
+      isCancelled: isCancelledRef.current,
+      memoryPalaceCore: !!memoryPalaceCore
+    })
+    
     // Check if running on mobile
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
@@ -73,10 +83,13 @@ function App({core}) {
       
       coreInitializationRef.current = true
       console.log('[App] Initializing Memory Palace Core...')
+      console.log('[App] Core state before initialization:', {
+        memoryPalaceCore: !!memoryPalaceCore,
+        coreIsInitialized: memoryPalaceCore?.isInitialized,
+        coreIsRunning: memoryPalaceCore?.isRunning
+      })
       
       try {
-        
-        
         // Set up event listeners for state updates BEFORE initialization
         // This ensures we don't miss any events during the initialization process
         const setupEventListeners = (core) => {
@@ -143,15 +156,24 @@ function App({core}) {
         const cleanupListeners = setupEventListeners(memoryPalaceCore);
         
         // Initialize the core
+        console.log('[App] About to call memoryPalaceCore.initialize()...')
         const initialized = await memoryPalaceCore.initialize()
-        // handleCaptionUpdate(`<span class="spoken">${"Welcome..."}</span><span class="unspoken">${"Whats next"}</span>`, "synthesis", true)
-        // console.log("---------------< caption test")
         console.log('[App] Core initialization result:', initialized)
+        console.log('[App] Core state after initialization:', {
+          isInitialized: memoryPalaceCore?.isInitialized,
+          isRunning: memoryPalaceCore?.isRunning,
+          hasRoomManager: !!memoryPalaceCore?.roomManager,
+          hasObjectManager: !!memoryPalaceCore?.objectManager
+        })
         
         if (initialized) {
           console.log('[App] Starting core...')
           await memoryPalaceCore.start()
           console.log('[App] Core started, updating state...')
+          console.log('[App] Core state after start:', {
+            isInitialized: memoryPalaceCore?.isInitialized,
+            isRunning: memoryPalaceCore?.isRunning
+          })
           
           // Check if component was unmounted during initialization
           if (isCancelledParam.current) {
@@ -189,19 +211,40 @@ function App({core}) {
       localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(true))
     }
 
-    // Initialize core inside useEffect to handle React lifecycle properly
-    initializeCore(isCancelledRef).then(() => {
-      console.log("----------------------------")
-      setIsLoading(false)
-      // Only update loading state if component is still mounted
-      if (!isCancelledRef.current) {
-        setTimeout(() => {
-          if (!isCancelledRef.current) {
-            setIsLoading(false)
+    // Simplified initialization with faster fallback
+    const initWithTimeout = async () => {
+      const initTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Initialization timeout - taking too long')), 3000) // Reduced to 3 seconds
+      )
+      
+      try {
+        await Promise.race([initializeCore(isCancelledRef), initTimeout])
+        console.log('[App] Core initialization completed successfully')
+        if (!isCancelledRef.current) {
+          console.log('[App] Setting loading to false after successful initialization')
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.error('[App] Core initialization failed or timed out:', error)
+        console.log('[App] Attempting emergency fallback - setting loading to false immediately')
+        
+        // Emergency fallback - just show the UI even if core isn't fully ready
+        if (!isCancelledRef.current) {
+          setIsLoading(false)
+          
+          if (error.message.includes('timeout')) {
+            console.warn('[App] Using emergency mode due to timeout')
+            // Show simple alert instead of caption since caption system might not be ready
+            setTimeout(() => alert('Loading took too long. App is in emergency mode - some features may not work.'), 100)
+          } else {
+            console.warn('[App] Using emergency mode due to initialization error')  
+            setTimeout(() => alert('Initialization failed. App is in emergency mode - please refresh if issues persist.'), 100)
           }
-        }, 1000)
+        }
       }
-    })
+    }
+    
+    initWithTimeout()
     
     return () => {
       // Mark as cancelled to prevent state updates

@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMicrophone, faCircle, faSpinner, faKeyboard, faPaperPlane, faClosedCaptioning } from '@fortawesome/free-solid-svg-icons'
 import { useAnthropicStream } from '../hooks/useAnthropicStream.js'
-import settingsManager from '../services/SettingsManager.js'
+import SettingsManager from '../services/SettingsManager.js'
+
+// Create settings manager instance
+const settingsManager = new SettingsManager()
 import voiceManager from '../utils/VoiceManager.js'
 
 const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition }) => {

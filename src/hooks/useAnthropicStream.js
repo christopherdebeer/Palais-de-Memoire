@@ -5,7 +5,10 @@
 
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import Anthropic from '@anthropic-ai/sdk'
-import settingsManager from '../services/SettingsManager.js'
+import SettingsManager from '../services/SettingsManager.js'
+
+// Create settings manager instance
+const settingsManager = new SettingsManager()
 import MemoryPalaceToolManager from '../utils/memoryPalaceTools.js'
 
 export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {

@@ -258,6 +258,5 @@ export class SettingsManager {
   }
 }
 
-// Singleton instance
-export const settingsManager = new SettingsManager()
-export default settingsManager
+// Simple default export without singleton
+export default SettingsManager

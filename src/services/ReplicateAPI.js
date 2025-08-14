@@ -3,7 +3,10 @@
  * Handles skybox generation for memory palace rooms
  */
 
-import settingsManager from './SettingsManager.js'
+import SettingsManager from './SettingsManager.js'
+
+// Create settings manager instance
+const settingsManager = new SettingsManager()
 
 export class ReplicateAPI {
   constructor() {

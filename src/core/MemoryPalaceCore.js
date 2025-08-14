@@ -4,6 +4,7 @@ import { RoomManager } from './RoomManager.js'
 import { ObjectManager } from './ObjectManager.js'
 import { InteractionController } from './InteractionController.js'
 import { EventTypes, DefaultSettings } from './types.js'
+import { persistenceService } from '../services/SimplePersistenceService.js'
 
 /**
  * MemoryPalaceCore - Central orchestrator for the Memory Palace application
@@ -61,25 +62,25 @@ export class MemoryPalaceCore extends EventEmitter {
       console.log('[MemoryPalaceCore] Starting initialization process...')
       console.log('[MemoryPalaceCore] Config:', this.config)
       
-      // Initialize state management with retry mechanism
+      // Initialize state management
       console.log('[MemoryPalaceCore] Step 1: Initializing StateManager...')
-      await this.initializeWithRetry(this.initializeStateManager.bind(this), 'StateManager')
+      await this.initializeStateManager()
       console.log('[MemoryPalaceCore] Step 1: StateManager initialized successfully')
       
-      // Initialize core managers with retry mechanism
+      // Initialize core managers
       console.log('[MemoryPalaceCore] Step 2: Initializing core managers...')
-      await this.initializeWithRetry(this.initializeCoreManagers.bind(this), 'CoreManagers')
+      await this.initializeCoreManagers()
       console.log('[MemoryPalaceCore] Step 2: Core managers initialized successfully')
       
       // Set up event listeners
-      console.log('[MemoryPalaceCore] Step 4: Setting up event listeners...')
+      console.log('[MemoryPalaceCore] Step 3: Setting up event listeners...')
       this.setupEventListeners()
-      console.log('[MemoryPalaceCore] Step 4: Event listeners set up successfully')
+      console.log('[MemoryPalaceCore] Step 3: Event listeners set up successfully')
       
       // Apply initial configuration
-      console.log('[MemoryPalaceCore] Step 5: Applying initial configuration...')
-      await this.initializeWithRetry(this.applyConfiguration.bind(this), 'Configuration')
-      console.log('[MemoryPalaceCore] Step 5: Initial configuration applied successfully')
+      console.log('[MemoryPalaceCore] Step 4: Applying initial configuration...')
+      await this.applyConfiguration()
+      console.log('[MemoryPalaceCore] Step 4: Initial configuration applied successfully')
       
       this.isInitialized = true
       this.metrics.initTime = performance.now() - startTime
@@ -116,95 +117,11 @@ export class MemoryPalaceCore extends EventEmitter {
         component: error.component || 'unknown'
       })
       
-      // Attempt partial recovery if possible
-      await this.attemptRecovery();
-      
-      // Return actual initialization state after recovery attempt
-      return this.isInitialized
+      // Don't attempt recovery - fail fast with clear error message
+      return false
     }
   }
   
-  /**
-   * Initialize a component with retry mechanism
-   * @param {Function} initFunction - Initialization function to call
-   * @param {string} componentName - Name of the component being initialized
-   * @param {number} maxRetries - Maximum number of retry attempts
-   * @returns {Promise<void>}
-   */
-  async initializeWithRetry(initFunction, componentName, maxRetries = 2) {
-    let attempts = 0;
-    let lastError = null;
-    
-    while (attempts <= maxRetries) {
-      try {
-        await initFunction();
-        return; // Success, exit the retry loop
-      } catch (error) {
-        attempts++;
-        lastError = error;
-        console.warn(`[MemoryPalaceCore] ${componentName} initialization attempt ${attempts} failed:`, error);
-        
-        if (attempts <= maxRetries) {
-          // Wait before retrying (exponential backoff)
-          const delay = Math.pow(2, attempts) * 500;
-          console.log(`[MemoryPalaceCore] Retrying ${componentName} initialization in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-    
-    // If we get here, all attempts failed
-    const enhancedError = new Error(`${componentName} initialization failed after ${maxRetries + 1} attempts: ${lastError.message}`);
-    enhancedError.component = componentName;
-    enhancedError.originalError = lastError;
-    throw enhancedError;
-  }
-  
-  /**
-   * Attempt recovery from initialization failure
-   * @returns {Promise<boolean>} Recovery success status
-   */
-  async attemptRecovery() {
-    console.log('[MemoryPalaceCore] Attempting recovery from initialization failure...');
-    
-    try {
-      // Check which components were successfully initialized
-      const hasStateManager = !!this.stateManager;
-      
-      // If we have state manager but no core managers, try to initialize them
-      if (hasStateManager && (!this.roomManager || !this.objectManager)) {
-        console.log('[MemoryPalaceCore] Attempting to recover core managers...');
-        try {
-          await this.initializeCoreManagers();
-          console.log('[MemoryPalaceCore] Successfully recovered core managers');
-        } catch (error) {
-          console.error('[MemoryPalaceCore] Failed to recover core managers:', error);
-        }
-      }
-      
-      // Set up event listeners if we have the necessary components
-      if (this.stateManager && this.roomManager && this.objectManager) {
-        this.setupEventListeners();
-        
-        // Mark as partially initialized if we have the minimum required components
-        this.isInitialized = true;
-        console.log('[MemoryPalaceCore] Partial recovery successful, core is usable with limited functionality');
-        this.emit('core_recovered', { 
-          hasStateManager: !!this.stateManager,
-          hasRoomManager: !!this.roomManager,
-          hasObjectManager: !!this.objectManager,
-          hasInteractionController: !!this.interactionController
-        });
-        return true;
-      }
-      
-      console.log('[MemoryPalaceCore] Recovery failed, core is not usable');
-      return false;
-    } catch (error) {
-      console.error('[MemoryPalaceCore] Recovery attempt failed:', error);
-      return false;
-    }
-  }
 
   /**
    * Start the Memory Palace system
@@ -275,44 +192,12 @@ export class MemoryPalaceCore extends EventEmitter {
    */
   async initializeStateManager() {
     console.log('[MemoryPalaceCore] StateManager: Starting initialization...')
-    console.log('[MemoryPalaceCore] StateManager: Persistence config:', this.config.persistence)
     
-    let persistenceAdapter = null
+    // Use simplified persistence service
+    await persistenceService.initialize()
+    console.log(`[MemoryPalaceCore] StateManager: Using ${persistenceService.getInfo().type} persistence`)
     
-    // Create persistence adapter based on config
-    if (this.config.persistence && this.config.persistence !== 'localStorage') {
-      try {
-        console.log(`[MemoryPalaceCore] StateManager: Loading ${this.config.persistence} persistence adapter...`)
-        const { PersistenceFactory } = await import('../services/PersistenceInterface.js')
-        console.log('[MemoryPalaceCore] StateManager: PersistenceFactory loaded')
-        
-        if (this.config.persistence === 'indexedDB') {
-          console.log('[MemoryPalaceCore] StateManager: Loading IndexedDB adapter...')
-          await import('../services/IndexedDBAdapter.js')
-          console.log('[MemoryPalaceCore] StateManager: IndexedDB adapter loaded')
-        }
-        
-        console.log('[MemoryPalaceCore] StateManager: Creating persistence adapter...')
-        persistenceAdapter = PersistenceFactory.createAdapter(this.config.persistence, {
-          dbName: 'MemoryPalaceDB',
-          storeName: 'palace_data'
-        })
-        console.log('[MemoryPalaceCore] StateManager: Persistence adapter created')
-        
-        console.log('[MemoryPalaceCore] StateManager: Initializing persistence adapter...')
-        await persistenceAdapter.initialize()
-        console.log(`[MemoryPalaceCore] StateManager: Using ${this.config.persistence} persistence adapter`)
-      } catch (error) {
-        console.warn(`[MemoryPalaceCore] StateManager: Failed to initialize ${this.config.persistence} persistence, falling back to localStorage:`, error)
-        console.warn('[MemoryPalaceCore] StateManager: Error stack:', error.stack)
-        persistenceAdapter = null
-      }
-    } else {
-      console.log('[MemoryPalaceCore] StateManager: Using localStorage (default)')
-    }
-    
-    console.log('[MemoryPalaceCore] StateManager: Initializing StateManager with adapter:', !!persistenceAdapter)
-    await this.stateManager.initialize(persistenceAdapter)
+    await this.stateManager.initialize(persistenceService)
     console.log('[MemoryPalaceCore] StateManager: ✅ StateManager initialized successfully')
   }
 
