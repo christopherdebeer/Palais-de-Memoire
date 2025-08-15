@@ -202,6 +202,7 @@ export class VoiceManager {
 
         grouped[langCode].voices.push({
           ...voice,
+          name: voice.name,
           displayName: this.getVoiceDisplayName(voice),
           isLocal: voice.localService,
           quality: this.getVoiceQuality(voice)
