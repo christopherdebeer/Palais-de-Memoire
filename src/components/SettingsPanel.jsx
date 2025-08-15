@@ -47,6 +47,38 @@ const SettingsPanel = ({
     }
   }, [isOpen])
 
+  // Listen for voice manager events to auto-update dropdown
+  useEffect(() => {
+    const handleVoiceManagerUpdate = (type, data) => {
+      if (type === 'voices_loaded') {
+        console.log('[SettingsPanel] VoiceManager voices_loaded event:', data.length, 'voices')
+        setVoices(data)
+        // Update grouped voices as well
+        voiceManager.getVoicesByLanguage().then(grouped => {
+          setVoicesByLanguage(grouped)
+          setVoicesLoading(false)
+        })
+      }
+    }
+
+    // Add listener to VoiceManager
+    voiceManager.addEventListener(handleVoiceManagerUpdate)
+    
+    // If voices are already loaded, update immediately
+    if (voiceManager.voicesLoaded && voiceManager.voices.length > 0) {
+      console.log('[SettingsPanel] VoiceManager already has voices loaded:', voiceManager.voices.length)
+      setVoices(voiceManager.voices)
+      voiceManager.getVoicesByLanguage().then(grouped => {
+        setVoicesByLanguage(grouped)
+        setVoicesLoading(false)
+      })
+    }
+
+    return () => {
+      voiceManager.removeEventListener(handleVoiceManagerUpdate)
+    }
+  }, [])
+
   const loadVoices = async () => {
     try {
       setVoicesLoading(true)

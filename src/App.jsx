@@ -434,8 +434,15 @@ function App({core}) {
           
           if (selectedVoiceName) {
             try {
+              // First ensure voices are loaded
+              await voiceManager.getVoices()
+              
+              // Check if selected voice exists in loaded voices
               const selectedVoice = await voiceManager.findVoiceByName(selectedVoiceName)
-              if (selectedVoice) {
+              const loadedVoices = voiceManager.voices || []
+              const voiceExistsInLoaded = loadedVoices.some(v => v.name === selectedVoiceName)
+              
+              if (selectedVoice && voiceExistsInLoaded) {
                 utterance.voice = selectedVoice
                 console.log('[App] Using voice from VoiceManager:', {
                   name: selectedVoice.name,
@@ -443,13 +450,13 @@ function App({core}) {
                   localService: selectedVoice.localService
                 })
               } else {
-                console.warn('[App] Selected voice not found:', selectedVoiceName)
-                // Fallback to default voice for the language
-                const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
-                if (defaultVoice) {
-                  utterance.voice = defaultVoice
-                  console.log('[App] Using default voice fallback:', defaultVoice.name)
-                }
+                console.warn('[App] Selected voice not found in loaded voices:', {
+                  selectedVoiceName,
+                  foundVoice: !!selectedVoice,
+                  voiceExistsInLoaded,
+                  loadedVoicesCount: loadedVoices.length
+                })
+                // Don't set voice if selected voice is not in loaded voices (use implicit default)
               }
             } catch (error) {
               console.error('[App] Error setting voice:', error)
