@@ -48,7 +48,7 @@ export class ReplicateAPI {
           prompt: fullPrompt,
           // Default parameters optimized for skybox generation
           aspect_ratio: "21:9",
-          height: 2048,
+          height: 1440,
           output_format: "png",
           num_inference_steps: 4,
           guidance_scale: 3.5,
