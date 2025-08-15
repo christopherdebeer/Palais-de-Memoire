@@ -1064,11 +1064,12 @@ const MemoryPalace = forwardRef(({
         console.log('[MemoryPalace] Object clicked:', objectData.name, objectData.id)
         
         // Highlight the selected object
+        const originalOpacity = marker.material.opacity;
         if (marker.material) {
           marker.material.opacity = 0.3 // Make visible temporarily
           setTimeout(() => {
             if (marker.material) {
-              marker.material.opacity = 0.0 // Back to invisible
+              marker.material.opacity = originalOpacity // Back to original
             }
           }, 500)
         }

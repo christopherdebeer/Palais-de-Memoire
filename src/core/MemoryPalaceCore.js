@@ -397,24 +397,11 @@ export class MemoryPalaceCore extends EventEmitter {
     const currentRoom = this.getCurrentRoom()
     const objects = this.getCurrentRoomObjects()
     
-    // Get connections for current room and transform them to door objects
-    const connections = Array.from(this.state.connections.values())
-      .filter(conn => conn.roomId === this.state.user.currentRoomId)
-      .map(conn => ({
-        ...conn,
-        name: conn.description || 'Door',
-        information: `Door leading to another room`,
-        targetRoomId: conn.targetRoomId, // This is the key property MemoryPalace checks for doors
-      }))
-    
-    // Combine objects and door connections
-    const allRoomItems = [...objects, ...connections]
-    
     return {
       isInitialized: this.isInitialized,
       isRunning: this.isRunning,
       currentRoom,
-      objects: allRoomItems, // Include both objects AND doors
+      objects, // Include both objects AND doors
       userState: this.state.user,
       stats: {
         totalRooms: this.state.rooms.size,

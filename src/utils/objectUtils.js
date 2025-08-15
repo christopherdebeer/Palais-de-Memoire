@@ -96,7 +96,21 @@ export async function deleteObject(state, objectId) {
  */
 export function getCurrentRoomObjects(state) {
   const currentRoomId = state.user.currentRoomId
-  return currentRoomId ? getRoomObjects(state, currentRoomId) : []
+  const objects = currentRoomId ? getRoomObjects(state, currentRoomId) : []
+    
+    // Get connections for current room and transform them to door objects
+    const connections = Array.from(state.connections.values())
+      .filter(conn => conn.roomId === state.user.currentRoomId)
+      .map(conn => ({
+        ...conn,
+        name: conn.description || 'Door',
+        information: `Door leading to another room`,
+        targetRoomId: conn.targetRoomId, // This is the key property MemoryPalace checks for doors
+      }))
+    
+    // Combine objects and door connections
+    const allRoomItems = [...objects, ...connections]
+  return allRoomItems;
 }
 
 /**
