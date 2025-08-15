@@ -24,6 +24,7 @@ const MemoryPalace = forwardRef(({
   const skyboxMaterialRef = useRef(null)
   const particleManagerRef = useRef(null)
   const objectMarkersRef = useRef(new Map())
+  const offScreenIndicatorsRef = useRef(new Map())
   const animationFrameRef = useRef(null)
   const settingsManagerRef = useRef(new SettingsManager())
   
@@ -319,6 +320,9 @@ const MemoryPalace = forwardRef(({
         }
       })
       
+      // Animate off-screen indicators
+      animateOffScreenIndicators()
+      
       animationFrameRef.current = requestAnimationFrame(animate)
     }
     
@@ -330,6 +334,214 @@ const MemoryPalace = forwardRef(({
       cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
     }
+  }
+
+  // Off-screen indicator functions
+  const createOffScreenIndicator = (obj, direction) => {
+    if (!sceneRef.current || !cameraRef.current) return null
+
+    console.log(`[MemoryPalace] 🎯 Creating off-screen indicator for object:`, {
+      objectId: obj.id,
+      objectName: obj.name,
+      direction: direction
+    })
+
+    // Create arrow geometry pointing in the direction of the object
+    const arrowGeometry = new THREE.ConeGeometry(0.5, 1.2, 8) // Much smaller size
+    const isDoor = obj.targetRoomId !== undefined
+    
+    // Use same color scheme as object markers
+    const arrowMaterial = new THREE.MeshBasicMaterial({
+      color: isDoor ? 0xffd700 : 0x4dabf7,
+      transparent: true,
+      opacity: 0.0,
+      depthTest: false,
+      depthWrite: false
+    })
+
+    const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial)
+    
+    // Position arrow at a fixed distance from camera in screen space
+    const camera = cameraRef.current
+    const fixedDistance = 8 // Fixed distance from camera
+    
+    // Calculate direction from camera to object in camera space
+    const objectWorldPos = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
+    const directionFromCamera = objectWorldPos.clone().sub(camera.position).normalize()
+    
+    // Convert to screen space to find edge position
+    const tempVector = directionFromCamera.clone()
+    tempVector.project(camera)
+    
+    // Clamp to screen edges with margin
+    const margin = 0.85 // Keep indicators within 85% of screen edge
+    tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+    tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+    tempVector.z = 0.1 // Near the camera
+    
+    // Convert back to world space at fixed distance
+    tempVector.unproject(camera)
+    const indicatorDirection = tempVector.sub(camera.position).normalize()
+    const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
+    
+    arrow.position.copy(indicatorPosition)
+    
+    // Point arrow toward the object
+    arrow.lookAt(objectWorldPos)
+    
+    // Add distance text sprite
+    const distance = camera.position.distanceTo(objectWorldPos)
+    const distanceText = Math.round(distance).toString() + 'm'
+    
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    canvas.width = 128
+    canvas.height = 64
+    
+    context.fillStyle = isDoor ? '#ffd700' : '#4dabf7'
+    context.font = 'bold 16px Arial'
+    context.textAlign = 'center'
+    context.fillText(obj.name.substring(0, 8), 64, 20)
+    // context.fillText(distanceText, 64, 40)
+    
+    const texture = new THREE.CanvasTexture(canvas)
+    const spriteMaterial = new THREE.SpriteMaterial({ 
+      map: texture,
+      transparent: true,
+      opacity: 0.0,
+      depthTest: false
+    })
+    const sprite = new THREE.Sprite(spriteMaterial)
+    sprite.scale.set(1.5, 0.75, 1) // Much smaller sprite
+    
+    // Position sprite slightly behind arrow
+    const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
+    sprite.position.copy(indicatorPosition.clone().add(spriteOffset))
+    
+    // Store references
+    arrow.userData = {
+      objectData: obj,
+      objectId: obj.id,
+      isDoor: isDoor,
+      sprite: sprite,
+      originalOpacity: 0.8,
+      originalPosition: indicatorPosition.clone(),
+      originalSpritePosition: sprite.position.clone()
+    }
+    
+    sprite.userData = {
+      objectId: obj.id,
+      arrow: arrow
+    }
+    
+    sceneRef.current.add(arrow)
+    sceneRef.current.add(sprite)
+    
+    return { arrow, sprite }
+  }
+
+  const updateOffScreenIndicators = (objects) => {
+    if (!sceneRef.current || !cameraRef.current) return
+
+    const camera = cameraRef.current
+    const frustum = new THREE.Frustum()
+    const cameraMatrix = new THREE.Matrix4()
+    cameraMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    frustum.setFromProjectionMatrix(cameraMatrix)
+
+    // Clear existing indicators
+    const currentIndicators = offScreenIndicatorsRef.current
+    currentIndicators.forEach((indicator, objectId) => {
+      if (indicator.arrow) {
+        sceneRef.current.remove(indicator.arrow)
+        if (indicator.arrow.geometry) indicator.arrow.geometry.dispose()
+        if (indicator.arrow.material) indicator.arrow.material.dispose()
+      }
+      if (indicator.sprite) {
+        sceneRef.current.remove(indicator.sprite)
+        if (indicator.sprite.material && indicator.sprite.material.map) {
+          indicator.sprite.material.map.dispose()
+        }
+        if (indicator.sprite.material) indicator.sprite.material.dispose()
+      }
+    })
+    currentIndicators.clear()
+
+    // Check each object for visibility
+    objects.forEach(obj => {
+      if (!obj.position) return
+
+      const objectPosition = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
+      
+      // Check if object is outside camera frustum
+      if (!frustum.containsPoint(objectPosition)) {
+        // Calculate direction from camera to object
+        const direction = objectPosition.clone().sub(camera.position)
+        
+        // Create indicator
+        const indicator = createOffScreenIndicator(obj, direction)
+        if (indicator) {
+          currentIndicators.set(obj.id, indicator)
+        }
+      }
+    })
+
+    console.log(`[MemoryPalace] 🎯 Updated off-screen indicators:`, {
+      totalObjects: objects.length,
+      indicatorsCreated: currentIndicators.size,
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  const animateOffScreenIndicators = () => {
+    const currentIndicators = offScreenIndicatorsRef.current
+    const time = Date.now() * 0.001
+    const camera = cameraRef.current
+
+    if (!camera) return
+
+    currentIndicators.forEach((indicator, objectId) => {
+      if (indicator.arrow && indicator.sprite) {
+        // Update positions to maintain screen-edge placement as camera moves
+        const obj = indicator.arrow.userData.objectData
+        const objectWorldPos = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
+        const directionFromCamera = objectWorldPos.clone().sub(camera.position).normalize()
+        
+        // Convert to screen space to find edge position
+        const tempVector = directionFromCamera.clone()
+        tempVector.project(camera)
+        
+        // Clamp to screen edges with margin
+        const margin = 0.85
+        tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+        tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+        tempVector.z = 0.1
+        
+        // Convert back to world space at fixed distance
+        tempVector.unproject(camera)
+        const indicatorDirection = tempVector.sub(camera.position).normalize()
+        const fixedDistance = 8
+        const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
+        
+        // Update arrow position and rotation
+        indicator.arrow.position.copy(indicatorPosition)
+        indicator.arrow.lookAt(objectWorldPos)
+        
+        // Update sprite position
+        const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
+        indicator.sprite.position.copy(indicatorPosition.clone().add(spriteOffset))
+        
+        // Gentle pulsing animation
+        const pulse = 0.8 + Math.sin(time * 3) * 0.2
+        indicator.arrow.material.opacity = indicator.arrow.userData.originalOpacity * pulse
+        indicator.sprite.material.opacity = 0.9 * pulse
+
+        // Subtle floating motion (much smaller now)
+        const float = Math.sin(time * 2 + objectId.length) * 0.05
+        indicator.arrow.position.add(new THREE.Vector3(0, float, 0))
+        indicator.sprite.position.add(new THREE.Vector3(0, float, 0))
+      }
+    })
   }
 
   // Nipple.js functions
@@ -1236,6 +1448,24 @@ const MemoryPalace = forwardRef(({
       // Clear object markers
       objectMarkersRef.current.clear()
       
+      // Clear off-screen indicators
+      const currentIndicators = offScreenIndicatorsRef.current
+      currentIndicators.forEach((indicator, objectId) => {
+        if (indicator.arrow) {
+          sceneRef.current.remove(indicator.arrow)
+          if (indicator.arrow.geometry) indicator.arrow.geometry.dispose()
+          if (indicator.arrow.material) indicator.arrow.material.dispose()
+        }
+        if (indicator.sprite) {
+          sceneRef.current.remove(indicator.sprite)
+          if (indicator.sprite.material && indicator.sprite.material.map) {
+            indicator.sprite.material.map.dispose()
+          }
+          if (indicator.sprite.material) indicator.sprite.material.dispose()
+        }
+      })
+      offScreenIndicatorsRef.current.clear()
+      
       // Clear refs
       sceneRef.current = null
       rendererRef.current = null
@@ -1340,6 +1570,10 @@ const MemoryPalace = forwardRef(({
     if (sceneRef.current && particleManagerRef.current) {
       console.log(`[MemoryPalace] 🎬 SCENE: scene and particle manager ready, updating markers`)
       updateObjectMarkers(objects)
+      
+      // Update off-screen indicators when objects change
+      updateOffScreenIndicators(objects)
+      
       console.log(`[MemoryPalace] ✅ SCENE: scene re-render completed with objects`, {
         finalObjectCount: objects.length,
         timestamp: new Date().toISOString()

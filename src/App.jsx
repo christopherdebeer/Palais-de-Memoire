@@ -456,13 +456,13 @@ function App({core}) {
         
         case 'remove_object':
           console.log('[App] Processing REMOVE_OBJECT command:', command.parameters)
-          if (command.parameters.name && memoryPalaceCore.objectManager) {
+          if (command.parameters.name) {
             const currentObjects = memoryPalaceCore.getCurrentRoomObjects()
             const targetObject = currentObjects.find(obj => 
               obj.name.toLowerCase().includes(command.parameters.name.toLowerCase())
             )
             if (targetObject) {
-              await memoryPalaceCore.objectManager.deleteObject(targetObject.id)
+              await memoryPalaceCore.deleteObject(targetObject.id)
               console.log('[App] Object removed successfully:', targetObject)
               updatePalaceState(memoryPalaceCore)
             } else {
@@ -492,7 +492,7 @@ function App({core}) {
           console.log('[App] Processing EDIT_ROOM command:', command.parameters)
           if (command.parameters.description && currentPalaceState?.currentRoom) {
             // Update room description through core
-            await memoryPalaceCore.roomManager.editRoom(
+            await memoryPalaceCore.editRoom(
               currentPalaceState.currentRoom.id,
               { description: command.parameters.description }
             )
@@ -733,7 +733,7 @@ function App({core}) {
       setIsProcessingObjectAction(true)
       
       // Update object through core
-      await memoryPalaceCore.objectManager.updateObject(updatedObject.id, {
+      await memoryPalaceCore.updateObject(updatedObject.id, {
         name: updatedObject.name,
         information: updatedObject.information
       })
@@ -760,7 +760,7 @@ function App({core}) {
       setIsProcessingObjectAction(true)
       
       // Delete object through core
-      await memoryPalaceCore.objectManager.deleteObject(objectId)
+      await memoryPalaceCore.deleteObject(objectId)
       
       // Close inspector and update state
       setObjectInspectorOpen(false)
