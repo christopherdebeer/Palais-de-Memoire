@@ -68,7 +68,7 @@ const MobileInterface = ({ voiceEnabled, onVoiceToggle }) => {
           </div>
           
           <div className="menu-footer">
-            <p>Tap and hold to speak, or use the command buttons above.</p>
+            <p>Tap to speak, tap again to cancel, or use the command buttons above.</p>
           </div>
         </div>
       )}

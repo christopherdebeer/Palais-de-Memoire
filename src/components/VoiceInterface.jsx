@@ -539,10 +539,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
   }
 
   const startListening = async () => {
-    // console.log("Testing")
-    // const resp = await processCommand("testing voice")
-    // console.log(resp)
-    // return;
     console.log('[VoiceInterface] Attempting to start listening:', {
       hasRecognition: !!recognitionRef.current,
       enabled,
@@ -578,6 +574,15 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     setIsListening(false)
     if (false && onListeningChange) {
       onListeningChange(false)
+    }
+  }
+
+  const toggleListening = () => {
+    console.log('[VoiceInterface] Toggling voice input - currently listening:', isListening)
+    if (isListening) {
+      stopListening()
+    } else {
+      startListening()
     }
   }
 
@@ -674,11 +679,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       {/* Voice Control Button */}
       <button
         className={`voice-control ${isListening ? 'listening' : ''} ${isProcessing ? 'processing' : ''}`}
-        onMouseDown={startListening}
-        onMouseUp={stopListening}
-        onTouchStart={startListening}
-        onTouchEnd={stopListening}
-        aria-label="Hold to speak"
+        onClick={toggleListening}
+        aria-label={isListening ? 'Tap to cancel' : 'Tap to speak'}
         disabled={isProcessing}
       >
         <FontAwesomeIcon 
@@ -687,7 +689,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           spin={isProcessing}
         />
         <span className="voice-control-text">
-          {isProcessing ? 'Processing...' : (isListening ? 'Listening...' : 'Hold to speak')}
+          {isProcessing ? 'Processing...' : (isListening ? 'Tap to cancel' : 'Tap to speak')}
         </span>
       </button>
 
