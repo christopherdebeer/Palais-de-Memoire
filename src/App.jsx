@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
 import VoiceInterface from './components/VoiceInterface'
+import voiceManager from './utils/VoiceManager.js'
 import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
@@ -25,9 +26,13 @@ function App({core}) {
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // captions and TTS
   const [captionText, setCaptionText] = useState('')
   const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
   const [captionsEnabled, setCaptionsEnabled] = useState(true)
+
+  
   const [memoryPalaceCore, setMemoryPalaceCore] = useState(core)
   const [currentPalaceState, setCurrentPalaceState] = useState(null)
   const coreInitializationRef = useRef(false)
@@ -399,6 +404,123 @@ function App({core}) {
         console.log('[App] Unknown menu command:', command)
     }
   }
+
+  const speakResponse = async (text) => {
+      console.log('[App] Speaking response:', {
+        text,
+        speechSynthesisSupported: 'speechSynthesis' in window,
+        audioFeedbackEnabled: settingsManager.get('audioFeedback')
+      })
+      
+      if ('speechSynthesis' in window && settingsManager.get('audioFeedback')) {
+        // Cancel any existing speech
+        window.speechSynthesis.cancel()
+        
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.rate = settingsManager.get('speechRate') || 1.0
+        utterance.pitch = settingsManager.get('speechPitch') || 1.0
+        utterance.volume = 0.8
+        
+        console.log('[App] TTS settings:', {
+          rate: utterance.rate,
+          pitch: utterance.pitch,
+          volume: utterance.volume
+        })
+  
+        // Use configured voice with VoiceManager for better voice handling
+        const selectedVoiceName = settingsManager.get('voice')
+        console.log('[App] Voice selection:', {
+          selectedVoiceName,
+          voiceManagerLoaded: !voiceManager.isLoading()
+        })
+        
+        if (selectedVoiceName) {
+          try {
+            const selectedVoice = await voiceManager.findVoiceByName(selectedVoiceName)
+            if (selectedVoice) {
+              utterance.voice = selectedVoice
+              console.log('[App] Using voice from VoiceManager:', {
+                name: selectedVoice.name,
+                lang: selectedVoice.lang,
+                localService: selectedVoice.localService
+              })
+            } else {
+              console.warn('[App] Selected voice not found:', selectedVoiceName)
+              // Fallback to default voice for the language
+              const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
+              if (defaultVoice) {
+                utterance.voice = defaultVoice
+                console.log('[App] Using default voice fallback:', defaultVoice.name)
+              }
+            }
+          } catch (error) {
+            console.error('[App] Error setting voice:', error)
+          }
+        } else {
+          // No voice selected, use system default or get a recommended voice
+          try {
+            const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
+            if (defaultVoice) {
+              utterance.voice = defaultVoice
+              console.log('[App] Using system default voice:', defaultVoice.name)
+            }
+          } catch (error) {
+            console.warn('[App] Could not set default voice:', error)
+          }
+        }
+  
+        // Enhanced caption display with karaoke-style highlighting
+        if (captionsEnabled) {
+          console.log('[App] Setting up TTS captions for:', text.substring(0, 50) + '...')
+          handleCaptionUpdate(text, 'synthesis')
+          
+          // Set up word-by-word highlighting
+          let wordIndex = 0
+          const words = text.split(/\s+/)
+          
+          utterance.onboundary = (event) => {
+            // console.log('[App] TTS boundary event:', event.name, 'wordIndex:', wordIndex)
+            if (event.name === 'word' && captionsEnabled) {
+              wordIndex++
+              const spoken = words.slice(0, wordIndex).join(' ')
+              const remaining = words.slice(wordIndex).join(' ')
+              
+              // Create karaoke-style highlighting
+              const highlightedText = remaining.length > 0 
+                ? `<span class="spoken">${spoken}</span> ${remaining}`
+                : `<span class="spoken">${spoken}</span>`
+              
+              // console.log('[App] Updating caption with highlighting:', highlightedText.substring(0, 50) + '...')
+              handleCaptionUpdate(highlightedText, 'synthesis')
+            }
+          }
+        } else {
+          console.log('[App] Captions disabled, not showing TTS captions')
+        }
+        
+        utterance.onstart = () => {
+          console.log('[App] TTS started')
+        }
+        
+        utterance.onend = () => {
+          console.log('[App] TTS ended')
+          // Caption hiding is now handled at App level
+        }
+        
+        utterance.onerror = (event) => {
+          console.error('[VoiceInterface] TTS error:', {
+            error: event.error,
+            type: event.type,
+            stack: new Error().stack
+          })
+          // Caption hiding is now handled at App level
+        }
+  
+        window.speechSynthesis.speak(utterance)
+      } else {
+        console.log('[App] TTS skipped - not supported or audio feedback disabled')
+      }
+    }
 
   const handleVoiceCommand = async (command) => {
     console.log('[App] Voice command received:', {
@@ -884,9 +1006,8 @@ function App({core}) {
         isMobile={isMobile}
         onCommand={handleVoiceCommand}
         onListeningChange={handleListeningChange}
-        onCaptionUpdate={handleCaptionUpdate}
+        speakResponse={speakResponse}
         onCaptionToggle={handleCaptionToggle}
-        captionsEnabled={captionsEnabled}
         memoryPalaceCore={memoryPalaceCore}
         currentPalaceState={currentPalaceState}
         isCreationMode={isCreationMode}

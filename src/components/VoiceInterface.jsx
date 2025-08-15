@@ -6,12 +6,10 @@ import SettingsManager from '../services/SettingsManager.js'
 
 // Create settings manager instance
 const settingsManager = new SettingsManager()
-import voiceManager from '../utils/VoiceManager.js'
 
-const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCaptionUpdate, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition }) => {
+
+const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeningChange, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition }) => {
   const [isListening, setIsListening] = useState(false)
-  const [transcript, setTranscript] = useState('')
-  const [response, setResponse] = useState('')
   const [isSupported, setIsSupported] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [apiConfigured, setApiConfigured] = useState(false)
@@ -19,7 +17,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
   const [showTextInput, setShowTextInput] = useState(false)
   const [conversationHistory, setConversationHistory] = useState([])
   const recognitionRef = useRef(null)
-  const synthRef = useRef(null)
   const captionTimeoutRef = useRef(null)
   
   // Initialize Anthropic streaming hook with memory palace core and voice interface
@@ -78,12 +75,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
 
         recognition.onstart = () => {
           console.log('[VoiceInterface] Speech recognition started')
-          setIsListening(true)
-          setTranscript('')
-          // Notify parent component about listening state change
-          if (false && onListeningChange) {
-            onListeningChange(true)
-          }
+          setIsListening(true);
         }
 
         recognition.onresult = (event) => {
@@ -98,17 +90,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           
           if (!transcript || transcript.trim().length === 0) {
             console.warn('[VoiceInterface] Voice input captured but transcript is empty')
-            if (onCaptionUpdate) {
-              onCaptionUpdate('No speech detected, please try again', 'recognition')
-            }
+            speakResponse('No speech detected, please try again', 'recognition')
             return
           }
           
           console.log('[VoiceInterface] Processing captured voice input:', transcript)
-          setTranscript(transcript)
-          if (false && onCaptionUpdate) {
-            onCaptionUpdate(`You said: "${transcript}"`, 'recognition')
-          }
           processCommand(transcript)
         }
 
@@ -179,9 +165,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       if (recognitionRef.current) {
         recognitionRef.current.abort()
       }
-      if (synthRef.current) {
-        window.speechSynthesis.cancel()
-      }
       if (captionTimeoutRef.current) {
         clearTimeout(captionTimeoutRef.current)
       }
@@ -204,17 +187,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       console.warn('[VoiceInterface] Creation mode triggered but API not configured')
       // Provide feedback that API needs to be configured
       const response = 'Please configure your Anthropic API key in the settings panel to use voice creation mode.'
-      if (onCaptionUpdate) {
-        onCaptionUpdate(response, 'synthesis')
-      }
       speakResponse(response)
     } else if (isCreationMode && !isCoreReady) {
       console.warn('[VoiceInterface] Creation mode triggered but Memory Palace Core not ready')
       // Provide feedback that core is not ready
       const response = 'Memory Palace is still initializing. Please try again in a moment.'
-      if (onCaptionUpdate) {
-        onCaptionUpdate(response, 'synthesis')
-      }
       speakResponse(response)
     }
   }, [isCreationMode, enabled, isSupported, isProcessing, apiConfigured, memoryPalaceCore])
@@ -298,8 +275,8 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           
           // Set response for display (but don't speak it - narrate tool handles speech)
           if (responseText) {
-            setResponse(responseText)
-            // Note: Speech synthesis is now handled by the narrate tool, not here
+            console.log(`[VoiceInterface] responseText ${responseText}`)
+            
           }
           
           // Handle tool calls as commands
@@ -373,7 +350,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
           fallbackReason
         })
         
-        setResponse(response)
         speakResponse(response)
 
         // Send basic command for fallback processing
@@ -412,129 +388,10 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       }
       
       const errorResponse = `I encountered an error processing your request: ${error.message}. Please check your API configuration and try again.`
-      setResponse(errorResponse)
       speakResponse(errorResponse)
     } finally {
       console.log('[VoiceInterface] Command processing complete')
       setIsProcessing(false)
-    }
-  }
-
-  const speakResponse = async (text) => {
-    console.log('[VoiceInterface] Speaking response:', {
-      text,
-      speechSynthesisSupported: 'speechSynthesis' in window,
-      audioFeedbackEnabled: settingsManager.get('audioFeedback')
-    })
-    
-    if ('speechSynthesis' in window && settingsManager.get('audioFeedback')) {
-      // Cancel any existing speech
-      window.speechSynthesis.cancel()
-      
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = settingsManager.get('speechRate') || 1.0
-      utterance.pitch = settingsManager.get('speechPitch') || 1.0
-      utterance.volume = 0.8
-      
-      console.log('[VoiceInterface] TTS settings:', {
-        rate: utterance.rate,
-        pitch: utterance.pitch,
-        volume: utterance.volume
-      })
-
-      // Use configured voice with VoiceManager for better voice handling
-      const selectedVoiceName = settingsManager.get('voice')
-      console.log('[VoiceInterface] Voice selection:', {
-        selectedVoiceName,
-        voiceManagerLoaded: !voiceManager.isLoading()
-      })
-      
-      if (selectedVoiceName) {
-        try {
-          const selectedVoice = await voiceManager.findVoiceByName(selectedVoiceName)
-          if (selectedVoice) {
-            utterance.voice = selectedVoice
-            console.log('[VoiceInterface] Using voice from VoiceManager:', {
-              name: selectedVoice.name,
-              lang: selectedVoice.lang,
-              localService: selectedVoice.localService
-            })
-          } else {
-            console.warn('[VoiceInterface] Selected voice not found:', selectedVoiceName)
-            // Fallback to default voice for the language
-            const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
-            if (defaultVoice) {
-              utterance.voice = defaultVoice
-              console.log('[VoiceInterface] Using default voice fallback:', defaultVoice.name)
-            }
-          }
-        } catch (error) {
-          console.error('[VoiceInterface] Error setting voice:', error)
-        }
-      } else {
-        // No voice selected, use system default or get a recommended voice
-        try {
-          const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
-          if (defaultVoice) {
-            utterance.voice = defaultVoice
-            console.log('[VoiceInterface] Using system default voice:', defaultVoice.name)
-          }
-        } catch (error) {
-          console.warn('[VoiceInterface] Could not set default voice:', error)
-        }
-      }
-
-      // Enhanced caption display with karaoke-style highlighting
-      if (captionsEnabled && onCaptionUpdate) {
-        console.log('[VoiceInterface] Setting up TTS captions for:', text.substring(0, 50) + '...')
-        onCaptionUpdate(text, 'synthesis')
-        
-        // Set up word-by-word highlighting
-        let wordIndex = 0
-        const words = text.split(/\s+/)
-        
-        utterance.onboundary = (event) => {
-          // console.log('[VoiceInterface] TTS boundary event:', event.name, 'wordIndex:', wordIndex)
-          if (event.name === 'word' && captionsEnabled && onCaptionUpdate) {
-            wordIndex++
-            const spoken = words.slice(0, wordIndex).join(' ')
-            const remaining = words.slice(wordIndex).join(' ')
-            
-            // Create karaoke-style highlighting
-            const highlightedText = remaining.length > 0 
-              ? `<span class="spoken">${spoken}</span> ${remaining}`
-              : `<span class="spoken">${spoken}</span>`
-            
-            // console.log('[VoiceInterface] Updating caption with highlighting:', highlightedText.substring(0, 50) + '...')
-            onCaptionUpdate(highlightedText, 'synthesis')
-          }
-        }
-      } else {
-        console.log('[VoiceInterface] Captions disabled, not showing TTS captions')
-      }
-      
-      utterance.onstart = () => {
-        console.log('[VoiceInterface] TTS started')
-      }
-      
-      utterance.onend = () => {
-        console.log('[VoiceInterface] TTS ended')
-        // Caption hiding is now handled at App level
-      }
-      
-      utterance.onerror = (event) => {
-        console.error('[VoiceInterface] TTS error:', {
-          error: event.error,
-          type: event.type,
-          stack: new Error().stack
-        })
-        // Caption hiding is now handled at App level
-      }
-
-      synthRef.current = utterance
-      window.speechSynthesis.speak(utterance)
-    } else {
-      console.log('[VoiceInterface] TTS skipped - not supported or audio feedback disabled')
     }
   }
 
@@ -591,21 +448,11 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
     if (textInput.trim() && !isProcessing) {
       const command = textInput.trim()
       setTextInput('')
-      setTranscript(command)
       
       // Check if API is configured before processing text input
       if (!apiConfigured) {
         console.warn('[VoiceInterface] API not configured - providing feedback for text input')
         const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
-        
-        // Provide consistent feedback for text input
-        if (onCaptionUpdate) {
-          onCaptionUpdate(`You typed: "${command}"`, 'recognition')
-          // Brief delay then show the response
-          setTimeout(() => {
-            onCaptionUpdate(response, 'synthesis')
-          }, 1000)
-        }
         speakResponse(response)
         
         return
@@ -685,38 +532,13 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       >
         <FontAwesomeIcon 
           icon={isProcessing ? faSpinner : (isListening ? faCircle : faMicrophone)}
-          style={{ color: isListening ? '#FF3B30' : 'inherit' }}
+          style={{ color: isListening ? 'white' : 'inherit' }}
           spin={isProcessing}
         />
         <span className="voice-control-text">
           {isProcessing ? 'Processing...' : (isListening ? 'Tap to cancel' : 'Tap to speak')}
         </span>
       </button>
-
-
-      {/* Voice Status */}
-      <div className="voice-status-info">
-        {isSupported ? (
-          <>
-            <span className="status-supported">
-              <FontAwesomeIcon icon={faCircle} style={{ color: '#30D158' }} /> Voice control ready
-            </span>
-            {apiConfigured ? (
-              <span className="status-api-configured">
-                <FontAwesomeIcon icon={faCircle} style={{ color: '#007AFF' }} /> AI assistant enabled
-              </span>
-            ) : (
-              <span className="status-api-missing">
-                <FontAwesomeIcon icon={faCircle} style={{ color: '#FF9500' }} /> Configure API keys for full AI features
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="status-unsupported">
-            <FontAwesomeIcon icon={faCircle} style={{ color: '#FF3B30' }} /> Voice control not supported in this browser
-          </span>
-        )}
-      </div>
 
     </div>
   )

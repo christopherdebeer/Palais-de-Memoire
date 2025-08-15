@@ -153,6 +153,10 @@ CRITICAL NARRATION INSTRUCTIONS:
 - For conversations: Use narrate tool for all speech output
 - The narrate tool handles speech synthesis and captions automatically
 
+AESTHETIC STYLE:
+- When creating rooms, ensure that descriptions are visually detailed
+- Ensure description aligns but does not repeat Aesthetic: "${settingsManager.get('aestheticPrompt')}"
+
 IMPORTANT GUIDELINES:
 - Always use tools to perform actions rather than just describing them
 - If user wants to create something, use create_room or add_object tools
