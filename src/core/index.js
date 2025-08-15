@@ -1,16 +1,13 @@
 /**
- * Memory Palace Core - Main exports
+ * Memory Palace Core - Simplified exports
+ * Consolidated system with reduced abstraction
  */
 
-// Core system - simplified exports
+// Main core system
 export { MemoryPalaceCore } from './MemoryPalaceCore.js'
 
-// Types and constants
-export { 
-  CommandActions, 
-  StateKeys, 
-  EventTypes
-} from './types.js'
+// Essential types only
+export { EventTypes } from './types.js'
 
-// Simple default export
+// Default export
 export { MemoryPalaceCore as default } from './MemoryPalaceCore.js'

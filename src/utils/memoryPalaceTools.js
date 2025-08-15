@@ -1,6 +1,6 @@
 /**
- * Memory Palace Tools Integration
- * Handles tool execution for memory palace operations via Claude
+ * Memory Palace Tools - Simplified Integration
+ * Direct interface to the consolidated MemoryPalaceCore system
  */
 
 import replicateAPI from '../services/ReplicateAPI.js'
@@ -8,53 +8,13 @@ import replicateAPI from '../services/ReplicateAPI.js'
 export class MemoryPalaceToolManager {
   constructor(memoryPalaceCore, voiceInterface = null) {
     this.core = memoryPalaceCore
-    this.roomManager = memoryPalaceCore?.roomManager
-    this.objectManager = memoryPalaceCore?.objectManager
     this.voiceInterface = voiceInterface
-    
-    // Track initialization state
-    this.isReady = this.checkIfReady()
     
     console.log(`[MemoryPalaceTools] Tool manager initialized:`, {
       hasCore: !!this.core,
       coreInitialized: this.core?.isInitialized,
-      coreRunning: this.core?.isRunning,
-      hasRoomManager: !!this.roomManager,
-      hasObjectManager: !!this.objectManager,
-      hasVoiceInterface: !!this.voiceInterface,
-      isReady: this.isReady
+      coreRunning: this.core?.isRunning
     })
-  }
-  
-  /**
-   * Check if the tool manager is ready to use
-   */
-  checkIfReady() {
-    return !!(
-      this.core && 
-      this.core.isInitialized && 
-      this.roomManager && 
-      this.objectManager
-    )
-  }
-  
-  /**
-   * Validate core readiness and throw error if not ready
-   */
-  validateCore() {
-    if (!this.core) {
-      throw new Error('Memory Palace core not initialized')
-    }
-    
-    if (!this.core.isInitialized) {
-      throw new Error('Memory Palace core not fully initialized')
-    }
-    
-    if (!this.roomManager || !this.objectManager) {
-      throw new Error('Memory Palace managers not available')
-    }
-    
-    return true
   }
 
   /**
@@ -64,44 +24,33 @@ export class MemoryPalaceToolManager {
     console.log(`[MemoryPalaceTools] Executing ${toolName}`, input)
 
     try {
-      // Check if core is ready before executing any tool
-      if (!this.isReady && !this.checkIfReady()) {
+      if (!this.core?.isInitialized) {
         return `Tool execution failed: Memory Palace core is not fully initialized. Please wait a moment and try again.`
       }
+
       switch (toolName) {
         case 'create_room':
           return await this.createRoom(input)
-        
         case 'edit_room':
           return await this.editRoom(input)
-        
         case 'go_to_room':
           return await this.goToRoom(input)
-        
         case 'add_object':
           return await this.addObject(input)
-        
         case 'remove_object':
           return await this.removeObject(input)
-        
         case 'list_rooms':
           return await this.listRooms()
-        
         case 'get_room_info':
           return await this.getRoomInfo()
-        
         case 'regenerate_room_image':
           return await this.regenerateRoomImage(input)
-        
         case 'add_object_at_position':
           return await this.addObjectAtPosition(input)
-        
         case 'create_door_at_position':
           return await this.createDoorAtPosition(input)
-        
         case 'narrate':
           return await this.narrateText(input)
-        
         default:
           throw new Error(`Unknown tool: ${toolName}`)
       }
@@ -116,10 +65,7 @@ export class MemoryPalaceToolManager {
    */
   async createRoom({ name, description }) {
     try {
-      this.validateCore()
       const room = await this.core.createRoom(name, description)
-      // Navigate to the newly created room
-      await this.core.navigateToRoom(room.id)
       return `Successfully created room "${name}" with description: ${description}. You are now in the new room.`
     } catch (error) {
       return `Failed to create room "${name}": ${error.message}`
@@ -131,15 +77,13 @@ export class MemoryPalaceToolManager {
    */
   async editRoom({ description }) {
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      const currentRoom = currentState.currentRoom
+      const currentRoom = this.core.getCurrentRoom()
       
       if (!currentRoom) {
         return `No current room to edit`
       }
 
-      await this.roomManager.updateRoom(currentRoom.id, { description })
+      await this.core.editRoom(currentRoom.id, { description })
       return `Successfully updated room "${currentRoom.name}" description to: ${description}`
     } catch (error) {
       return `Failed to edit room: ${error.message}`
@@ -151,14 +95,10 @@ export class MemoryPalaceToolManager {
    */
   async goToRoom({ roomName }) {
     try {
-      this.validateCore()
-      const rooms = this.core.getAllRooms()
-      const room = rooms.find(r => 
-        r.name.toLowerCase().includes(roomName.toLowerCase())
-      )
+      const room = this.core.findRoomByName(roomName)
       
       if (!room) {
-        const availableRooms = rooms.map(r => r.name).join(', ')
+        const availableRooms = this.core.getAllRooms().map(r => r.name).join(', ')
         return `Room "${roomName}" not found. Available rooms: ${availableRooms || 'none'}`
       }
 
@@ -173,49 +113,15 @@ export class MemoryPalaceToolManager {
    * Add object to current room
    */
   async addObject({ name, info, position }) {
-    const correlationId = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-    console.log(`[MemoryPalaceTools] 🎯 TOOL CALL: add_object started`, {
-      correlationId,
-      name,
-      info: info?.substring(0, 100) + (info?.length > 100 ? '...' : ''),
-      position,
-      timestamp: new Date().toISOString()
-    })
-
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      if (!currentState.currentRoom) {
-        console.log(`[MemoryPalaceTools] ❌ TOOL CALL: add_object failed - no current room`, { correlationId })
+      const currentRoom = this.core.getCurrentRoom()
+      if (!currentRoom) {
         return `No current room to add object to. Please create a room first.`
       }
 
-      console.log(`[MemoryPalaceTools] 📍 TOOL CALL: adding object to room`, {
-        correlationId,
-        roomId: currentState.currentRoom.id,
-        roomName: currentState.currentRoom.name,
-        objectName: name
-      })
-
       const object = await this.core.addObject(name, info, position)
-      
-      console.log(`[MemoryPalaceTools] ✅ TOOL CALL: add_object completed successfully`, {
-        correlationId,
-        objectId: object.id,
-        objectName: object.name,
-        roomId: object.roomId,
-        position: object.position,
-        timestamp: new Date().toISOString()
-      })
-
-      return `Successfully added object "${name}" with info: ${info} to room "${currentState.currentRoom.name}"${position ? ' at the specified location' : ''}`
+      return `Successfully added object "${name}" with info: ${info} to room "${currentRoom.name}"${position ? ' at the specified location' : ''}`
     } catch (error) {
-      console.error(`[MemoryPalaceTools] ❌ TOOL CALL: add_object failed`, {
-        correlationId,
-        error: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      })
       return `Failed to add object "${name}": ${error.message}`
     }
   }
@@ -224,55 +130,19 @@ export class MemoryPalaceToolManager {
    * Add object at specific position (for creation mode)
    */
   async addObjectAtPosition({ name, info, position }) {
-    const correlationId = `obj_pos_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-    console.log(`[MemoryPalaceTools] 🎯 TOOL CALL: add_object_at_position started`, {
-      correlationId,
-      name,
-      info: info?.substring(0, 100) + (info?.length > 100 ? '...' : ''),
-      position,
-      timestamp: new Date().toISOString()
-    })
-
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      if (!currentState.currentRoom) {
-        console.log(`[MemoryPalaceTools] ❌ TOOL CALL: add_object_at_position failed - no current room`, { correlationId })
+      const currentRoom = this.core.getCurrentRoom()
+      if (!currentRoom) {
         return `No current room to add object to. Please create a room first.`
       }
 
       if (!position) {
-        console.log(`[MemoryPalaceTools] ❌ TOOL CALL: add_object_at_position failed - no position`, { correlationId })
         return `Position is required for spatial object creation`
       }
 
-      console.log(`[MemoryPalaceTools] 📍 TOOL CALL: adding object at position to room`, {
-        correlationId,
-        roomId: currentState.currentRoom.id,
-        roomName: currentState.currentRoom.name,
-        objectName: name,
-        position
-      })
-
       const object = await this.core.addObject(name, info, position)
-      
-      console.log(`[MemoryPalaceTools] ✅ TOOL CALL: add_object_at_position completed successfully`, {
-        correlationId,
-        objectId: object.id,
-        objectName: object.name,
-        roomId: object.roomId,
-        position: object.position,
-        timestamp: new Date().toISOString()
-      })
-
       return `Successfully created object "${name}" at the clicked location with info: ${info}`
     } catch (error) {
-      console.error(`[MemoryPalaceTools] ❌ TOOL CALL: add_object_at_position failed`, {
-        correlationId,
-        error: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      })
       return `Failed to create object "${name}" at position: ${error.message}`
     }
   }
@@ -282,9 +152,8 @@ export class MemoryPalaceToolManager {
    */
   async createDoorAtPosition({ description, targetRoomName, targetRoomDescription, position }) {
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      if (!currentState.currentRoom) {
+      const currentRoom = this.core.getCurrentRoom()
+      if (!currentRoom) {
         return `No current room to create door from. Please create a room first.`
       }
 
@@ -298,9 +167,9 @@ export class MemoryPalaceToolManager {
         
         // Create forward connection from current room to new room
         const forwardConnection = {
-          id: this.core.stateManager.generateId(),
-          roomId: currentState.currentRoom.id,
-          userId: this.core.stateManager.getUserState().id,
+          id: this.core.generateId(),
+          roomId: currentRoom.id,
+          userId: this.core.state.user.id,
           targetRoomId: newRoom.id,
           description: description || `Door to ${targetRoomName}`,
           bidirectional: true,
@@ -308,27 +177,29 @@ export class MemoryPalaceToolManager {
           createdAt: new Date().toISOString()
         }
         
-        await this.core.stateManager.setConnection(forwardConnection)
+        this.core.state.connections.set(forwardConnection.id, forwardConnection)
+        await this.core.saveState()
         
-        // Create return door "just behind the user" in the new room
+        // Create return door in the new room
         const returnPosition = {
-          x: position.x !== undefined ? -position.x : 0, // opposite direction
-          y: position.y !== undefined ? position.y : 1.5, // same height
-          z: position.z !== undefined ? -position.z : -2  // behind user position
+          x: position.x !== undefined ? -position.x : 0,
+          y: position.y !== undefined ? position.y : 1.5,
+          z: position.z !== undefined ? -position.z : -2
         }
         
         const returnConnection = {
-          id: this.core.stateManager.generateId(),
+          id: this.core.generateId(),
           roomId: newRoom.id,
-          userId: this.core.stateManager.getUserState().id,
-          targetRoomId: currentState.currentRoom.id,
-          description: `Return to ${currentState.currentRoom.name}`,
+          userId: this.core.state.user.id,
+          targetRoomId: currentRoom.id,
+          description: `Return to ${currentRoom.name}`,
           bidirectional: true,
           position: returnPosition,
           createdAt: new Date().toISOString()
         }
         
-        await this.core.stateManager.setConnection(returnConnection)
+        this.core.state.connections.set(returnConnection.id, returnConnection)
+        await this.core.saveState()
         
         return `Successfully created door "${description || `Door to ${targetRoomName}`}" at the clicked location, leading to the new room "${targetRoomName}". A return door has been automatically placed in the new room.`
       } else {
@@ -344,9 +215,8 @@ export class MemoryPalaceToolManager {
    */
   async removeObject({ name }) {
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      if (!currentState.currentRoom) {
+      const currentRoom = this.core.getCurrentRoom()
+      if (!currentRoom) {
         return `No current room to remove object from`
       }
 
@@ -360,7 +230,7 @@ export class MemoryPalaceToolManager {
         return `Object "${name}" not found in current room. Available objects: ${availableObjects || 'none'}`
       }
 
-      await this.objectManager.deleteObject(object.id)
+      await this.core.deleteObject(object.id)
       return `Successfully removed object: ${object.name}`
     } catch (error) {
       return `Failed to remove object "${name}": ${error.message}`
@@ -372,15 +242,14 @@ export class MemoryPalaceToolManager {
    */
   async listRooms() {
     try {
-      this.validateCore()
       const rooms = this.core.getAllRooms()
       
       if (rooms.length === 0) {
         return `No rooms found in your memory palace. Say "create a room" to get started!`
       }
 
-      const currentState = this.core.getCurrentState()
-      const currentRoomId = currentState.currentRoom?.id
+      const currentRoom = this.core.getCurrentRoom()
+      const currentRoomId = currentRoom?.id
 
       const roomList = rooms.map(room => {
         const marker = room.id === currentRoomId ? ' (current)' : ''
@@ -398,28 +267,25 @@ export class MemoryPalaceToolManager {
    */
   async getRoomInfo() {
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      const currentRoom = currentState.currentRoom
+      const currentRoom = this.core.getCurrentRoom()
       
       if (!currentRoom) {
         return `No current room. Say "create a room" to get started!`
       }
 
       const objects = this.core.getCurrentRoomObjects()
+      const stats = this.core.getCurrentState().stats
       
       let info = `Current room: ${currentRoom.name}\n`
       info += `Description: ${currentRoom.description}\n`
       
       if (objects.length > 0) {
         info += `\nObjects in this room (${objects.length} total):\n`
-        info += objects.map(obj => `- ${obj.name}: ${obj.info || obj.information}`).join('\n')
+        info += objects.map(obj => `- ${obj.name}: ${obj.information}`).join('\n')
       } else {
         info += `\nNo objects in this room yet. Say "add an object" to place something here.`
       }
 
-      // Add room statistics
-      const stats = currentState.stats
       info += `\n\nMemory Palace Statistics:`
       info += `\n- Total rooms: ${stats.totalRooms}`
       info += `\n- Total objects: ${stats.totalObjects}`
@@ -437,19 +303,12 @@ export class MemoryPalaceToolManager {
     try {
       console.log(`[MemoryPalaceTools] Narrating text:`, text.substring(0, 100) + '...')
       
-      if (!this.voiceInterface) {
-        console.warn('[MemoryPalaceTools] No voice interface available for narration')
+      if (!this.voiceInterface?.speakResponse) {
         return `Narration not available - voice interface not connected`
       }
 
-      // Call the voice interface's speakResponse method
-      if (typeof this.voiceInterface.speakResponse === 'function') {
-        await this.voiceInterface.speakResponse(text)
-        return `Successfully narrated text`
-      } else {
-        console.warn('[MemoryPalaceTools] Voice interface speakResponse method not available')
-        return `Narration method not available`
-      }
+      await this.voiceInterface.speakResponse(text)
+      return `Successfully narrated text`
     } catch (error) {
       console.error(`[MemoryPalaceTools] Error narrating text:`, error)
       return `Failed to narrate text: ${error.message}`
@@ -461,9 +320,7 @@ export class MemoryPalaceToolManager {
    */
   async regenerateRoomImage(input = {}) {
     try {
-      this.validateCore()
-      const currentState = this.core.getCurrentState()
-      const currentRoom = currentState.currentRoom
+      const currentRoom = this.core.getCurrentRoom()
       
       if (!currentRoom) {
         return `No current room to regenerate image for. Please create a room first.`
@@ -471,30 +328,24 @@ export class MemoryPalaceToolManager {
 
       console.log(`[MemoryPalaceTools] Regenerating image for room: ${currentRoom.name}`)
       
-      // Check if Replicate API is configured
       if (!replicateAPI.isConfigured()) {
         return `Image regeneration not available - Replicate API key not configured. Please configure your Replicate API key in settings to generate room images.`
       }
 
-      // Generate new image using existing room description
       const result = await replicateAPI.generateSkyboxImage(
         currentRoom.description, 
         currentRoom.name
       )
 
       if (result.success) {
-        // Update room with new image URL if the core supports it
-        if (this.roomManager && result.url) {
-          try {
-            await this.roomManager.editRoom(currentRoom.id, { 
-              imageUrl: result.url,
-              lastImageGenerated: new Date().toISOString(),
-              imagePrompt: result.prompt
-            })
-            console.log(`[MemoryPalaceTools] Updated room ${currentRoom.name} with new image URL`)
-          } catch (updateError) {
-            console.warn(`[MemoryPalaceTools] Could not update room with image URL:`, updateError)
-          }
+        try {
+          await this.core.editRoom(currentRoom.id, { 
+            imageUrl: result.url,
+            lastImageGenerated: new Date().toISOString()
+          })
+          console.log(`[MemoryPalaceTools] Updated room ${currentRoom.name} with new image URL`)
+        } catch (updateError) {
+          console.warn(`[MemoryPalaceTools] Could not update room with image URL:`, updateError)
         }
 
         return `Successfully regenerated image for room "${currentRoom.name}"! The new skybox image has been generated using the existing description: "${currentRoom.description}". Image URL: ${result.url}`
@@ -519,14 +370,8 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the new room'
-            },
-            description: {
-              type: 'string', 
-              description: 'Detailed description of the room for image generation and memory association'
-            }
+            name: { type: 'string', description: 'Name of the new room' },
+            description: { type: 'string', description: 'Detailed description of the room for image generation and memory association' }
           },
           required: ['name', 'description']
         }
@@ -537,10 +382,7 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            description: {
-              type: 'string',
-              description: 'Updated detailed room description'
-            }
+            description: { type: 'string', description: 'Updated detailed room description' }
           },
           required: ['description']
         }
@@ -551,10 +393,7 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            roomName: {
-              type: 'string',
-              description: 'Name of the room to navigate to'
-            }
+            roomName: { type: 'string', description: 'Name of the room to navigate to' }
           },
           required: ['roomName']
         }
@@ -565,14 +404,8 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the memory object'
-            },
-            info: {
-              type: 'string',
-              description: 'Information or memory to associate with this object'
-            }
+            name: { type: 'string', description: 'Name of the memory object' },
+            info: { type: 'string', description: 'Information or memory to associate with this object' }
           },
           required: ['name', 'info']
         }
@@ -583,10 +416,7 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the object to remove'
-            }
+            name: { type: 'string', description: 'Name of the object to remove' }
           },
           required: ['name']
         }
@@ -594,26 +424,17 @@ export class MemoryPalaceToolManager {
       {
         name: 'list_rooms',
         description: 'List all available rooms in the memory palace',
-        input_schema: {
-          type: 'object',
-          properties: {}
-        }
+        input_schema: { type: 'object', properties: {} }
       },
       {
         name: 'get_room_info',
         description: 'Get detailed information about the current room and its objects',
-        input_schema: {
-          type: 'object',
-          properties: {}
-        }
+        input_schema: { type: 'object', properties: {} }
       },
       {
         name: 'regenerate_room_image',
-        description: 'Regenerate the skybox image for the current room using its existing description with a new random seed',
-        input_schema: {
-          type: 'object',
-          properties: {}
-        }
+        description: 'Regenerate the skybox image for the current room using its existing description',
+        input_schema: { type: 'object', properties: {} }
       },
       {
         name: 'add_object_at_position',
@@ -621,14 +442,8 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the memory object'
-            },
-            info: {
-              type: 'string',
-              description: 'Information or memory to associate with this object'
-            },
+            name: { type: 'string', description: 'Name of the memory object' },
+            info: { type: 'string', description: 'Information or memory to associate with this object' },
             position: {
               type: 'object',
               description: 'Spatial position coordinates',
@@ -649,18 +464,9 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            description: {
-              type: 'string',
-              description: 'Description of the door/entrance'
-            },
-            targetRoomName: {
-              type: 'string',
-              description: 'Name of the new room to create and connect to'
-            },
-            targetRoomDescription: {
-              type: 'string',
-              description: 'Description of the new room to create'
-            },
+            description: { type: 'string', description: 'Description of the door/entrance' },
+            targetRoomName: { type: 'string', description: 'Name of the new room to create and connect to' },
+            targetRoomDescription: { type: 'string', description: 'Description of the new room to create' },
             position: {
               type: 'object',
               description: 'Spatial position coordinates',
@@ -681,10 +487,7 @@ export class MemoryPalaceToolManager {
         input_schema: {
           type: 'object',
           properties: {
-            text: {
-              type: 'string',
-              description: 'Text to speak aloud to the user'
-            }
+            text: { type: 'string', description: 'Text to speak aloud to the user' }
           },
           required: ['text']
         }

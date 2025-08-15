@@ -1,13 +1,10 @@
 import { EventEmitter } from './EventEmitter.js'
-import { StateManager } from './StateManager.js'
-import { RoomManager } from './RoomManager.js'
-import { ObjectManager } from './ObjectManager.js'
-import { InteractionController } from './InteractionController.js'
 import { EventTypes } from './types.js'
+import replicateAPI from '../services/ReplicateAPI.js'
 
 /**
- * MemoryPalaceCore - Central orchestrator for the Memory Palace application
- * Coordinates all subsystems and provides a unified API for the application
+ * MemoryPalaceCore - Simplified central system for the Memory Palace application
+ * Consolidates functionality from multiple managers into a single, cohesive system
  */
 export class MemoryPalaceCore extends EventEmitter {
   constructor(config = {}) {
@@ -15,38 +12,50 @@ export class MemoryPalaceCore extends EventEmitter {
     
     // Configuration
     this.config = {
-      enableImageGeneration: true, // Enable image generation via Replicate
-      persistence: 'localStorage', // 'localStorage' | 'indexedDB' | custom adapter
+      enableImageGeneration: true,
+      persistence: 'localStorage',
       enableVoice: true,
       enableSpatialInteraction: true,
       autopilot: false,
       ...config
     }
     
-    // Core subsystems
-    this.stateManager = new StateManager()
-    this.roomManager = null
-    this.objectManager = null
-    this.interactionController = null
+    // Application state - simplified in-memory storage
+    this.state = {
+      user: {
+        id: this.generateId(),
+        currentRoomId: null,
+        roomCounter: 0,
+        objectCounter: 0,
+        settings: {}
+      },
+      rooms: new Map(),
+      objects: new Map(),
+      connections: new Map(),
+      conversationHistory: []
+    }
     
-    // Application state
+    // Application status
     this.isInitialized = false
     this.isRunning = false
     this.version = '0.1.0'
     
-    // Performance monitoring
+    // Processing state
+    this.isProcessingCommand = false
+    this.isGeneratingImage = false
+    this.pendingInteraction = null
+    
+    // Performance metrics
     this.metrics = {
       initTime: 0,
       commandsProcessed: 0,
       roomsCreated: 0,
-      objectsCreated: 0,
-      apiCallsPerformed: 0
+      objectsCreated: 0
     }
   }
 
   /**
    * Initialize the Memory Palace core system
-   * @returns {Promise<boolean>} Success status
    */
   async initialize() {
     if (this.isInitialized) {
@@ -56,27 +65,11 @@ export class MemoryPalaceCore extends EventEmitter {
     const startTime = performance.now()
     
     try {
-      // Initialize state management
-      await this.stateManager.initialize()
+      // Load state from localStorage
+      await this.loadState()
       
-      // Initialize core managers
-      this.roomManager = new RoomManager(this.stateManager)
-      this.objectManager = new ObjectManager(this.stateManager)
-      this.interactionController = new InteractionController(
-        this.stateManager,
-        this.roomManager,
-        this.objectManager
-      )
-      
-      await this.roomManager.initialize()
-      await this.objectManager.initialize()
-      await this.interactionController.initialize()
-      
-      // Set up event listeners
-      this.setupEventListeners()
-      
-      // Apply initial configuration
-      await this.applyConfiguration()
+      // Ensure default state
+      this.ensureDefaultState()
       
       this.isInitialized = true
       this.metrics.initTime = performance.now() - startTime
@@ -86,22 +79,17 @@ export class MemoryPalaceCore extends EventEmitter {
       return true
       
     } catch (error) {
-      this.lastError = error
       console.error('[MemoryPalaceCore] Initialization failed:', error)
-      
       this.emit(EventTypes.ERROR_OCCURRED, { 
         type: 'initialization_error', 
         error: error.message
       })
-      
       return false
     }
   }
-  
 
   /**
    * Start the Memory Palace system
-   * @returns {Promise<boolean>} Success status
    */
   async start() {
     if (!this.isInitialized) {
@@ -109,15 +97,12 @@ export class MemoryPalaceCore extends EventEmitter {
     }
     
     if (this.isRunning) {
-      console.warn('Memory Palace Core already running')
       return true
     }
     
     try {
-      // Start subsystems
-      if (this.config.autopilot) {
-        this.interactionController.setAutopilotMode(true)
-      }
+      // Apply initial configuration
+      await this.applyConfiguration()
       
       this.isRunning = true
       this.emit('core_started')
@@ -137,7 +122,6 @@ export class MemoryPalaceCore extends EventEmitter {
 
   /**
    * Stop the Memory Palace system
-   * @returns {Promise<boolean>} Success status
    */
   async stop() {
     if (!this.isRunning) {
@@ -145,11 +129,8 @@ export class MemoryPalaceCore extends EventEmitter {
     }
     
     try {
-      // Stop subsystems
-      this.interactionController.setAutopilotMode(false)
-      
       // Save final state
-      await this.stateManager.saveState()
+      await this.saveState()
       
       this.isRunning = false
       this.emit('core_stopped')
@@ -163,280 +144,876 @@ export class MemoryPalaceCore extends EventEmitter {
     }
   }
 
-
   /**
-   * Set up event listeners for system coordination
-   */
-  setupEventListeners() {
-    // Forward important events from subsystems
-    this.stateManager.on(EventTypes.ERROR_OCCURRED, (error) => {
-      this.emit(EventTypes.ERROR_OCCURRED, error)
-    })
-    
-    
-    this.roomManager.on(EventTypes.ROOM_CREATED, (room) => {
-      this.metrics.roomsCreated++
-      this.emit(EventTypes.ROOM_CREATED, room)
-    })
-    
-    this.objectManager.on(EventTypes.OBJECT_CREATED, (object) => {
-      this.metrics.objectsCreated++
-      this.emit(EventTypes.OBJECT_CREATED, object)
-    })
-    
-    this.interactionController.on(EventTypes.COMMAND_PROCESSED, (command) => {
-      this.metrics.commandsProcessed++
-      this.emit(EventTypes.COMMAND_PROCESSED, command)
-    })
-    
-    // Cross-system coordination
-    this.interactionController.on('autopilot_started', () => {
-      this.emit('autopilot_started')
-    })
-    
-    this.interactionController.on('autopilot_stopped', () => {
-      this.emit('autopilot_stopped')
-    })
-  }
-
-  /**
-   * Apply initial configuration
+   * Apply initial configuration and ensure default room exists
    */
   async applyConfiguration() {
-    // Apply settings from config or load saved settings
-    const userState = this.stateManager.getUserState()
-    const settings = { ...(userState.settings || {}) }
-    
-    await this.stateManager.updateUserState({ settings })
-    
     // Ensure a default room exists if no rooms are present
-    await this.ensureDefaultRoom()
-  }
-
-  /**
-   * Ensure a default room exists when starting with an empty palace
-   */
-  async ensureDefaultRoom() {
-    const rooms = this.stateManager.getRooms()
-    const userState = this.stateManager.getUserState()
-    
-    // If no rooms exist, create a default room
-    if (rooms.size === 0) {
+    if (this.state.rooms.size === 0) {
       console.log('[MemoryPalaceCore] No rooms found, creating default room...')
       
-      // Create the default room with the same description as the default skybox
-      const defaultRoom = await this.roomManager.createRoom(
+      const defaultRoom = await this.createRoom(
         'Study',
         'A large study, with a desk with various papers and objects, the floor is covered with a old persian rug, bookshelfs and wooden filing cabnets line to walls, with a fireplace to the right, and a few closed wooden doors leading to ajoining rooms. There is a window, with heavy curtains open, revealing a snowy forrest at night.',
         { imageUrl: '/default_skybox.png' } 
       )
       
       console.log('[MemoryPalaceCore] Default room created:', defaultRoom)
-      
-      // Navigate to the default room
-      await this.roomManager.navigateToRoom(defaultRoom.id)
-      console.log('[MemoryPalaceCore] Navigated to default room')
+      await this.navigateToRoom(defaultRoom.id)
       
       return defaultRoom
     }
     
     // If rooms exist but no current room is set, navigate to the first room
-    if (!userState.currentRoomId && rooms.size > 0) {
-      const firstRoom = Array.from(rooms.values())[0]
+    if (!this.state.user.currentRoomId && this.state.rooms.size > 0) {
+      const firstRoom = Array.from(this.state.rooms.values())[0]
       console.log('[MemoryPalaceCore] No current room set, navigating to first room:', firstRoom.name)
-      await this.roomManager.navigateToRoom(firstRoom.id)
+      await this.navigateToRoom(firstRoom.id)
       return firstRoom
     }
     
     return null
   }
 
-  // Public API Methods
+  // === STATE MANAGEMENT ===
 
   /**
-   * Process user input (main interaction method)
-   * @param {string} input - User input text
-   * @param {Object} options - Processing options
-   * @returns {Promise<Object>} Processing result
+   * Load state from localStorage
    */
-  async processInput(input, options = {}) {
-    if (!this.isInitialized || !this.isRunning) {
-      throw new Error('Core must be initialized and started')
+  async loadState() {
+    try {
+      const keys = ['user', 'rooms', 'objects', 'connections', 'conversationHistory']
+      
+      keys.forEach(key => {
+        const stored = localStorage.getItem(`palais_${key}`)
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored)
+            if (key === 'rooms' || key === 'objects' || key === 'connections') {
+              this.state[key] = new Map(Object.entries(parsed))
+            } else {
+              this.state[key] = parsed
+            }
+          } catch (error) {
+            console.warn(`Failed to parse stored state for ${key}:`, error)
+          }
+        }
+      })
+    } catch (error) {
+      console.error('Failed to load state:', error)
+    }
+  }
+
+  /**
+   * Save state to localStorage
+   */
+  async saveState() {
+    try {
+      const keys = ['user', 'rooms', 'objects', 'connections', 'conversationHistory']
+      
+      keys.forEach(key => {
+        const value = this.state[key]
+        if (value !== undefined) {
+          let serializable = value
+          if (value instanceof Map) {
+            serializable = Object.fromEntries(value)
+          }
+          localStorage.setItem(`palais_${key}`, JSON.stringify(serializable))
+        }
+      })
+    } catch (error) {
+      console.error('Failed to save state:', error)
+    }
+  }
+
+  /**
+   * Ensure default state exists
+   */
+  ensureDefaultState() {
+    if (!this.state.user.id) {
+      this.state.user.id = this.generateId()
+    }
+  }
+
+  /**
+   * Generate a unique ID
+   */
+  generateId() {
+    return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  // === ROOM MANAGEMENT ===
+
+  /**
+   * Create a new room
+   */
+  async createRoom(name, description, options = {}) {
+    const roomId = this.generateId()
+    const roomCounter = this.state.user.roomCounter + 1
+
+    const room = {
+      id: roomId,
+      userId: this.state.user.id,
+      name: name || `Room ${roomCounter}`,
+      description,
+      imageUrl: options.imageUrl || null,
+      roomCounter,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    // Save room
+    this.state.rooms.set(roomId, room)
+    this.state.user.roomCounter = roomCounter
+    this.state.user.currentRoomId = roomId
+    
+    await this.saveState()
+    
+    this.metrics.roomsCreated++
+    this.emit(EventTypes.ROOM_CREATED, room)
+    
+    // Generate room image if needed
+    if (!room.imageUrl && !options.skipImageGeneration) {
+      this.generateRoomImage(roomId, description)
+    }
+
+    return room
+  }
+
+  /**
+   * Edit an existing room
+   */
+  async editRoom(roomId, updates) {
+    const room = this.state.rooms.get(roomId)
+    if (!room) {
+      throw new Error(`Room ${roomId} not found`)
+    }
+
+    const updatedRoom = {
+      ...room,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    }
+
+    this.state.rooms.set(roomId, updatedRoom)
+    await this.saveState()
+
+    // Regenerate image if description changed
+    if (updates.description && updates.description !== room.description) {
+      this.generateRoomImage(roomId, updates.description)
+    }
+
+    this.emit(EventTypes.ROOM_UPDATED, updatedRoom)
+    return updatedRoom
+  }
+
+  /**
+   * Delete a room
+   */
+  async deleteRoom(roomId) {
+    const room = this.state.rooms.get(roomId)
+    if (!room) {
+      return false
+    }
+
+    // If deleting current room, navigate to another room or clear current
+    if (this.state.user.currentRoomId === roomId) {
+      const allRooms = this.getAllRooms().filter(r => r.id !== roomId)
+      const newCurrentRoomId = allRooms.length > 0 ? allRooms[0].id : null
+      await this.navigateToRoom(newCurrentRoomId)
+    }
+
+    // Remove room
+    this.state.rooms.delete(roomId)
+    
+    // Remove associated objects
+    for (const [objId, obj] of this.state.objects.entries()) {
+      if (obj.roomId === roomId) {
+        this.state.objects.delete(objId)
+      }
     }
     
-    return this.interactionController.processInput(input, options)
+    // Remove associated connections
+    for (const [connId, conn] of this.state.connections.entries()) {
+      if (conn.roomId === roomId || conn.targetRoomId === roomId) {
+        this.state.connections.delete(connId)
+      }
+    }
+    
+    await this.saveState()
+    this.emit(EventTypes.ROOM_DELETED, { roomId, room })
+    
+    return true
+  }
+
+  /**
+   * Navigate to a room
+   */
+  async navigateToRoom(roomId) {
+    let targetRoom = null
+    
+    if (roomId) {
+      targetRoom = this.state.rooms.get(roomId)
+      if (!targetRoom) {
+        throw new Error(`Room ${roomId} not found`)
+      }
+    }
+
+    const previousRoomId = this.state.user.currentRoomId
+    this.state.user.currentRoomId = roomId
+    
+    await this.saveState()
+
+    this.emit(EventTypes.ROOM_CHANGED, {
+      previousRoomId,
+      currentRoomId: roomId,
+      currentRoom: targetRoom
+    })
+
+    return targetRoom
+  }
+
+  /**
+   * Generate an image for a room
+   */
+  async generateRoomImage(roomId, description) {
+    if (this.isGeneratingImage) {
+      console.warn('Image generation already in progress')
+      return false
+    }
+
+    const room = this.state.rooms.get(roomId)
+    if (!room) {
+      console.error(`Room ${roomId} not found`)
+      return false
+    }
+
+    this.isGeneratingImage = true
+
+    try {
+      if (!replicateAPI.isConfigured()) {
+        throw new Error('Replicate API is not configured. Please add your API key in settings.')
+      }
+
+      const result = await replicateAPI.generateSkyboxImage(description, room.name)
+
+      // Update room with image URL
+      await this.editRoom(roomId, { imageUrl: result.url })
+        
+      this.emit('room_image_generated', {
+        roomId,
+        imageUrl: result.url,
+        description
+      })
+        
+      return true
+    } catch (error) {
+      console.error('Error generating room image:', error)
+      this.emit(EventTypes.ERROR_OCCURRED, {
+        type: 'image_generation_error',
+        roomId,
+        error: error.message
+      })
+      return false
+    } finally {
+      this.isGeneratingImage = false
+    }
+  }
+
+  /**
+   * Get current room
+   */
+  getCurrentRoom() {
+    if (!this.state.user.currentRoomId) return null
+    return this.state.rooms.get(this.state.user.currentRoomId)
+  }
+
+  /**
+   * Get all rooms
+   */
+  getAllRooms() {
+    return Array.from(this.state.rooms.values()).sort((a, b) => a.roomCounter - b.roomCounter)
+  }
+
+  /**
+   * Find room by name
+   */
+  findRoomByName(name) {
+    const rooms = this.getAllRooms()
+    const lowerName = name.toLowerCase()
+    
+    // Exact match first
+    let found = rooms.find(r => r.name.toLowerCase() === lowerName)
+    if (found) return found
+    
+    // Partial match
+    found = rooms.find(r => r.name.toLowerCase().includes(lowerName))
+    if (found) return found
+    
+    // Description match
+    found = rooms.find(r => r.description.toLowerCase().includes(lowerName))
+    return found || null
+  }
+
+  // === OBJECT MANAGEMENT ===
+
+  /**
+   * Add an object to current room
+   */
+  async addObject(name, information, position = null) {
+    console.log(`[MemoryPalaceCore] Adding object`, { name, information: information?.substring(0, 100) + '...', position })
+
+    const currentRoomId = this.state.user.currentRoomId
+    if (!currentRoomId) {
+      throw new Error('No current room')
+    }
+    
+    const objectId = this.generateId()
+    const objectCounter = this.state.user.objectCounter + 1
+
+    // Use provided position or generate default
+    const objectPosition = position || this.generateDefaultPosition(currentRoomId)
+
+    const object = {
+      id: objectId,
+      roomId: currentRoomId,
+      userId: this.state.user.id,
+      name: name || `Object ${objectCounter}`,
+      information: information || '',
+      position: objectPosition,
+      objectCounter,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    // Save object
+    this.state.objects.set(objectId, object)
+    this.state.user.objectCounter = objectCounter
+    
+    await this.saveState()
+
+    this.metrics.objectsCreated++
+    this.emit(EventTypes.OBJECT_CREATED, object)
+    
+    console.log(`[MemoryPalaceCore] Object added successfully:`, object)
+    return object
+  }
+
+  /**
+   * Update an existing object
+   */
+  async updateObject(objectId, updates) {
+    const object = this.state.objects.get(objectId)
+    if (!object) {
+      throw new Error(`Object ${objectId} not found`)
+    }
+
+    const updatedObject = {
+      ...object,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    }
+
+    this.state.objects.set(objectId, updatedObject)
+    await this.saveState()
+    
+    this.emit(EventTypes.OBJECT_UPDATED, updatedObject)
+    return updatedObject
+  }
+
+  /**
+   * Delete an object
+   */
+  async deleteObject(objectId) {
+    const object = this.state.objects.get(objectId)
+    if (!object) {
+      return false
+    }
+
+    this.state.objects.delete(objectId)
+    await this.saveState()
+    
+    this.emit(EventTypes.OBJECT_DELETED, { objectId, object })
+    return true
+  }
+
+  /**
+   * Get objects in current room
+   */
+  getCurrentRoomObjects() {
+    const currentRoomId = this.state.user.currentRoomId
+    return currentRoomId ? this.getRoomObjects(currentRoomId) : []
+  }
+
+  /**
+   * Get objects in a specific room
+   */
+  getRoomObjects(roomId) {
+    return Array.from(this.state.objects.values()).filter(obj => obj.roomId === roomId)
+  }
+
+  /**
+   * Find objects by name
+   */
+  findObjectsByName(name, roomId = null) {
+    const objects = roomId ? this.getRoomObjects(roomId) : Array.from(this.state.objects.values())
+    const lowerName = name.toLowerCase()
+    
+    return objects.filter(obj => 
+      obj.name.toLowerCase().includes(lowerName) ||
+      obj.information.toLowerCase().includes(lowerName)
+    ).sort((a, b) => {
+      const aExact = obj.name.toLowerCase() === lowerName
+      const bExact = obj.name.toLowerCase() === lowerName
+      if (aExact && !bExact) return -1
+      if (!aExact && bExact) return 1
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  /**
+   * Generate a default position for a new object in a room
+   */
+  generateDefaultPosition(roomId) {
+    const existingObjects = this.getRoomObjects(roomId)
+    
+    // Create a spiral pattern around the room
+    const radius = 400
+    const angle = (existingObjects.length * 60) * (Math.PI / 180)
+    const height = Math.sin(existingObjects.length * 0.3) * 50
+    
+    return {
+      x: Math.cos(angle) * radius,
+      y: height,
+      z: Math.sin(angle) * radius
+    }
+  }
+
+  /**
+   * Convert screen coordinates to world position
+   */
+  screenToWorldPosition(screenX, screenY, distance = 400) {
+    const phi = (screenX - 0.5) * Math.PI * 2
+    const theta = (screenY - 0.5) * Math.PI
+    
+    return {
+      x: distance * Math.sin(theta) * Math.cos(phi),
+      y: distance * Math.cos(theta),
+      z: distance * Math.sin(theta) * Math.sin(phi)
+    }
+  }
+
+  // === INPUT PROCESSING ===
+
+  /**
+   * Process user input (simplified command processing)
+   */
+  async processInput(input, options = {}) {
+    if (this.isProcessingCommand) {
+      return {
+        success: false,
+        error: 'Another command is currently being processed'
+      }
+    }
+
+    this.isProcessingCommand = true
+    
+    try {
+      // Add to conversation history
+      this.addToHistory('user', input)
+      
+      // Simple command parsing
+      const command = this.parseCommand(input)
+      this.emit(EventTypes.COMMAND_PROCESSED, { input, command })
+      
+      // Execute command
+      const result = await this.executeCommand(command)
+      
+      // Add response to history
+      if (result.response) {
+        this.addToHistory('assistant', result.response)
+      }
+      
+      this.isProcessingCommand = false
+      this.metrics.commandsProcessed++
+      
+      return result
+      
+    } catch (error) {
+      this.isProcessingCommand = false
+      console.error('Error processing input:', error)
+      
+      return {
+        success: false,
+        error: error.message,
+        response: 'I apologize, but I encountered an error processing your request. Please try again.'
+      }
+    }
   }
 
   /**
    * Handle spatial interaction (clicks, touches)
-   * @param {number} screenX - Screen X coordinate (0-1)
-   * @param {number} screenY - Screen Y coordinate (0-1)
-   * @param {string} type - Interaction type
-   * @returns {Promise<Object>} Interaction result
    */
   async processSpatialInteraction(screenX, screenY, type = 'click') {
-    if (!this.isInitialized || !this.isRunning) {
-      throw new Error('Core must be initialized and started')
+    const currentRoomId = this.state.user.currentRoomId
+    
+    if (!currentRoomId) {
+      return {
+        success: false,
+        error: 'No current room',
+        response: 'Please create or navigate to a room first.'
+      }
     }
     
-    return this.interactionController.processSpatialInteraction(screenX, screenY, type)
+    // Convert screen coordinates to world position
+    const worldPosition = this.screenToWorldPosition(screenX, screenY)
+    
+    // Check if clicking near existing objects
+    const nearbyObjects = this.getObjectsNearPosition(worldPosition, 100, currentRoomId)
+    
+    if (nearbyObjects.length > 0) {
+      // Clicked on existing object
+      const object = nearbyObjects[0]
+      return {
+        success: true,
+        data: { object, interaction: 'object_selected' },
+        response: `"${object.name}": ${object.information}`
+      }
+    } else {
+      // Clicked on empty space
+      this.pendingInteraction = {
+        type: 'spatial_placement',
+        position: worldPosition,
+        screenX,
+        screenY,
+        timestamp: Date.now()
+      }
+      
+      return {
+        success: true,
+        data: { interaction: 'position_selected', position: worldPosition },
+        response: 'Position selected. You can now describe what you want to remember at this location.'
+      }
+    }
   }
 
   /**
+   * Get objects within a certain distance of a position
+   */
+  getObjectsNearPosition(position, radius, roomId = null) {
+    const objects = roomId ? this.getRoomObjects(roomId) : Array.from(this.state.objects.values())
+    
+    return objects
+      .map(obj => ({
+        ...obj,
+        distance: this.calculateDistance(position, obj.position)
+      }))
+      .filter(obj => obj.distance <= radius)
+      .sort((a, b) => a.distance - b.distance)
+  }
+
+  /**
+   * Calculate distance between two 3D points
+   */
+  calculateDistance(pos1, pos2) {
+    const dx = pos1.x - pos2.x
+    const dy = pos1.y - pos2.y
+    const dz = pos1.z - pos2.z
+    return Math.sqrt(dx * dx + dy * dy + dz * dz)
+  }
+
+  // === SIMPLIFIED COMMAND PROCESSING ===
+
+  /**
+   * Parse command using simple pattern matching
+   */
+  parseCommand(input) {
+    const lower = input.toLowerCase()
+    const words = lower.split(' ')
+    
+    // CREATE_ROOM patterns
+    if (words.some(w => ['create', 'make', 'build'].includes(w)) && 
+        words.some(w => ['room', 'space', 'place', 'area'].includes(w))) {
+      return {
+        action: 'CREATE_ROOM',
+        parameters: {
+          description: this.extractDescription(input, 'room'),
+          name: this.extractName(input) || 'New Room'
+        }
+      }
+    }
+    
+    // ADD_OBJECT patterns
+    if (words.some(w => ['add', 'place', 'put', 'remember'].includes(w)) && 
+        words.some(w => ['object', 'item', 'thing', 'memory'].includes(w))) {
+      return {
+        action: 'ADD_OBJECT',
+        parameters: {
+          name: this.extractName(input) || 'Memory Object',
+          information: this.extractDescription(input, 'object'),
+          position: this.pendingInteraction?.position || null
+        }
+      }
+    }
+    
+    // NAVIGATE patterns
+    if (words.some(w => ['go', 'move', 'navigate', 'travel'].includes(w))) {
+      return {
+        action: 'NAVIGATE',
+        parameters: {
+          roomName: this.extractRoomName(input)
+        }
+      }
+    }
+    
+    // LIST patterns
+    if (words.some(w => ['list', 'show', 'tell'].includes(w))) {
+      if (words.some(w => ['rooms', 'room'].includes(w))) {
+        return { action: 'LIST_ROOMS', parameters: {} }
+      } else {
+        return { action: 'LIST_OBJECTS', parameters: {} }
+      }
+    }
+    
+    // DESCRIBE patterns
+    if (words.some(w => ['describe', 'what', 'where'].includes(w))) {
+      return { action: 'DESCRIBE', parameters: {} }
+    }
+    
+    // Default CHAT response
+    return {
+      action: 'CHAT',
+      parameters: { input }
+    }
+  }
+
+  /**
+   * Execute a parsed command
+   */
+  async executeCommand(command) {
+    const { action, parameters } = command
+    
+    try {
+      switch (action) {
+        case 'CREATE_ROOM':
+          const room = await this.createRoom(parameters.name, parameters.description)
+          return {
+            success: true,
+            data: { room },
+            response: `Created "${room.name}" - ${room.description}. The immersive environment is being generated.`
+          }
+          
+        case 'ADD_OBJECT':
+          const object = await this.addObject(parameters.name, parameters.information, parameters.position)
+          return {
+            success: true,
+            data: { object },
+            response: `Added "${object.name}" to remember: ${object.information}`
+          }
+          
+        case 'NAVIGATE':
+          if (parameters.roomName) {
+            const targetRoom = this.findRoomByName(parameters.roomName)
+            if (targetRoom) {
+              await this.navigateToRoom(targetRoom.id)
+              return {
+                success: true,
+                data: { room: targetRoom },
+                response: `Moved to "${targetRoom.name}". ${targetRoom.description}`
+              }
+            }
+          }
+          return {
+            success: false,
+            error: 'Room not found',
+            response: 'I couldn\'t find the room you want to navigate to.'
+          }
+          
+        case 'LIST_ROOMS':
+          const rooms = this.getAllRooms()
+          const roomList = rooms.map(room => `"${room.name}"`).join(', ')
+          return {
+            success: true,
+            data: { rooms },
+            response: rooms.length > 0 
+              ? `Your memory palace has ${rooms.length} rooms: ${roomList}`
+              : 'You haven\'t created any rooms yet.'
+          }
+          
+        case 'LIST_OBJECTS':
+          const currentRoom = this.getCurrentRoom()
+          if (!currentRoom) {
+            return {
+              success: true,
+              response: 'You are not currently in any room.'
+            }
+          }
+          
+          const objects = this.getCurrentRoomObjects()
+          const objectList = objects.map(obj => `"${obj.name}"`).join(', ')
+          
+          return {
+            success: true,
+            data: { objects },
+            response: objects.length > 0
+              ? `Objects in "${currentRoom.name}": ${objectList}`
+              : `No memory objects in "${currentRoom.name}" yet.`
+          }
+          
+        case 'DESCRIBE':
+          const current = this.getCurrentRoom()
+          if (!current) {
+            return {
+              success: true,
+              response: 'You are not currently in any room. Create a room to begin building your memory palace.'
+            }
+          }
+          
+          const roomObjects = this.getCurrentRoomObjects()
+          let description = `You are in "${current.name}". ${current.description}`
+          
+          if (roomObjects.length > 0) {
+            description += `\n\nMemory objects here: ${roomObjects.map(obj => `"${obj.name}"`).join(', ')}.`
+          }
+          
+          return {
+            success: true,
+            data: { currentRoom: current, objects: roomObjects },
+            response: description
+          }
+          
+        case 'CHAT':
+        default:
+          return {
+            success: true,
+            response: 'I\'m here to help you build and navigate your memory palace!'
+          }
+      }
+    } catch (error) {
+      console.error(`Error executing command ${action}:`, error)
+      return {
+        success: false,
+        error: error.message,
+        response: `I encountered an error while ${action.toLowerCase().replace('_', ' ')}: ${error.message}`
+      }
+    }
+  }
+
+  // === HELPER METHODS ===
+
+  /**
+   * Extract description from input
+   */
+  extractDescription(input, type) {
+    const patterns = {
+      room: /(?:room|space|area)\s+(?:like|with|of|that)\s+(.+?)(?:\.|$)/i,
+      object: /(?:object|item|thing)\s+(?:called|named|with|that)\s+(.+?)(?:\.|$)/i
+    }
+    
+    const pattern = patterns[type]
+    if (pattern) {
+      const match = input.match(pattern)
+      if (match) return match[1].trim()
+    }
+    
+    return input.replace(/^(create|add|make|build)\s+/i, '').trim()
+  }
+
+  /**
+   * Extract name from input
+   */
+  extractName(input) {
+    const quotedMatch = input.match(/"([^"]+)"/i)
+    if (quotedMatch) return quotedMatch[1]
+    
+    const namedMatch = input.match(/(?:called|named)\s+([a-zA-Z\s]+)/i)
+    if (namedMatch) return namedMatch[1].trim()
+    
+    return null
+  }
+
+  /**
+   * Extract room name from input
+   */
+  extractRoomName(input) {
+    const quotedMatch = input.match(/"([^"]+)"/i)
+    if (quotedMatch) return quotedMatch[1]
+    
+    const toMatch = input.match(/(?:to|into)\s+([a-zA-Z\s]+)/i)
+    if (toMatch) return toMatch[1].trim()
+    
+    return null
+  }
+
+  /**
+   * Add message to conversation history
+   */
+  addToHistory(role, content) {
+    this.state.conversationHistory.push({
+      role,
+      content,
+      timestamp: new Date().toISOString()
+    })
+    
+    // Trim history if too long
+    if (this.state.conversationHistory.length > 10) {
+      this.state.conversationHistory = this.state.conversationHistory.slice(-10)
+    }
+  }
+
+  // === PUBLIC API ===
+
+  /**
    * Get current application state
-   * @returns {Object} Current state information
    */
   getCurrentState() {
-    const currentRoom = this.roomManager?.getCurrentRoom()
-    const userState = this.stateManager.getUserState()
+    const currentRoom = this.getCurrentRoom()
     
     return {
       isInitialized: this.isInitialized,
       isRunning: this.isRunning,
       currentRoom,
-      userState,
+      userState: this.state.user,
       stats: {
-        totalRooms: this.roomManager?.getAllRooms().length || 0,
-        totalObjects: Array.from(this.stateManager.getObjects().values()).length,
+        totalRooms: this.state.rooms.size,
+        totalObjects: this.state.objects.size,
         metrics: this.metrics
       }
     }
   }
 
   /**
-   * Create a new room
-   * @param {string} name - Room name
-   * @param {string} description - Room description
-   * @param {Object} options - Creation options
-   * @returns {Promise<Object>} Created room
-   */
-  async createRoom(name, description, options = {}) {
-    if (!this.roomManager) {
-      throw new Error('Room manager not initialized')
-    }
-    
-    return this.roomManager.createRoom(name, description, options)
-  }
-
-  /**
-   * Navigate to a room
-   * @param {string} roomId - Target room ID
-   * @returns {Promise<Object|null>} Target room
-   */
-  async navigateToRoom(roomId) {
-    if (!this.roomManager) {
-      throw new Error('Room manager not initialized')
-    }
-    
-    return this.roomManager.navigateToRoom(roomId)
-  }
-
-  /**
-   * Add an object to current room
-   * @param {string} name - Object name
-   * @param {string} information - Memory information
-   * @param {Object} position - 3D position
-   * @returns {Promise<Object>} Created object
-   */
-  async addObject(name, information, position = null) {
-    console.log(`[MemoryPalaceCore] 🏛️ CORE: addObject called`, {
-      name,
-      information: information?.substring(0, 100) + (information?.length > 100 ? '...' : ''),
-      position,
-      timestamp: new Date().toISOString()
-    })
-
-    if (!this.objectManager || !this.roomManager) {
-      console.error(`[MemoryPalaceCore] ❌ CORE: addObject failed - managers not initialized`, {
-        hasObjectManager: !!this.objectManager,
-        hasRoomManager: !!this.roomManager
-      })
-      throw new Error('Managers not initialized')
-    }
-    
-    const currentRoomId = this.roomManager.currentRoomId
-    if (!currentRoomId) {
-      console.error(`[MemoryPalaceCore] ❌ CORE: addObject failed - no current room`)
-      throw new Error('No current room')
-    }
-    
-    console.log(`[MemoryPalaceCore] 📍 CORE: passing object to ObjectManager`, {
-      currentRoomId,
-      objectName: name,
-      hasPosition: !!position
-    })
-
-    const result = await this.objectManager.addObject(currentRoomId, name, information, position)
-    
-    console.log(`[MemoryPalaceCore] ✅ CORE: addObject completed`, {
-      objectId: result.id,
-      objectName: result.name,
-      roomId: result.roomId,
-      position: result.position,
-      timestamp: new Date().toISOString()
-    })
-
-    return result
-  }
-
-  /**
-   * Get all rooms
-   * @returns {Object[]} Array of rooms
-   */
-  getAllRooms() {
-    return this.roomManager?.getAllRooms() || []
-  }
-
-  /**
-   * Get objects in current room
-   * @returns {Object[]} Array of objects
-   */
-  getCurrentRoomObjects() {
-    const currentRoomId = this.roomManager?.currentRoomId
-    return currentRoomId ? this.objectManager?.getRoomObjects(currentRoomId) || [] : []
-  }
-
-  /**
    * Get application settings
-   * @returns {Object} Current settings
    */
   getSettings() {
-    const userState = this.stateManager.getUserState()
-    return userState.settings || {}
+    return this.state.user.settings || {}
   }
 
   /**
    * Update application settings
-   * @param {Object} updates - Settings updates
-   * @returns {Promise<Object>} Updated settings
    */
   async updateSettings(updates) {
-    const currentSettings = this.getSettings()
-    const newSettings = { ...currentSettings, ...updates }
+    this.state.user.settings = { ...this.state.user.settings, ...updates }
+    await this.saveState()
     
-    await this.stateManager.updateUserState({ settings: newSettings })
-    this.emit('settings_updated', newSettings)
-    
-    return newSettings
-  }
-
-  /**
-   * Enable/disable autopilot mode
-   * @param {boolean} enabled - Enable autopilot
-   */
-  setAutopilotMode(enabled) {
-    this.interactionController?.setAutopilotMode(enabled)
+    this.emit('settings_updated', this.state.user.settings)
+    return this.state.user.settings
   }
 
   /**
    * Export palace data
-   * @returns {Object} Exportable data
    */
   exportPalace() {
     return {
       version: this.version,
       exportedAt: new Date().toISOString(),
-      data: this.stateManager.exportState(),
+      data: {
+        user: this.state.user,
+        rooms: Object.fromEntries(this.state.rooms),
+        objects: Object.fromEntries(this.state.objects),
+        connections: Object.fromEntries(this.state.connections),
+        conversationHistory: this.state.conversationHistory
+      },
       metadata: {
         stats: this.getCurrentState().stats,
         config: this.config
@@ -446,13 +1023,23 @@ export class MemoryPalaceCore extends EventEmitter {
 
   /**
    * Import palace data
-   * @param {Object} data - Data to import
-   * @returns {Promise<boolean>} Success status
    */
   async importPalace(data) {
     try {
       if (data.version && data.data) {
-        await this.stateManager.importState(data.data)
+        // Clear current state
+        this.state.rooms.clear()
+        this.state.objects.clear()
+        this.state.connections.clear()
+        
+        // Import data
+        this.state.user = data.data.user || this.state.user
+        this.state.rooms = new Map(Object.entries(data.data.rooms || {}))
+        this.state.objects = new Map(Object.entries(data.data.objects || {}))
+        this.state.connections = new Map(Object.entries(data.data.connections || {}))
+        this.state.conversationHistory = data.data.conversationHistory || []
+        
+        await this.saveState()
         this.emit('palace_imported', data.metadata)
         return true
       } else {
@@ -470,11 +1057,25 @@ export class MemoryPalaceCore extends EventEmitter {
 
   /**
    * Clear all palace data
-   * @returns {Promise<boolean>} Success status
    */
   async clearPalace() {
     try {
-      await this.stateManager.clearState()
+      // Clear state
+      this.state.rooms.clear()
+      this.state.objects.clear()
+      this.state.connections.clear()
+      this.state.conversationHistory = []
+      this.state.user.currentRoomId = null
+      this.state.user.roomCounter = 0
+      this.state.user.objectCounter = 0
+      
+      // Clear localStorage
+      const keys = ['user', 'rooms', 'objects', 'connections', 'conversationHistory']
+      keys.forEach(key => {
+        localStorage.removeItem(`palais_${key}`)
+      })
+      
+      await this.saveState()
       this.emit('palace_cleared')
       return true
     } catch (error) {
@@ -485,52 +1086,35 @@ export class MemoryPalaceCore extends EventEmitter {
 
   /**
    * Get system performance metrics
-   * @returns {Object} Performance data
    */
   getMetrics() {
     return {
       ...this.metrics,
       uptime: this.isRunning ? performance.now() - this.metrics.initTime : 0,
-      memoryUsage: this.calculateMemoryUsage()
-    }
-  }
-
-  /**
-   * Calculate approximate memory usage
-   * @returns {Object} Memory usage statistics
-   */
-  calculateMemoryUsage() {
-    const rooms = this.stateManager.getRooms()
-    const objects = this.stateManager.getObjects()
-    const connections = this.stateManager.getConnections()
-    
-    return {
-      rooms: rooms.size,
-      objects: objects.size,
-      connections: connections.size,
-      conversationHistory: this.interactionController?.conversationHistory?.length || 0
+      memoryUsage: {
+        rooms: this.state.rooms.size,
+        objects: this.state.objects.size,
+        connections: this.state.connections.size,
+        conversationHistory: this.state.conversationHistory.length
+      }
     }
   }
 
   /**
    * Get system health status
-   * @returns {Object} Health check results
    */
   getHealthStatus() {
     return {
       initialized: this.isInitialized,
       running: this.isRunning,
-      stateManager: !!this.stateManager,
-      roomManager: !!this.roomManager,
-      objectManager: !!this.objectManager,
-      interactionController: !!this.interactionController,
+      hasRooms: this.state.rooms.size > 0,
+      hasCurrentRoom: !!this.state.user.currentRoomId,
       lastError: this.lastError || null
     }
   }
 
   /**
    * Restart the system
-   * @returns {Promise<boolean>} Success status
    */
   async restart() {
     await this.stop()
@@ -542,36 +1126,15 @@ export class MemoryPalaceCore extends EventEmitter {
    */
   async dispose() {
     try {
-      // Stop the system if it's running
       if (this.isRunning) {
         await this.stop()
       }
       
-      // Properly dispose of each subsystem if they have dispose methods
-      if (this.interactionController?.dispose) {
-        await this.interactionController.dispose()
-      }
-      
-      if (this.objectManager?.dispose) {
-        await this.objectManager.dispose()
-      }
-      
-      if (this.roomManager?.dispose) {
-        await this.roomManager.dispose()
-      }
-      
-      if (this.stateManager?.dispose) {
-        await this.stateManager.dispose()
-      }
-      
       // Clear all event listeners
-      this.clear()
+      this.removeAllListeners()
       
-      // Clear subsystem references
-      this.stateManager = null
-      this.roomManager = null
-      this.objectManager = null
-      this.interactionController = null
+      // Clear state references
+      this.state = null
       
       this.isInitialized = false
       this.isRunning = false
@@ -579,6 +1142,89 @@ export class MemoryPalaceCore extends EventEmitter {
       console.log('[MemoryPalaceCore] All resources disposed successfully')
     } catch (error) {
       console.error('[MemoryPalaceCore] Error during disposal:', error)
+    }
+  }
+
+  // === LEGACY COMPATIBILITY ===
+  // These methods provide compatibility with the old manager-based system
+
+  /**
+   * Legacy compatibility - provides roomManager-like interface
+   */
+  get roomManager() {
+    return {
+      currentRoomId: this.state.user.currentRoomId,
+      getCurrentRoom: () => this.getCurrentRoom(),
+      getAllRooms: () => this.getAllRooms(),
+      createRoom: (name, description, options) => this.createRoom(name, description, options),
+      editRoom: (roomId, updates) => this.editRoom(roomId, updates),
+      deleteRoom: (roomId) => this.deleteRoom(roomId),
+      navigateToRoom: (roomId) => this.navigateToRoom(roomId),
+      findRoomByName: (name) => this.findRoomByName(name),
+      generateRoomImage: (roomId, description) => this.generateRoomImage(roomId, description)
+    }
+  }
+
+  /**
+   * Legacy compatibility - provides objectManager-like interface
+   */
+  get objectManager() {
+    return {
+      addObject: (roomId, name, information, position) => {
+        // For legacy compatibility, if roomId is provided, temporarily set it as current
+        const originalRoomId = this.state.user.currentRoomId
+        if (roomId !== originalRoomId) {
+          this.state.user.currentRoomId = roomId
+        }
+        const result = this.addObject(name, information, position)
+        // Restore original room
+        if (roomId !== originalRoomId) {
+          this.state.user.currentRoomId = originalRoomId
+        }
+        return result
+      },
+      updateObject: (objectId, updates) => this.updateObject(objectId, updates),
+      deleteObject: (objectId) => this.deleteObject(objectId),
+      getRoomObjects: (roomId) => this.getRoomObjects(roomId),
+      getObject: (objectId) => this.state.objects.get(objectId) || null,
+      findObjectsByName: (name, roomId) => this.findObjectsByName(name, roomId),
+      screenToWorldPosition: (screenX, screenY, distance) => this.screenToWorldPosition(screenX, screenY, distance),
+      generateDefaultPosition: (roomId) => this.generateDefaultPosition(roomId)
+    }
+  }
+
+  /**
+   * Legacy compatibility - provides stateManager-like interface
+   */
+  get stateManager() {
+    return {
+      getUserState: () => this.state.user,
+      updateUserState: (updates) => {
+        this.state.user = { ...this.state.user, ...updates }
+        return this.saveState()
+      },
+      getRooms: () => this.state.rooms,
+      getRoom: (roomId) => this.state.rooms.get(roomId),
+      setRoom: (room) => {
+        this.state.rooms.set(room.id, room)
+        return this.saveState()
+      },
+      getObjects: () => this.state.objects,
+      getRoomObjects: (roomId) => this.getRoomObjects(roomId),
+      setObject: (object) => {
+        this.state.objects.set(object.id, object)
+        return this.saveState()
+      },
+      deleteObject: (objectId) => this.deleteObject(objectId),
+      getConnections: () => this.state.connections,
+      setConnection: (connection) => {
+        this.state.connections.set(connection.id, connection)
+        return this.saveState()
+      },
+      generateId: () => this.generateId(),
+      exportState: () => this.exportPalace().data,
+      importState: (data) => this.importPalace({ version: this.version, data }),
+      clearState: () => this.clearPalace()
     }
   }
 }
