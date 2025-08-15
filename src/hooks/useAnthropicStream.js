@@ -11,7 +11,7 @@ import SettingsManager from '../services/SettingsManager.js'
 const settingsManager = new SettingsManager()
 import MemoryPalaceToolManager from '../utils/memoryPalaceTools.js'
 
-export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
+export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null, voiceInterface = null) => {
   const [status, setStatus] = useState('idle') // 'idle' | 'thinking' | 'streaming' | 'tool_use' | 'waiting_for_user'
   const [liveBlocks, setLiveBlocks] = useState(null)
   const [pendingTool, setPendingTool] = useState(null)
@@ -143,6 +143,15 @@ MEMORY PALACE TOOLS AVAILABLE:
 - get_room_info: Get detailed info about current room and its objects
 - add_object_at_position: Add memory object at specific spatial coordinates (for creation mode)
 - create_door_at_position: Create door/connection at specific spatial coordinates (for creation mode)
+- narrate: Speak text aloud with speech synthesis and closed captions
+
+CRITICAL NARRATION INSTRUCTIONS:
+- ALWAYS use the 'narrate' tool for ALL spoken responses to the user
+- NEVER include narrative text in your message content - use the narrate tool instead
+- For actions: Use appropriate memory palace tools AND narrate tool to explain what happened
+- For responses: Use ONLY the narrate tool, do not include text in message content
+- For conversations: Use narrate tool for all speech output
+- The narrate tool handles speech synthesis and captions automatically
 
 IMPORTANT GUIDELINES:
 - Always use tools to perform actions rather than just describing them
@@ -169,7 +178,7 @@ Use these tools actively to help users build and navigate their memory palace.`
     // Check if core is properly initialized before creating tool manager
     if (memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning) {
       console.log('[useAnthropicStream] Creating tool manager with initialized core')
-      return new MemoryPalaceToolManager(memoryPalaceCore)
+      return new MemoryPalaceToolManager(memoryPalaceCore, voiceInterface)
     } else {
       if (memoryPalaceCore) {
         console.warn('[useAnthropicStream] Memory Palace core provided but not fully initialized:', {
@@ -182,7 +191,7 @@ Use these tools actively to help users build and navigate their memory palace.`
       }
       return null
     }
-  }, [memoryPalaceCore])
+  }, [memoryPalaceCore, voiceInterface])
 
   // Get memory palace tools for Claude
   const getMemoryPalaceTools = useCallback(() => {
@@ -190,7 +199,7 @@ Use these tools actively to help users build and navigate their memory palace.`
   }, [])
 
   // Execute memory palace tool calls
-  const executeToolCall = useCallback(async (toolName, input, toolUseId) => {
+  const executeToolCall = useCallback(async (toolName, input, toolUseId, voiceInterface) => {
     console.log(`[useAnthropicStream] Executing tool: ${toolName}`, input)
     
     // Check if core is ready at execution time (in case it was initialized after hook mount)
@@ -204,7 +213,7 @@ Use these tools actively to help users build and navigate their memory palace.`
       // Core is ready but toolManager wasn't created or updated yet
       // Create a new tool manager on-demand
       console.log('[useAnthropicStream] Creating on-demand tool manager for execution')
-      const onDemandToolManager = new MemoryPalaceToolManager(memoryPalaceCore)
+      const onDemandToolManager = new MemoryPalaceToolManager(memoryPalaceCore, voiceInterface)
       return await onDemandToolManager.executeTool(toolName, input, toolUseId)
     } else {
       // Fallback responses when memory palace core is not available
@@ -228,11 +237,14 @@ Use these tools actively to help users build and navigate their memory palace.`
         case 'list_rooms':
           return 'Room listing not available - Memory Palace core not connected.'
         
+        case 'narrate':
+          return `Narration: ${input.text}`
+        
         default:
           return `Unknown tool: ${toolName}`
       }
     }
-  }, [toolManager])
+  }, [toolManager, voiceInterface])
 
   // Assemble final message from streaming blocks
   const assembleMessage = useCallback((blocks) => {
@@ -259,7 +271,7 @@ Use these tools actively to help users build and navigate their memory palace.`
   }, [])
 
   // Stream a single message
-  const streamMessage = useCallback(async (messages, context = {}) => {
+  const streamMessage = useCallback(async (messages, context = {}, voiceInterface = null) => {
     const anthropic = getAnthropicClient() // Get client on-demand
 
     const body = buildRequestBody(messages, context)
@@ -351,7 +363,7 @@ Use these tools actively to help users build and navigate their memory palace.`
   }, [getAnthropicClient, buildRequestBody, mergeDelta, assembleMessage])
 
   // Main send function with tool use loop
-  const send = useCallback(async (history, userText, context = {}) => {
+  const send = useCallback(async (history, userText, context = {}, voiceInterface = null) => {
     // Client availability is checked in streamMessage via getAnthropicClient()
     if (status !== 'idle') {
       const error = 'Stream already in progress'
@@ -374,12 +386,18 @@ Use these tools actively to help users build and navigate their memory palace.`
         setStatus('streaming')
 
         const { message, stopReason } = await streamMessage(currentMessages, context)
-
+        if (!message.content || message.content.length === 0) {
+          console.warn('[useAnthropicStream] Empty message content:', message)
+          break;
+        }
         // Add assistant message
         allNewMessages.push(message)
         currentMessages.push(message)
 
         if (onAddMessage) {
+          console.log(`[useAntropicStream] on Message: `, message)
+          
+
           onAddMessage({
             id: crypto.randomUUID(),
             role: message.role,
@@ -396,7 +414,7 @@ Use these tools actively to help users build and navigate their memory palace.`
           for (const block of message.content) {
             if (block.type === 'tool_use') {
               try {
-                const result = await executeToolCall(block.name, block.input, block.id)
+                const result = await executeToolCall(block.name, block.input, block.id, voiceInterface)
                 toolResults.push({
                   type: 'tool_result',
                   tool_use_id: block.id,

@@ -22,14 +22,15 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
   const synthRef = useRef(null)
   const captionTimeoutRef = useRef(null)
   
-  // Initialize Anthropic streaming hook with memory palace core
+  // Initialize Anthropic streaming hook with memory palace core and voice interface
   // Ensure we only pass the core if it's properly initialized
   const { send, status, liveBlocks } = useAnthropicStream(
     (message) => {
       // Handle incoming messages from stream
       console.log('[VoiceInterface] Received streaming message:', message)
     },
-    memoryPalaceCore
+    memoryPalaceCore,
+    this
   )
 
   useEffect(() => {
@@ -266,7 +267,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         
         // Stream response from Anthropic using send function
         try {
-          const newMessages = await send(conversationHistory, command, context)
+          const newMessages = await send(conversationHistory, command, context, {speakResponse})
           
           console.log('[VoiceInterface] Send response received:', {
             newMessageCount: newMessages.length,
@@ -302,10 +303,10 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
             ...newMessages
           ])
           
-          // Set response for display
+          // Set response for display (but don't speak it - narrate tool handles speech)
           if (responseText) {
             setResponse(responseText)
-            speakResponse(responseText)
+            // Note: Speech synthesis is now handled by the narrate tool, not here
           }
           
           // Handle tool calls as commands

@@ -6,10 +6,11 @@
 import replicateAPI from '../services/ReplicateAPI.js'
 
 export class MemoryPalaceToolManager {
-  constructor(memoryPalaceCore) {
+  constructor(memoryPalaceCore, voiceInterface = null) {
     this.core = memoryPalaceCore
     this.roomManager = memoryPalaceCore?.roomManager
     this.objectManager = memoryPalaceCore?.objectManager
+    this.voiceInterface = voiceInterface
     
     // Track initialization state
     this.isReady = this.checkIfReady()
@@ -20,6 +21,7 @@ export class MemoryPalaceToolManager {
       coreRunning: this.core?.isRunning,
       hasRoomManager: !!this.roomManager,
       hasObjectManager: !!this.objectManager,
+      hasVoiceInterface: !!this.voiceInterface,
       isReady: this.isReady
     })
   }
@@ -96,6 +98,9 @@ export class MemoryPalaceToolManager {
         
         case 'create_door_at_position':
           return await this.createDoorAtPosition(input)
+        
+        case 'narrate':
+          return await this.narrateText(input)
         
         default:
           throw new Error(`Unknown tool: ${toolName}`)
@@ -358,6 +363,32 @@ export class MemoryPalaceToolManager {
   }
 
   /**
+   * Narrate text using speech synthesis and captions
+   */
+  async narrateText({ text }) {
+    try {
+      console.log(`[MemoryPalaceTools] Narrating text:`, text.substring(0, 100) + '...')
+      
+      if (!this.voiceInterface) {
+        console.warn('[MemoryPalaceTools] No voice interface available for narration')
+        return `Narration not available - voice interface not connected`
+      }
+
+      // Call the voice interface's speakResponse method
+      if (typeof this.voiceInterface.speakResponse === 'function') {
+        await this.voiceInterface.speakResponse(text)
+        return `Successfully narrated text`
+      } else {
+        console.warn('[MemoryPalaceTools] Voice interface speakResponse method not available')
+        return `Narration method not available`
+      }
+    } catch (error) {
+      console.error(`[MemoryPalaceTools] Error narrating text:`, error)
+      return `Failed to narrate text: ${error.message}`
+    }
+  }
+
+  /**
    * Regenerate image for current room using existing description
    */
   async regenerateRoomImage(input = {}) {
@@ -574,6 +605,20 @@ export class MemoryPalaceToolManager {
             }
           },
           required: ['description', 'targetRoomName', 'targetRoomDescription', 'position']
+        }
+      },
+      {
+        name: 'narrate',
+        description: 'Speak text aloud with speech synthesis and closed captions',
+        input_schema: {
+          type: 'object',
+          properties: {
+            text: {
+              type: 'string',
+              description: 'Text to speak aloud to the user'
+            }
+          },
+          required: ['text']
         }
       }
     ]
