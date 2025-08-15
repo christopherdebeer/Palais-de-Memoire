@@ -98,7 +98,7 @@ const SettingsPanel = ({
         groupedStructure: Object.entries(grouped).map(([lang, group]) => ({
           language: lang,
           count: group.voices.length,
-          voices: group.voices.map(v => v.name)
+          voices: group.voices.map(v => ({ name: v.name, displayName: v.displayName, hasName: !!v.name }))
         }))
       })
     } catch (error) {
@@ -400,12 +400,16 @@ const SettingsPanel = ({
                           .map(([langCode, langGroup]) => (
                             <optgroup key={langCode} label={`${langGroup.name} (${langGroup.voices.length})`}>
                               {langGroup.voices
-                                .filter(voice => voice.name && voice.name.trim()) // Filter out voices with invalid names
-                                .map((voice, index) => (
-                                  <option key={`${langCode}-${voice.name || `voice-${index}`}`} value={voice.name}>
-                                    {voice.displayName}
-                                  </option>
-                                ))}
+                                .filter(voice => voice && (voice.name || voice.voiceURI) && (voice.name || voice.voiceURI).trim()) // More robust voice validation
+                                .map((voice, index) => {
+                                  const voiceName = voice.name || voice.voiceURI || `voice-${index}`
+                                  const displayName = voice.displayName || voice.name || voice.voiceURI || 'Unknown Voice'
+                                  return (
+                                    <option key={`${langCode}-${voiceName}`} value={voiceName}>
+                                      {displayName}
+                                    </option>
+                                  )
+                                })}
                             </optgroup>
                           ))}
                       </select>
