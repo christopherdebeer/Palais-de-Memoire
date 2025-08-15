@@ -246,17 +246,10 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
         
         const context = {
-          currentRoom: currentPalaceState?.currentRoom || null,
-          rooms: isCoreReady ? memoryPalaceCore.getAllRooms() : [],
-          objects: isCoreReady ? memoryPalaceCore.getCurrentRoomObjects() : [],
-          // Add creation mode context
+          isCoreReady,
           isCreationMode: isCreationMode || false,
           creationPosition: pendingCreationPosition || null,
-          // Add core status for better error handling
-          coreStatus: {
-            isInitialized: memoryPalaceCore?.isInitialized || false,
-            isRunning: memoryPalaceCore?.isRunning || false
-          }
+          ...memoryPalaceCore.getCurrentState()
         }
         
         console.log('[VoiceInterface] Sending message with context:', {
@@ -558,21 +551,6 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
       isProcessing,
       apiConfigured
     })
-    
-    // // Check if API is configured before starting voice recognition
-    // if (!apiConfigured) {
-    //   console.warn('[VoiceInterface] API not configured - providing feedback instead of starting recognition')
-    //   const fallbackReason = 'Anthropic API key not configured or invalid'
-    //   const response = 'Please configure your Anthropic API key in the settings panel for AI-powered memory palace assistance.'
-      
-    //   // Provide the same feedback as text input would
-    //   if (onCaptionUpdate) {
-    //     onCaptionUpdate(response, 'synthesis')
-    //   }
-    //   speakResponse(response)
-      
-    //   return
-    // }
     
     if (recognitionRef.current && enabled && isSupported && !isListening) {
       try {

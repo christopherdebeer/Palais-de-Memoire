@@ -401,7 +401,7 @@ const MemoryPalace = forwardRef(({
     context.fillStyle = isDoor ? '#ffd700' : '#4dabf7'
     context.font = 'bold 16px Arial'
     context.textAlign = 'center'
-    context.fillText(obj.name.substring(0, 8), 64, 20)
+    context.fillText(obj.name, 64, 20)
     // context.fillText(distanceText, 64, 40)
     
     const texture = new THREE.CanvasTexture(canvas)
@@ -424,7 +424,7 @@ const MemoryPalace = forwardRef(({
       objectId: obj.id,
       isDoor: isDoor,
       sprite: sprite,
-      originalOpacity: 0.0,
+      originalOpacity: 1.0,
       originalPosition: indicatorPosition.clone(),
       originalSpritePosition: sprite.position.clone()
     }

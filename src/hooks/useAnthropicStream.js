@@ -92,7 +92,7 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null, voiceI
     const basePrompt = settingsManager.get('systemPrompt') || 
       'You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands.'
     
-    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null, coreStatus = {} } = context
+    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null } = context
 
     let contextPrompt = basePrompt + '\n\n'
 
