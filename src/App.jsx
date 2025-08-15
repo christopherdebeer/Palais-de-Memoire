@@ -354,18 +354,8 @@ function App({core}) {
         // Convert result to string if it's an object
         const resultText = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)
         
-        // Trigger TTS and captions instead of alert
-        handleCaptionUpdate(resultText, 'synthesis')
-        
-        // Use TTS functionality
-        if (window.speechSynthesis && resultText) {
-          window.speechSynthesis.cancel()
-          const utterance = new SpeechSynthesisUtterance(resultText)
-          utterance.rate = 0.9
-          utterance.pitch = 1.0
-          utterance.volume = 0.8
-          window.speechSynthesis.speak(utterance)
-        }
+        // Trigger TTS and captions using speakResponse for consistency
+        speakResponse(resultText)
         
       } catch (error) {
         console.error('[App] Error executing direct action:', error)
@@ -427,46 +417,57 @@ function App({core}) {
           volume: utterance.volume
         })
   
-        // Use configured voice with VoiceManager for better voice handling
-        const selectedVoiceName = settingsManager.get('voice')
-        console.log('[App] Voice selection:', {
-          selectedVoiceName,
-          voiceManagerLoaded: !voiceManager.isLoading()
-        })
+        // iOS Safari detection for voice handling workaround
+        const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
         
-        if (selectedVoiceName) {
-          try {
-            const selectedVoice = await voiceManager.findVoiceByName(selectedVoiceName)
-            if (selectedVoice) {
-              utterance.voice = selectedVoice
-              console.log('[App] Using voice from VoiceManager:', {
-                name: selectedVoice.name,
-                lang: selectedVoice.lang,
-                localService: selectedVoice.localService
-              })
-            } else {
-              console.warn('[App] Selected voice not found:', selectedVoiceName)
-              // Fallback to default voice for the language
+        console.log('[App] iOS Safari detection:', { isIOSSafari, userAgent: navigator.userAgent })
+        
+        // Only set voice if not on iOS Safari to avoid boundary event issues
+        if (!isIOSSafari) {
+          // Use configured voice with VoiceManager for better voice handling
+          const selectedVoiceName = settingsManager.get('voice')
+          console.log('[App] Voice selection:', {
+            selectedVoiceName,
+            voiceManagerLoaded: !voiceManager.isLoading()
+          })
+          
+          if (selectedVoiceName) {
+            try {
+              const selectedVoice = await voiceManager.findVoiceByName(selectedVoiceName)
+              if (selectedVoice) {
+                utterance.voice = selectedVoice
+                console.log('[App] Using voice from VoiceManager:', {
+                  name: selectedVoice.name,
+                  lang: selectedVoice.lang,
+                  localService: selectedVoice.localService
+                })
+              } else {
+                console.warn('[App] Selected voice not found:', selectedVoiceName)
+                // Fallback to default voice for the language
+                const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
+                if (defaultVoice) {
+                  utterance.voice = defaultVoice
+                  console.log('[App] Using default voice fallback:', defaultVoice.name)
+                }
+              }
+            } catch (error) {
+              console.error('[App] Error setting voice:', error)
+            }
+          } else {
+            // No voice selected, use system default or get a recommended voice
+            try {
               const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
               if (defaultVoice) {
                 utterance.voice = defaultVoice
-                console.log('[App] Using default voice fallback:', defaultVoice.name)
+                console.log('[App] Using system default voice:', defaultVoice.name)
               }
+            } catch (error) {
+              console.warn('[App] Could not set default voice:', error)
             }
-          } catch (error) {
-            console.error('[App] Error setting voice:', error)
           }
         } else {
-          // No voice selected, use system default or get a recommended voice
-          try {
-            const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
-            if (defaultVoice) {
-              utterance.voice = defaultVoice
-              console.log('[App] Using system default voice:', defaultVoice.name)
-            }
-          } catch (error) {
-            console.warn('[App] Could not set default voice:', error)
-          }
+          console.log('[App] iOS Safari detected - skipping voice assignment to avoid boundary event issues')
         }
   
         // Enhanced caption display with karaoke-style highlighting
@@ -709,18 +710,8 @@ function App({core}) {
       // Convert result to string if it's an object
       const resultText = typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)
       
-      // Trigger TTS and captions instead of alert
-      handleCaptionUpdate(`Success: ${resultText}`, 'synthesis')
-      
-      // Use TTS functionality
-      if (window.speechSynthesis && resultText) {
-        window.speechSynthesis.cancel()
-        const utterance = new SpeechSynthesisUtterance(`Success: ${resultText}`)
-        utterance.rate = 0.9
-        utterance.pitch = 1.0
-        utterance.volume = 0.8
-        window.speechSynthesis.speak(utterance)
-      }
+      // Trigger TTS and captions using speakResponse for consistency
+      speakResponse(`Success: ${resultText}`)
       
     } catch (error) {
       console.error('[App] Error executing action:', error)
