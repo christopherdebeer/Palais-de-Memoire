@@ -115,7 +115,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0xffd700,
         transparent: true,
-        opacity: 0.0, // Invisible hit area
+        opacity: 1.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -126,7 +126,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
-        opacity: 0.0, // Invisible hit area
+        opacity: 1.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -424,7 +424,7 @@ const MemoryPalace = forwardRef(({
       objectId: obj.id,
       isDoor: isDoor,
       sprite: sprite,
-      originalOpacity: 0.8,
+      originalOpacity: 0.0,
       originalPosition: indicatorPosition.clone(),
       originalSpritePosition: sprite.position.clone()
     }
@@ -489,7 +489,9 @@ const MemoryPalace = forwardRef(({
     console.log(`[MemoryPalace] 🎯 Updated off-screen indicators:`, {
       totalObjects: objects.length,
       indicatorsCreated: currentIndicators.size,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      objects,
+      currentIndicators,
     })
   }
 
