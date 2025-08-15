@@ -368,10 +368,6 @@ const SettingsPanel = ({
                           .map(([langCode, langGroup]) => (
                             <optgroup key={langCode} label={`${langGroup.name} (${langGroup.voices.length})`}>
                               {langGroup.voices
-                                .map(x => {
-                                  console.log(`[SettingsPanel] (${langGroup.name}) voice: `, x);
-                                  return x;
-                                })
                                 .filter(voice => voice.name && voice.name.trim()) // Filter out voices with invalid names
                                 .map((voice, index) => (
                                   <option key={`${langCode}-${voice.name || `voice-${index}`}`} value={voice.name}>
