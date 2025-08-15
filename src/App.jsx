@@ -424,7 +424,7 @@ function App({core}) {
         console.log('[App] iOS Safari detection:', { isIOSSafari, userAgent: navigator.userAgent })
         
         // Only set voice if not on iOS Safari to avoid boundary event issues
-        if (!isIOSSafari) {
+        if (true || !isIOSSafari) {
           // Use configured voice with VoiceManager for better voice handling
           const selectedVoiceName = settingsManager.get('voice')
           console.log('[App] Voice selection:', {
