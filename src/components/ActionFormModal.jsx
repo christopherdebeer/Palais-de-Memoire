@@ -83,16 +83,58 @@ const ActionFormModal = ({
 
   const getSelectOptions = (field, state) => {
     if (field.key === 'roomName') {
-      // We need to get actual rooms from the memory palace core
-      // Since we don't have direct access here, we'll show a message for now
-      // This should be enhanced to receive room data from the parent component
-      return []
+      // Get rooms from the memory palace core state
+      if (state && state.roomManager) {
+        const rooms = state.roomManager.getAllRooms() || [];
+        return rooms.map(room => ({
+          value: room.name,
+          label: `${room.name} - ${room.description.substring(0, 30)}...`
+        }));
+      } else if (state && state.core && state.core.getAllRooms) {
+        // Try alternative access pattern
+        const rooms = state.core.getAllRooms() || [];
+        return rooms.map(room => ({
+          value: room.name,
+          label: `${room.name} - ${room.description.substring(0, 30)}...`
+        }));
+      } else {
+        // If we can't access rooms through normal means,
+        // try to use the state directly if it contains rooms array
+        const coreState = window.memoryPalaceCore?.getCurrentState();
+        if (coreState && window.memoryPalaceCore && window.memoryPalaceCore.getAllRooms) {
+          const rooms = window.memoryPalaceCore.getAllRooms();
+          return rooms.map(room => ({
+            value: room.name,
+            label: `${room.name} - ${room.description.substring(0, 30)}...`
+          }));
+        }
+        
+        console.warn('Could not retrieve rooms for dropdown', state);
+        return [];
+      }
     }
     if (field.key === 'name' && action === 'remove_object') {
-      // We need to get actual objects from the current room
-      // Since we don't have direct access here, we'll show a message for now
-      // This should be enhanced to receive object data from the parent component
-      return []
+      // Get objects from the current room state
+      if (state && state.currentRoom && state.core && state.core.getCurrentRoomObjects) {
+        const objects = state.core.getCurrentRoomObjects() || [];
+        return objects.map(obj => ({
+          value: obj.name,
+          label: obj.name
+        }));
+      } else {
+        // If we can't access objects through normal means
+        const coreState = window.memoryPalaceCore?.getCurrentState();
+        if (coreState && window.memoryPalaceCore && window.memoryPalaceCore.getCurrentRoomObjects) {
+          const objects = window.memoryPalaceCore.getCurrentRoomObjects();
+          return objects.map(obj => ({
+            value: obj.name,
+            label: obj.name
+          }));
+        }
+        
+        console.warn('Could not retrieve objects for dropdown', state);
+        return [];
+      }
     }
     return []
   }

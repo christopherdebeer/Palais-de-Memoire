@@ -248,7 +248,7 @@ function App({core}) {
     
     return () => {
       // Mark as cancelled to prevent state updates
-      isCancelledRef.current = true
+      // isCancelledRef.current = true
       
       window.removeEventListener('resize', checkMobile)
       if (captionTimeoutRef.current) {
@@ -616,7 +616,7 @@ function App({core}) {
   }
 
   const handleCaptionUpdate = (text, mode, disableTimeout) => {
-    console.log('[App] Caption update:', { text, mode, captionsEnabled })
+    // console.log('[App] Caption update:', { text, mode, captionsEnabled })
     
     if (!captionsEnabled) {
       console.log('[App] Captions disabled - not showing')

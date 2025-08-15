@@ -500,7 +500,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         const words = text.split(/\s+/)
         
         utterance.onboundary = (event) => {
-          console.log('[VoiceInterface] TTS boundary event:', event.name, 'wordIndex:', wordIndex)
+          // console.log('[VoiceInterface] TTS boundary event:', event.name, 'wordIndex:', wordIndex)
           if (event.name === 'word' && captionsEnabled && onCaptionUpdate) {
             wordIndex++
             const spoken = words.slice(0, wordIndex).join(' ')
@@ -511,7 +511,7 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
               ? `<span class="spoken">${spoken}</span> ${remaining}`
               : `<span class="spoken">${spoken}</span>`
             
-            console.log('[VoiceInterface] Updating caption with highlighting:', highlightedText.substring(0, 50) + '...')
+            // console.log('[VoiceInterface] Updating caption with highlighting:', highlightedText.substring(0, 50) + '...')
             onCaptionUpdate(highlightedText, 'synthesis')
           }
         }

@@ -19,8 +19,7 @@ export { EventEmitter } from './EventEmitter.js'
 export { 
   CommandActions, 
   StateKeys, 
-  EventTypes, 
-  DefaultSettings 
+  EventTypes
 } from './types.js'
 
 /**

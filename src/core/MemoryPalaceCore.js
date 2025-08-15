@@ -3,7 +3,7 @@ import { StateManager } from './StateManager.js'
 import { RoomManager } from './RoomManager.js'
 import { ObjectManager } from './ObjectManager.js'
 import { InteractionController } from './InteractionController.js'
-import { EventTypes, DefaultSettings } from './types.js'
+import { EventTypes } from './types.js'
 import { persistenceService } from '../services/SimplePersistenceService.js'
 
 /**
@@ -287,7 +287,7 @@ export class MemoryPalaceCore extends EventEmitter {
   async applyConfiguration() {
     // Apply settings from config or load saved settings
     const userState = this.stateManager.getUserState()
-    const settings = { ...DefaultSettings, ...(userState.settings || {}) }
+    const settings = { ...(userState.settings || {}) }
     
     await this.stateManager.updateUserState({ settings })
     
@@ -308,8 +308,8 @@ export class MemoryPalaceCore extends EventEmitter {
       
       // Create the default room with the same description as the default skybox
       const defaultRoom = await this.roomManager.createRoom(
-        'Welcome Hall',
-        'A peaceful starting space for your memory palace. This elegant hall features classical architecture with warm lighting, perfect for beginning your journey of memory organization.',
+        'Study',
+        'A large study, with a desk with various papers and objects, the floor is covered with a old persian rug, bookshelfs and wooden filing cabnets line to walls, with a fireplace to the right, and a few closed wooden doors leading to ajoining rooms. There is a window, with heavy curtains open, revealing a snowy forrest at night.',
         { imageUrl: '/default_skybox.png' } 
       )
       
@@ -456,7 +456,7 @@ export class MemoryPalaceCore extends EventEmitter {
    */
   getSettings() {
     const userState = this.stateManager.getUserState()
-    return userState.settings || DefaultSettings
+    return userState.settings || {}
   }
 
   /**

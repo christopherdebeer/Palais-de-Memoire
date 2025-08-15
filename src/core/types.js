@@ -119,36 +119,8 @@ export const EventTypes = {
   ERROR_OCCURRED: 'error_occurred'
 }
 
-/**
- * Default settings object
- */
-export const DefaultSettings = {
-  voice: {
-    enabled: true,
-    selectedVoice: null,
-    speechRate: 0.9,
-    speechPitch: 1.0
-  },
-  ai: {
-    systemPrompt: 'You are a helpful memory palace assistant.',
-    responseTemperature: 0.7,
-    aestheticPrompt: 'photorealistic, high quality, immersive'
-  },
-  rendering: {
-    quality: 'high',
-    enableParticles: true,
-    compassVisible: true
-  },
-  accessibility: {
-    captions: false,
-    highContrast: false,
-    reducedMotion: false
-  }
-}
-
 export default {
   CommandActions,
   StateKeys, 
-  EventTypes,
-  DefaultSettings
+  EventTypes
 }

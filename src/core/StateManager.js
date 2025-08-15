@@ -1,5 +1,5 @@
 import { EventEmitter } from './EventEmitter.js'
-import { StateKeys, EventTypes, DefaultSettings } from './types.js'
+import { StateKeys, EventTypes } from './types.js'
 
 /**
  * Centralized state management for the Memory Palace application
@@ -111,7 +111,7 @@ export class StateManager extends EventEmitter {
         currentRoomId: null,
         roomCounter: 0,
         objectCounter: 0,
-        settings: { ...DefaultSettings }
+        settings: {}
       })
     }
 
