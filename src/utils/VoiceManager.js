@@ -9,9 +9,76 @@ export class VoiceManager {
     this.voicesLoaded = false
     this.listeners = new Set()
     this.loadingPromise = null
-    
+
+    // iOS detection (Mobile Safari, not Chrome/Firefox on iOS)
+    this.isIOSWebKit = /iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) &&
+                       /WebKit/i.test(navigator.userAgent) &&
+                       !/CriOS|FxiOS/i.test(navigator.userAgent)
+
+    this._primed = false      // whether we've already attempted a dummy speak
+    this._priming = null      // in-flight priming promise
+
     // Initialize voice loading
     this.initializeVoices()
+  }
+
+  /**
+   * PUBLIC: Call this from a user gesture (click/tap) *especially on iOS*
+   * to ensure voices are populated before you try to select a voice.
+   *
+   * Example:
+   *   button.addEventListener('click', () => voiceManager.prime())
+   */
+  async prime() {
+    await this._primeIOSVoicesOnce()
+    // After priming, ensure voices are (re)loaded
+    await this.initializeVoices()
+    return this.voices
+  }
+
+  /**
+   * Try to trigger iOS to actually populate voices by speaking a silent,
+   * ultra-short utterance. Works best when called inside a user gesture.
+   */
+  _primeIOSVoicesOnce() {
+    if (!('speechSynthesis' in window)) return Promise.resolve()
+    if (!this.isIOSWebKit) return Promise.resolve()
+    if (this._primed) return Promise.resolve()
+    if (this._priming) return this._priming
+
+    this._priming = new Promise((resolve) => {
+      try {
+        // Use NBSP or a single period; set volume to 0 to be silent.
+        const u = new SpeechSynthesisUtterance('\u00A0')
+        u.volume = 0
+        u.rate = 1
+        u.pitch = 1
+
+        // In case iOS queues forever, add a short timeout fail-safe.
+        let settled = false
+        const done = () => {
+          if (settled) return
+          settled = true
+          this._primed = true
+          resolve()
+        }
+
+        u.onend = done
+        u.onerror = done
+
+        // Kick it off (ideally inside a user gesture).
+        window.speechSynthesis.speak(u)
+
+        // Fallback: force-resolve after a short delay if events don't fire.
+        setTimeout(done, 250)
+      } catch {
+        // Even if it throws, mark as primed so we don't loop.
+        this._primed = true
+        resolve()
+      }
+    })
+
+    return this._priming
   }
 
   /**
@@ -22,37 +89,49 @@ export class VoiceManager {
       return this.loadingPromise
     }
 
-    this.loadingPromise = new Promise((resolve) => {
+    this.loadingPromise = new Promise(async (resolve) => {
       if (!('speechSynthesis' in window)) {
         console.warn('[VoiceManager] Speech Synthesis not supported')
+        this.voices = []
+        this.voicesLoaded = true
+        this.notifyListeners('voices_loaded', [])
         resolve([])
         return
       }
 
-      let voicesLoadedCount = 0
+      let attempts = 0
       const maxRetries = 10
-      const retryDelay = 100
+      const baseDelay = 100
 
       const loadVoices = () => {
-        const voices = window.speechSynthesis.getVoices()
-        console.log(`[VoiceManager] Voices loaded (attempt ${voicesLoadedCount + 1}):`, voices.length)
-        
-        if (voices.length > 0) {
-          this.voices = voices
+        const list = window.speechSynthesis.getVoices() || []
+        console.log(`[VoiceManager] Voices loaded (attempt ${attempts + 1}):`, list.length)
+
+        if (list.length > 0) {
+          this.voices = list
           this.voicesLoaded = true
-          this.notifyListeners('voices_loaded', voices)
-          resolve(voices)
+          this.notifyListeners('voices_loaded', list)
+          resolve(list)
           return true
         }
         return false
       }
 
-      const retryLoadVoices = () => {
+      const retry = async () => {
         if (loadVoices()) return
 
-        voicesLoadedCount++
-        if (voicesLoadedCount < maxRetries) {
-          setTimeout(retryLoadVoices, retryDelay * voicesLoadedCount) // Exponential backoff
+        attempts++
+
+        // If iOS and still empty, try the “dummy speak” prime once.
+        if (this.isIOSWebKit && attempts === 1) {
+          await this._primeIOSVoicesOnce()
+          // Re-check immediately after priming
+          if (loadVoices()) return
+        }
+
+        if (attempts < maxRetries) {
+          const delay = baseDelay * (attempts) // gentle backoff
+          setTimeout(retry, delay)
         } else {
           console.warn('[VoiceManager] Failed to load voices after', maxRetries, 'attempts')
           this.voices = []
@@ -62,14 +141,13 @@ export class VoiceManager {
         }
       }
 
-      // Try to load voices immediately
+      // Try immediately
       if (loadVoices()) return
 
-      // Set up voiceschanged event listener for browsers that need it (Chrome, Safari)
+      // Listen for voiceschanged where it’s reliable (Chrome/Safari desktop)
       const handleVoicesChanged = () => {
         console.log('[VoiceManager] voiceschanged event fired')
         if (!this.voicesLoaded && loadVoices()) {
-          // Remove the event listener once voices are loaded
           if (window.speechSynthesis.removeEventListener) {
             window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged)
           } else {
@@ -78,17 +156,14 @@ export class VoiceManager {
         }
       }
 
-      // Modern browsers
       if (window.speechSynthesis.addEventListener) {
         window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged)
-      } 
-      // Older browsers
-      else if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      } else if (window.speechSynthesis.onvoiceschanged !== undefined) {
         window.speechSynthesis.onvoiceschanged = handleVoicesChanged
       }
 
-      // Also try periodic retries for browsers that don't fire voiceschanged reliably
-      retryLoadVoices()
+      // Begin retries (and iOS prime on first pass)
+      retry()
     })
 
     return this.loadingPromise
@@ -111,13 +186,12 @@ export class VoiceManager {
     const voices = await this.getVoices()
     const grouped = {}
 
-    // Filter out invalid voices and process valid ones
     voices
-      .filter(voice => voice && voice.name && voice.name.trim()) // Filter out voices with invalid names
+      .filter(voice => voice && voice.name && voice.name.trim())
       .forEach(voice => {
         const lang = voice.lang || 'unknown'
-        const langCode = lang.split('-')[0] // Get base language code (e.g., 'en' from 'en-US')
-        
+        const langCode = lang.split('-')[0]
+
         if (!grouped[langCode]) {
           grouped[langCode] = {
             code: langCode,
@@ -125,7 +199,7 @@ export class VoiceManager {
             voices: []
           }
         }
-        
+
         grouped[langCode].voices.push({
           ...voice,
           displayName: this.getVoiceDisplayName(voice),
@@ -134,13 +208,9 @@ export class VoiceManager {
         })
       })
 
-    // Sort voices within each language group
     Object.values(grouped).forEach(group => {
       group.voices.sort((a, b) => {
-        // Prioritize local voices, then by name
-        if (a.isLocal !== b.isLocal) {
-          return b.isLocal - a.isLocal
-        }
+        if (a.isLocal !== b.isLocal) return (b.isLocal ? 1 : 0) - (a.isLocal ? 1 : 0)
         return a.displayName.localeCompare(b.displayName)
       })
     })
@@ -153,7 +223,7 @@ export class VoiceManager {
    */
   async getVoicesForLanguage(languageCode) {
     const voices = await this.getVoices()
-    return voices.filter(voice => 
+    return voices.filter(voice =>
       voice.lang && voice.lang.startsWith(languageCode)
     )
   }
@@ -171,12 +241,9 @@ export class VoiceManager {
    */
   async getDefaultVoiceForLanguage(languageCode = 'en') {
     const voices = await this.getVoicesForLanguage(languageCode)
-    
-    if (voices.length === 0) {
-      return null
-    }
 
-    // Prefer local voices
+    if (voices.length === 0) return null
+
     const localVoices = voices.filter(voice => voice.localService)
     if (localVoices.length > 0) {
       return localVoices[0]
@@ -190,24 +257,15 @@ export class VoiceManager {
    */
   async getRecommendedVoices() {
     const voices = await this.getVoices()
-    
-    // Define patterns for high-quality voices
+
     const qualityPatterns = [
-      /premium/i,
-      /enhanced/i,
-      /natural/i,
-      /neural/i,
-      /wavenet/i,
-      /studio/i
+      /premium/i, /enhanced/i, /natural/i, /neural/i, /wavenet/i, /studio/i
     ]
 
     return voices.filter(voice => {
-      // Prefer local voices
       if (voice.localService) return true
-      
-      // Check for quality indicators in name
       return qualityPatterns.some(pattern => pattern.test(voice.name))
-    }).slice(0, 10) // Limit to top 10
+    }).slice(0, 10)
   }
 
   /**
@@ -220,14 +278,13 @@ export class VoiceManager {
         return
       }
 
-      // Cancel any existing speech
       window.speechSynthesis.cancel()
 
       const utterance = new SpeechSynthesisUtterance(sampleText)
-      utterance.voice = voice
-      utterance.rate = options.rate || 1.0
-      utterance.pitch = options.pitch || 1.0
-      utterance.volume = options.volume || 0.8
+      utterance.voice = voice // IMPORTANT: set the actual object
+      utterance.rate = options.rate ?? 1.0
+      utterance.pitch = options.pitch ?? 1.0
+      utterance.volume = options.volume ?? 0.8
 
       utterance.onend = () => resolve(true)
       utterance.onerror = (event) => reject(new Error(`Voice test failed: ${event.error}`))
@@ -241,27 +298,15 @@ export class VoiceManager {
    */
   getVoiceDisplayName(voice) {
     let name = voice.name
-
-    // Clean up common voice name patterns
     name = name.replace(/Microsoft\s+/i, '')
-    name = name.replace(/Google\s+/i, '')
-    name = name.replace(/Apple\s+/i, '')
-    name = name.replace(/\s+\(.*?\)$/, '') // Remove parenthetical info at end
+               .replace(/Google\s+/i, '')
+               .replace(/Apple\s+/i, '')
+               .replace(/\s+\(.*?\)$/, '')
 
-    // Add quality indicators
     const indicators = []
-    if (voice.localService) {
-      indicators.push('Local')
-    }
-    
-    if (this.getVoiceQuality(voice) === 'high') {
-      indicators.push('HD')
-    }
-
-    if (indicators.length > 0) {
-      name += ` (${indicators.join(', ')})`
-    }
-
+    if (voice.localService) indicators.push('Local')
+    if (this.getVoiceQuality(voice) === 'high') indicators.push('HD')
+    if (indicators.length > 0) name += ` (${indicators.join(', ')})`
     return name
   }
 
@@ -270,22 +315,12 @@ export class VoiceManager {
    */
   getVoiceQuality(voice) {
     const name = voice.name.toLowerCase()
-    
-    // High quality indicators
     const highQualityPatterns = [
-      /premium/,
-      /enhanced/,
-      /natural/,
-      /neural/,
-      /wavenet/,
-      /studio/,
-      /pro/
+      /premium/, /enhanced/, /natural/, /neural/, /wavenet/, /studio/, /pro/
     ]
-
-    if (voice.localService || highQualityPatterns.some(pattern => pattern.test(name))) {
+    if (voice.localService || highQualityPatterns.some(p => p.test(name))) {
       return 'high'
     }
-
     return 'standard'
   }
 
@@ -294,28 +329,12 @@ export class VoiceManager {
    */
   getLanguageName(langCode) {
     const languageNames = {
-      'en': 'English',
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German',
-      'it': 'Italian',
-      'pt': 'Portuguese',
-      'ru': 'Russian',
-      'ja': 'Japanese',
-      'ko': 'Korean',
-      'zh': 'Chinese',
-      'ar': 'Arabic',
-      'hi': 'Hindi',
-      'nl': 'Dutch',
-      'sv': 'Swedish',
-      'da': 'Danish',
-      'no': 'Norwegian',
-      'fi': 'Finnish',
-      'pl': 'Polish',
-      'tr': 'Turkish',
-      'th': 'Thai'
+      'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+      'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'ja': 'Japanese',
+      'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi',
+      'nl': 'Dutch', 'sv': 'Swedish', 'da': 'Danish', 'no': 'Norwegian',
+      'fi': 'Finnish', 'pl': 'Polish', 'tr': 'Turkish', 'th': 'Thai'
     }
-
     return languageNames[langCode] || langCode.toUpperCase()
   }
 
@@ -345,11 +364,8 @@ export class VoiceManager {
    */
   notifyListeners(type, data) {
     this.listeners.forEach(callback => {
-      try {
-        callback(type, data)
-      } catch (error) {
-        console.error('[VoiceManager] Listener error:', error)
-      }
+      try { callback(type, data) }
+      catch (error) { console.error('[VoiceManager] Listener error:', error) }
     })
   }
 
@@ -359,7 +375,7 @@ export class VoiceManager {
   async getVoiceStats() {
     const voices = await this.getVoices()
     const byLanguage = await this.getVoicesByLanguage()
-    
+
     const localVoices = voices.filter(v => v.localService)
     const remoteVoices = voices.filter(v => !v.localService)
 
