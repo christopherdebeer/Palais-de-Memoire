@@ -53,7 +53,7 @@ export class ReplicateAPI {
           num_inference_steps: 4,
           guidance_scale: 3.5,
           extra_lora_scale: 0.8,
-          num_inference_steps: 10,
+          num_inference_steps: 25,
           seed: Math.floor(Math.random() * 1000000),
           // Override with any user-provided options
           ...options
