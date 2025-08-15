@@ -88,6 +88,7 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null) => {
 
   // Build system prompt with memory palace context
   const buildSystemPrompt = useCallback((context = {}) => {
+    console.log("[useAnthropicStream] buildSystemPromp context", {context, memoryPalaceCore});
     const basePrompt = settingsManager.get('systemPrompt') || 
       'You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands.'
     
