@@ -105,7 +105,7 @@ export class VoiceManager {
 
       const loadVoices = () => {
         const list = window.speechSynthesis.getVoices() || []
-        console.log(`[VoiceManager] Voices loaded (attempt ${attempts + 1}):`, list.length)
+        console.log(`[VoiceManager] Voices loaded (attempt ${attempts + 1}):`, list.length, list)
 
         if (list.length > 0) {
           this.voices = list
