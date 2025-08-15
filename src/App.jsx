@@ -445,11 +445,11 @@ function App({core}) {
               } else {
                 console.warn('[App] Selected voice not found:', selectedVoiceName)
                 // Fallback to default voice for the language
-                const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
-                if (defaultVoice) {
-                  utterance.voice = defaultVoice
-                  console.log('[App] Using default voice fallback:', defaultVoice.name)
-                }
+                //const defaultVoice = await voiceManager.getDefaultVoiceForLanguage('en')
+                //if (defaultVoice) {
+                  //utterance.voice = defaultVoice
+                  console.log('[App] Using default voice fallback')
+                //}
               }
             } catch (error) {
               console.error('[App] Error setting voice:', error)
