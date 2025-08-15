@@ -245,10 +245,14 @@ const VoiceInterface = ({ enabled, isMobile, onCommand, onListeningChange, onCap
         // First check if memoryPalaceCore is initialized and running
         const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
         
+        // Use consistent state source - prefer currentPalaceState (from getCurrentState()) over direct core calls
+        // This ensures all context data comes from the same state snapshot and prevents mismatches
         const context = {
           currentRoom: currentPalaceState?.currentRoom || null,
-          rooms: isCoreReady ? memoryPalaceCore.getAllRooms() : [],
-          objects: isCoreReady ? memoryPalaceCore.getCurrentRoomObjects() : [],
+          rooms: currentPalaceState?.stats ? 
+            (isCoreReady ? memoryPalaceCore.getAllRooms() : []) : 
+            [],
+          objects: currentPalaceState?.objects || [],
           // Add creation mode context
           isCreationMode: isCreationMode || false,
           creationPosition: pendingCreationPosition || null,
