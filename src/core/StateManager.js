@@ -10,17 +10,13 @@ export class StateManager extends EventEmitter {
     super()
     this.state = new Map()
     this.isInitialized = false
-    this.persistenceAdapter = null
   }
 
   /**
    * Initialize the state manager
-   * @param {Object} persistenceAdapter - Adapter for data persistence (localStorage, API, etc.)
    */
-  async initialize(persistenceAdapter = null) {
-    this.persistenceAdapter = persistenceAdapter
-    
-    // Load initial state
+  async initialize() {
+    // Load initial state from localStorage
     await this.loadState()
     
     // Set up default state if empty
@@ -31,32 +27,20 @@ export class StateManager extends EventEmitter {
   }
 
   /**
-   * Load state from persistence layer
+   * Load state from localStorage
    */
   async loadState() {
     try {
-      if (this.persistenceAdapter) {
-        // Load from persistence adapter (IndexedDB, etc.)
-        const data = await this.persistenceAdapter.load()
-        Object.entries(data).forEach(([key, value]) => {
-          // Handle deserialization of complex types (Maps, etc.)
-          const deserializedValue = this.persistenceAdapter.deserializeValue ? 
-            this.persistenceAdapter.deserializeValue(value) : value
-          this.state.set(key, deserializedValue)
-        })
-      } else {
-        // Load from localStorage (fallback)
-        Object.values(StateKeys).forEach(key => {
-          const stored = localStorage.getItem(`palais_${key}`)
-          if (stored) {
-            try {
-              this.state.set(key, JSON.parse(stored))
-            } catch (error) {
-              console.warn(`Failed to parse stored state for ${key}:`, error)
-            }
+      Object.values(StateKeys).forEach(key => {
+        const stored = localStorage.getItem(`palais_${key}`)
+        if (stored) {
+          try {
+            this.state.set(key, JSON.parse(stored))
+          } catch (error) {
+            console.warn(`Failed to parse stored state for ${key}:`, error)
           }
-        })
-      }
+        }
+      })
     } catch (error) {
       console.error('Failed to load state:', error)
       this.emit(EventTypes.ERROR_OCCURRED, { type: 'state_load_error', error })
@@ -64,36 +48,19 @@ export class StateManager extends EventEmitter {
   }
 
   /**
-   * Save state to persistence layer
+   * Save state to localStorage
    * @param {string} [key] - Optional specific key to save, otherwise saves all
    */
   async saveState(key = null) {
     try {
-      if (this.persistenceAdapter) {
-        // Save to persistence adapter (IndexedDB, etc.)
-        const dataToSave = key 
-          ? { [key]: this.state.get(key) }
-          : Object.fromEntries(this.state)
-        
-        // Handle serialization of complex types (Maps, etc.)
-        if (this.persistenceAdapter.serializeValue) {
-          for (const [k, v] of Object.entries(dataToSave)) {
-            dataToSave[k] = this.persistenceAdapter.serializeValue(v)
-          }
+      const keysToSave = key ? [key] : [...this.state.keys()]
+      
+      keysToSave.forEach(stateKey => {
+        const value = this.state.get(stateKey)
+        if (value !== undefined) {
+          localStorage.setItem(`palais_${stateKey}`, JSON.stringify(value))
         }
-        
-        await this.persistenceAdapter.save(dataToSave)
-      } else {
-        // Save to localStorage (fallback)
-        const keysToSave = key ? [key] : [...this.state.keys()]
-        
-        keysToSave.forEach(stateKey => {
-          const value = this.state.get(stateKey)
-          if (value !== undefined) {
-            localStorage.setItem(`palais_${stateKey}`, JSON.stringify(value))
-          }
-        })
-      }
+      })
     } catch (error) {
       console.error('Failed to save state:', error)
       this.emit(EventTypes.ERROR_OCCURRED, { type: 'state_save_error', error, key })
@@ -389,13 +356,12 @@ export class StateManager extends EventEmitter {
    */
   async clearState() {
     this.state.clear()
-    if (this.persistenceAdapter) {
-      await this.persistenceAdapter.clear()
-    } else {
-      Object.values(StateKeys).forEach(key => {
-        localStorage.removeItem(`palais_${key}`)
-      })
-    }
+    
+    // Clear from localStorage
+    Object.values(StateKeys).forEach(key => {
+      localStorage.removeItem(`palais_${key}`)
+    })
+    
     this.ensureDefaultState()
     this.emit(EventTypes.STATE_CHANGED, 'cleared')
   }

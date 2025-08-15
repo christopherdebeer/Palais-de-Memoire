@@ -4,7 +4,6 @@ import { RoomManager } from './RoomManager.js'
 import { ObjectManager } from './ObjectManager.js'
 import { InteractionController } from './InteractionController.js'
 import { EventTypes } from './types.js'
-import { persistenceService } from '../services/SimplePersistenceService.js'
 
 /**
  * MemoryPalaceCore - Central orchestrator for the Memory Palace application
@@ -51,73 +50,50 @@ export class MemoryPalaceCore extends EventEmitter {
    */
   async initialize() {
     if (this.isInitialized) {
-      console.warn('[MemoryPalaceCore] Already initialized')
       return true
     }
 
     const startTime = performance.now()
-    this.lastError = null
     
     try {
-      console.log('[MemoryPalaceCore] Starting initialization process...')
-      console.log('[MemoryPalaceCore] Config:', this.config)
-      
       // Initialize state management
-      console.log('[MemoryPalaceCore] Step 1: Initializing StateManager...')
-      await this.initializeStateManager()
-      console.log('[MemoryPalaceCore] Step 1: StateManager initialized successfully')
+      await this.stateManager.initialize()
       
       // Initialize core managers
-      console.log('[MemoryPalaceCore] Step 2: Initializing core managers...')
-      await this.initializeCoreManagers()
-      console.log('[MemoryPalaceCore] Step 2: Core managers initialized successfully')
+      this.roomManager = new RoomManager(this.stateManager)
+      this.objectManager = new ObjectManager(this.stateManager)
+      this.interactionController = new InteractionController(
+        this.stateManager,
+        this.roomManager,
+        this.objectManager
+      )
+      
+      await this.roomManager.initialize()
+      await this.objectManager.initialize()
+      await this.interactionController.initialize()
       
       // Set up event listeners
-      console.log('[MemoryPalaceCore] Step 3: Setting up event listeners...')
       this.setupEventListeners()
-      console.log('[MemoryPalaceCore] Step 3: Event listeners set up successfully')
       
       // Apply initial configuration
-      console.log('[MemoryPalaceCore] Step 4: Applying initial configuration...')
       await this.applyConfiguration()
-      console.log('[MemoryPalaceCore] Step 4: Initial configuration applied successfully')
       
       this.isInitialized = true
       this.metrics.initTime = performance.now() - startTime
-      
-      console.log(`[MemoryPalaceCore] ✅ Initialization completed successfully in ${this.metrics.initTime.toFixed(2)}ms`)
-      console.log('[MemoryPalaceCore] Final state:', {
-        isInitialized: this.isInitialized,
-        hasStateManager: !!this.stateManager,
-        hasRoomManager: !!this.roomManager,
-        hasObjectManager: !!this.objectManager,
-        hasInteractionController: !!this.interactionController
-      })
       
       this.emit('core_initialized', { version: this.version, metrics: this.metrics })
       
       return true
       
     } catch (error) {
-      this.lastError = error;
-      console.error('[MemoryPalaceCore] ❌ Initialization failed:', error)
-      console.error('[MemoryPalaceCore] Error stack:', error.stack)
-      console.error('[MemoryPalaceCore] Current state at failure:', {
-        isInitialized: this.isInitialized,
-        hasStateManager: !!this.stateManager,
-        hasRoomManager: !!this.roomManager,
-        hasObjectManager: !!this.objectManager,
-        hasInteractionController: !!this.interactionController
-      })
+      this.lastError = error
+      console.error('[MemoryPalaceCore] Initialization failed:', error)
       
       this.emit(EventTypes.ERROR_OCCURRED, { 
         type: 'initialization_error', 
-        error: error.message,
-        stack: error.stack,
-        component: error.component || 'unknown'
+        error: error.message
       })
       
-      // Don't attempt recovery - fail fast with clear error message
       return false
     }
   }
@@ -187,64 +163,6 @@ export class MemoryPalaceCore extends EventEmitter {
     }
   }
 
-  /**
-   * Initialize state management
-   */
-  async initializeStateManager() {
-    console.log('[MemoryPalaceCore] StateManager: Starting initialization...')
-    
-    // Use simplified persistence service
-    await persistenceService.initialize()
-    console.log(`[MemoryPalaceCore] StateManager: Using ${persistenceService.getInfo().type} persistence`)
-    
-    await this.stateManager.initialize(persistenceService)
-    console.log('[MemoryPalaceCore] StateManager: ✅ StateManager initialized successfully')
-  }
-
-
-  /**
-   * Initialize core managers
-   */
-  async initializeCoreManagers() {
-    console.log('[MemoryPalaceCore] CoreManagers: Starting initialization...')
-    
-    try {
-      // Create manager instances
-      console.log('[MemoryPalaceCore] CoreManagers: Creating RoomManager...')
-      this.roomManager = new RoomManager(this.stateManager)
-      console.log('[MemoryPalaceCore] CoreManagers: RoomManager created')
-      
-      console.log('[MemoryPalaceCore] CoreManagers: Creating ObjectManager...')
-      this.objectManager = new ObjectManager(this.stateManager)
-      console.log('[MemoryPalaceCore] CoreManagers: ObjectManager created')
-      
-      console.log('[MemoryPalaceCore] CoreManagers: Creating InteractionController...')
-      this.interactionController = new InteractionController(
-        this.stateManager,
-        this.roomManager,
-        this.objectManager
-      )
-      console.log('[MemoryPalaceCore] CoreManagers: InteractionController created')
-      
-      // Initialize managers
-      console.log('[MemoryPalaceCore] CoreManagers: Initializing RoomManager...')
-      await this.roomManager.initialize()
-      console.log('[MemoryPalaceCore] CoreManagers: RoomManager initialized')
-      
-      console.log('[MemoryPalaceCore] CoreManagers: Initializing ObjectManager...')
-      await this.objectManager.initialize()
-      console.log('[MemoryPalaceCore] CoreManagers: ObjectManager initialized')
-      
-      console.log('[MemoryPalaceCore] CoreManagers: Initializing InteractionController...')
-      await this.interactionController.initialize()
-      console.log('[MemoryPalaceCore] CoreManagers: InteractionController initialized')
-      
-      console.log('[MemoryPalaceCore] CoreManagers: ✅ All core managers initialized successfully')
-    } catch (error) {
-      console.error('[MemoryPalaceCore] CoreManagers: ❌ Failed to initialize core managers:', error)
-      throw error
-    }
-  }
 
   /**
    * Set up event listeners for system coordination
@@ -663,30 +581,6 @@ export class MemoryPalaceCore extends EventEmitter {
       console.error('[MemoryPalaceCore] Error during disposal:', error)
     }
   }
-}
-
-// Export singleton instance for convenience
-let globalInstance = null
-
-/**
- * Get or create the global Memory Palace Core instance
- * @param {Object} config - Configuration for new instance
- * @returns {MemoryPalaceCore} Global instance
- */
-export function getMemoryPalaceCore(config = {}) {
-  if (!globalInstance) {
-    globalInstance = new MemoryPalaceCore(config)
-  }
-  return globalInstance
-}
-
-/**
- * Create a new Memory Palace Core instance
- * @param {Object} config - Configuration
- * @returns {MemoryPalaceCore} New instance
- */
-export function createMemoryPalaceCore(config = {}) {
-  return new MemoryPalaceCore(config)
 }
 
 export default MemoryPalaceCore
