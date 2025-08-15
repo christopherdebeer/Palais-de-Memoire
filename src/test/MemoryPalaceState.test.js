@@ -53,10 +53,7 @@ describe('Memory Palace Core State Synchronization', () => {
           
           // Simulate successful recovery
           this.isInitialized = true
-          this.stateManager = { initialized: true }
-          this.apiManager = { initialized: true }
-          this.roomManager = { initialized: true }
-          this.objectManager = { initialized: true }
+          // Note: In simplified core, managers are getters not separate objects
           
           console.log('[Test] Recovery successful, this.isInitialized =', this.isInitialized)
           
@@ -107,10 +104,7 @@ describe('Memory Palace Core State Synchronization', () => {
     const initializeSpy = vi.spyOn(core, 'initialize').mockImplementation(async function() {
       // Simulate successful initialization (line 106 path)
       this.isInitialized = true
-      this.stateManager = { initialized: true }
-      this.apiManager = { initialized: true } 
-      this.roomManager = { initialized: true }
-      this.objectManager = { initialized: true }
+      // Note: In simplified core, managers are getters not separate objects
       
       console.log('[Test] Normal success path: returning true')
       return true
