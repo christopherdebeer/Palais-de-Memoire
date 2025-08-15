@@ -95,7 +95,7 @@ export async function deleteObject(state, objectId) {
  * @returns {Object[]} Array of objects in current room
  */
 export function getCurrentRoomObjects(state) {
-  const currentRoomId = state.user.currentRoomId
+  const currentRoomId = state?.user?.currentRoomId
   const objects = currentRoomId ? getRoomObjects(state, currentRoomId) : []
     
     // Get connections for current room and transform them to door objects

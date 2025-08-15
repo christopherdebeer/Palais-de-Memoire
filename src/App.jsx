@@ -1232,7 +1232,7 @@ function App({core}) {
       )}
       
       <div className="app-header">
-        <h1>Palais de Mémoire</h1>
+        <h1>{memoryPalaceCore.getCurrentState()?.currentRoom?.name || "Palais de Mémoire"}</h1>
         <div className="header-buttons">
           <button 
             className="menu-toggle"

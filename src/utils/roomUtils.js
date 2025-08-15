@@ -132,7 +132,7 @@ export async function navigateToRoom(state, roomId) {
  * @returns {Object|null} Current room or null
  */
 export function getCurrentRoom(state) {
-  if (!state.user.currentRoomId) return null
+  if (!state?.user?.currentRoomId) return null
   return state.rooms.get(state.user.currentRoomId)
 }
 

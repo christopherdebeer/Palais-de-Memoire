@@ -1554,7 +1554,7 @@ const MemoryPalace = forwardRef(({
   // Handle room changes
   useEffect(() => {
     if (currentRoom) {
-      console.log('[MemoryPalace] Room changed, updating skybox:', currentRoom.name)
+      console.log('[MemoryPalace] Room changed, updating skybox:', currentRoom)
       updateSkyboxForRoom(currentRoom)
     }
   }, [currentRoom])
