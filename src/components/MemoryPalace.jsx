@@ -89,10 +89,21 @@ const MemoryPalace = forwardRef(({
   const createObjectMarker = (obj) => {
     if (!sceneRef.current) return null
 
-    console.log('[MemoryPalace] Creating marker for object:', obj.name, obj.id)
+    console.log(`[MemoryPalace] 🏗️ SCENE: createObjectMarker called`, {
+      objectId: obj.id,
+      objectName: obj.name,
+      position: obj.position,
+      timestamp: new Date().toISOString()
+    })
     
     // Determine marker type based on object properties
     const isDoor = obj.targetRoomId !== undefined
+    
+    console.log(`[MemoryPalace] 🎯 SCENE: marker type determined`, {
+      objectId: obj.id,
+      isDoor,
+      markerType: isDoor ? 'door' : 'object'
+    })
     
     // Create appropriate geometry for marker type (matching prototype)
     let markerGeometry, markerMaterial
@@ -130,9 +141,18 @@ const MemoryPalace = forwardRef(({
       // Use stored 3D coordinates but extend them outward
       const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
       marker.position.copy(direction.multiplyScalar(baseRadius))
+      
+      console.log(`[MemoryPalace] 📍 SCENE: marker positioned using object coordinates`, {
+        objectId: obj.id,
+        objectPosition: obj.position,
+        markerPosition: marker.position
+      })
     } else {
       // Fallback to default position (facing forward)
-      console.warn('[MemoryPalace] Object has no 3D position, using default:', obj.name)
+      console.warn(`[MemoryPalace] ⚠️ SCENE: object has no 3D position, using default`, {
+        objectId: obj.id,
+        objectName: obj.name
+      })
       marker.position.set(baseRadius, 0, 0) // Forward facing
     }
     
@@ -146,6 +166,10 @@ const MemoryPalace = forwardRef(({
     
     // Create particle system for this marker
     if (particleManagerRef.current) {
+      console.log(`[MemoryPalace] ✨ SCENE: creating particle system for marker`, {
+        objectId: obj.id,
+        markerPosition: marker.position
+      })
       const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id)
       sceneRef.current.add(particleSystem)
       
@@ -154,7 +178,15 @@ const MemoryPalace = forwardRef(({
     }
     
     sceneRef.current.add(marker)
-    console.log('[MemoryPalace] Added object marker to scene:', obj.name, 'at position:', marker.position)
+    
+    console.log(`[MemoryPalace] ✅ SCENE: object marker added to scene`, {
+      objectId: obj.id,
+      objectName: obj.name,
+      markerPosition: marker.position,
+      isDoor,
+      hasParticleSystem: !!marker.userData.particleSystem,
+      timestamp: new Date().toISOString()
+    })
     
     return marker
   }
@@ -162,17 +194,30 @@ const MemoryPalace = forwardRef(({
   const updateObjectMarkers = (newObjects) => {
     if (!sceneRef.current) return
     
-    // console.log('[MemoryPalace] Updating object markers. New objects:', newObjects.length)
+    console.log(`[MemoryPalace] 🎬 SCENE: updateObjectMarkers called`, {
+      newObjectsCount: newObjects.length,
+      newObjectIds: newObjects.map(obj => obj.id),
+      newObjectNames: newObjects.map(obj => obj.name),
+      timestamp: new Date().toISOString()
+    })
     
     // Get current markers
     const currentMarkers = objectMarkersRef.current
     const currentObjectIds = new Set(Array.from(currentMarkers.keys()))
     const newObjectIds = new Set(newObjects.map(obj => obj.id))
     
+    console.log(`[MemoryPalace] 🔍 SCENE: marker comparison`, {
+      currentMarkerCount: currentMarkers.size,
+      currentObjectIds: Array.from(currentObjectIds),
+      newObjectIds: Array.from(newObjectIds),
+      markersToRemove: Array.from(currentObjectIds).filter(id => !newObjectIds.has(id)),
+      markersToAdd: Array.from(newObjectIds).filter(id => !currentObjectIds.has(id))
+    })
+    
     // Remove markers for objects that no longer exist
     currentObjectIds.forEach(objectId => {
       if (!newObjectIds.has(objectId)) {
-        console.log('[MemoryPalace] Removing marker for deleted object:', objectId)
+        console.log(`[MemoryPalace] 🗑️ SCENE: removing marker for deleted object`, { objectId })
         const marker = currentMarkers.get(objectId)
         if (marker) {
           // Remove particle system
@@ -189,6 +234,7 @@ const MemoryPalace = forwardRef(({
           if (marker.material) marker.material.dispose()
           
           currentMarkers.delete(objectId)
+          console.log(`[MemoryPalace] ✅ SCENE: marker removed from scene`, { objectId })
         }
       }
     })
@@ -196,10 +242,19 @@ const MemoryPalace = forwardRef(({
     // Add markers for new objects
     newObjects.forEach(obj => {
       if (!currentMarkers.has(obj.id)) {
-        console.log('[MemoryPalace] Adding marker for new object:', obj.name)
+        console.log(`[MemoryPalace] ➕ SCENE: adding marker for new object`, {
+          objectId: obj.id,
+          objectName: obj.name,
+          position: obj.position
+        })
         const marker = createObjectMarker(obj)
         if (marker) {
           currentMarkers.set(obj.id, marker)
+          console.log(`[MemoryPalace] ✅ SCENE: new marker added to scene`, {
+            objectId: obj.id,
+            objectName: obj.name,
+            markerPosition: marker.position
+          })
         }
       } else {
         // Update existing marker if needed (position, properties)
@@ -210,7 +265,12 @@ const MemoryPalace = forwardRef(({
           const newPos = obj.position
           if (oldPos && newPos && 
               (oldPos.x !== newPos.x || oldPos.y !== newPos.y || oldPos.z !== newPos.z)) {
-            console.log('[MemoryPalace] Updating position for object:', obj.name)
+            console.log(`[MemoryPalace] 🔄 SCENE: updating position for existing object`, {
+              objectId: obj.id,
+              objectName: obj.name,
+              oldPosition: oldPos,
+              newPosition: newPos
+            })
             
             // Update marker position
             const baseRadius = 500
@@ -221,6 +281,11 @@ const MemoryPalace = forwardRef(({
             if (marker.userData.particleSystem) {
               marker.userData.particleSystem.position.copy(marker.position)
             }
+            
+            console.log(`[MemoryPalace] ✅ SCENE: object position updated in scene`, {
+              objectId: obj.id,
+              newMarkerPosition: marker.position
+            })
           }
           
           // Update userData with new object data
@@ -229,7 +294,11 @@ const MemoryPalace = forwardRef(({
       }
     })
     
-    // console.log('[MemoryPalace] Object markers updated. Total active:', currentMarkers.size)
+    console.log(`[MemoryPalace] ✅ SCENE: updateObjectMarkers completed`, {
+      totalActiveMarkers: currentMarkers.size,
+      activeMarkerIds: Array.from(currentMarkers.keys()),
+      timestamp: new Date().toISOString()
+    })
   }
 
   const startObjectAnimation = () => {
@@ -1259,9 +1328,27 @@ const MemoryPalace = forwardRef(({
 
   // Handle objects changes
   useEffect(() => {
+    console.log(`[MemoryPalace] 🎭 SCENE: objects prop changed, triggering scene re-render`, {
+      objectsCount: objects.length,
+      objectIds: objects.map(obj => obj.id),
+      objectNames: objects.map(obj => obj.name),
+      hasScene: !!sceneRef.current,
+      hasParticleManager: !!particleManagerRef.current,
+      timestamp: new Date().toISOString()
+    })
+
     if (sceneRef.current && particleManagerRef.current) {
-      // console.log('[MemoryPalace] Objects changed, updating markers:', objects.length)
+      console.log(`[MemoryPalace] 🎬 SCENE: scene and particle manager ready, updating markers`)
       updateObjectMarkers(objects)
+      console.log(`[MemoryPalace] ✅ SCENE: scene re-render completed with objects`, {
+        finalObjectCount: objects.length,
+        timestamp: new Date().toISOString()
+      })
+    } else {
+      console.warn(`[MemoryPalace] ⚠️ SCENE: scene re-render skipped - missing dependencies`, {
+        hasScene: !!sceneRef.current,
+        hasParticleManager: !!particleManagerRef.current
+      })
     }
   }, [objects])
 

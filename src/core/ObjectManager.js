@@ -29,10 +29,26 @@ export class ObjectManager extends EventEmitter {
    * @returns {Promise<Object>} Created object
    */
   async addObject(roomId, name, information, position = null, options = {}) {
+    console.log(`[ObjectManager] 📦 OBJECT_MGR: addObject called`, {
+      roomId,
+      name,
+      information: information?.substring(0, 100) + (information?.length > 100 ? '...' : ''),
+      position,
+      hasOptions: Object.keys(options).length > 0,
+      timestamp: new Date().toISOString()
+    })
+
     const room = this.stateManager.getRoom(roomId)
     if (!room) {
+      console.error(`[ObjectManager] ❌ OBJECT_MGR: addObject failed - room not found`, { roomId })
       throw new Error(`Room ${roomId} not found`)
     }
+
+    console.log(`[ObjectManager] 🏠 OBJECT_MGR: room found`, {
+      roomId,
+      roomName: room.name,
+      roomDescription: room.description?.substring(0, 50) + '...'
+    })
 
     const userState = this.stateManager.getUserState()
     const objectId = this.stateManager.generateId()
@@ -40,6 +56,13 @@ export class ObjectManager extends EventEmitter {
 
     // Use provided position or generate default
     const objectPosition = position || this.generateDefaultPosition(roomId)
+
+    console.log(`[ObjectManager] 📍 OBJECT_MGR: object position determined`, {
+      objectId,
+      providedPosition: !!position,
+      finalPosition: objectPosition,
+      objectCounter
+    })
 
     // Create object
     const object = {
@@ -55,6 +78,12 @@ export class ObjectManager extends EventEmitter {
       ...options
     }
 
+    console.log(`[ObjectManager] 💾 OBJECT_MGR: saving object to state`, {
+      objectId: object.id,
+      objectName: object.name,
+      roomId: object.roomId
+    })
+
     // Save object to state
     await this.stateManager.setObject(object)
 
@@ -63,7 +92,23 @@ export class ObjectManager extends EventEmitter {
       objectCounter
     })
 
+    console.log(`[ObjectManager] 📡 OBJECT_MGR: emitting OBJECT_CREATED event`, {
+      objectId: object.id,
+      objectName: object.name,
+      eventType: EventTypes.OBJECT_CREATED,
+      timestamp: new Date().toISOString()
+    })
+
     this.emit(EventTypes.OBJECT_CREATED, object)
+    
+    console.log(`[ObjectManager] ✅ OBJECT_MGR: addObject completed successfully`, {
+      objectId: object.id,
+      objectName: object.name,
+      roomId: object.roomId,
+      position: object.position,
+      timestamp: new Date().toISOString()
+    })
+
     return object
   }
 

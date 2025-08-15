@@ -173,16 +173,49 @@ export class MemoryPalaceToolManager {
    * Add object to current room
    */
   async addObject({ name, info, position }) {
+    const correlationId = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+    console.log(`[MemoryPalaceTools] 🎯 TOOL CALL: add_object started`, {
+      correlationId,
+      name,
+      info: info?.substring(0, 100) + (info?.length > 100 ? '...' : ''),
+      position,
+      timestamp: new Date().toISOString()
+    })
+
     try {
       this.validateCore()
       const currentState = this.core.getCurrentState()
       if (!currentState.currentRoom) {
+        console.log(`[MemoryPalaceTools] ❌ TOOL CALL: add_object failed - no current room`, { correlationId })
         return `No current room to add object to. Please create a room first.`
       }
 
+      console.log(`[MemoryPalaceTools] 📍 TOOL CALL: adding object to room`, {
+        correlationId,
+        roomId: currentState.currentRoom.id,
+        roomName: currentState.currentRoom.name,
+        objectName: name
+      })
+
       const object = await this.core.addObject(name, info, position)
+      
+      console.log(`[MemoryPalaceTools] ✅ TOOL CALL: add_object completed successfully`, {
+        correlationId,
+        objectId: object.id,
+        objectName: object.name,
+        roomId: object.roomId,
+        position: object.position,
+        timestamp: new Date().toISOString()
+      })
+
       return `Successfully added object "${name}" with info: ${info} to room "${currentState.currentRoom.name}"${position ? ' at the specified location' : ''}`
     } catch (error) {
+      console.error(`[MemoryPalaceTools] ❌ TOOL CALL: add_object failed`, {
+        correlationId,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      })
       return `Failed to add object "${name}": ${error.message}`
     }
   }
@@ -191,20 +224,55 @@ export class MemoryPalaceToolManager {
    * Add object at specific position (for creation mode)
    */
   async addObjectAtPosition({ name, info, position }) {
+    const correlationId = `obj_pos_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+    console.log(`[MemoryPalaceTools] 🎯 TOOL CALL: add_object_at_position started`, {
+      correlationId,
+      name,
+      info: info?.substring(0, 100) + (info?.length > 100 ? '...' : ''),
+      position,
+      timestamp: new Date().toISOString()
+    })
+
     try {
       this.validateCore()
       const currentState = this.core.getCurrentState()
       if (!currentState.currentRoom) {
+        console.log(`[MemoryPalaceTools] ❌ TOOL CALL: add_object_at_position failed - no current room`, { correlationId })
         return `No current room to add object to. Please create a room first.`
       }
 
       if (!position) {
+        console.log(`[MemoryPalaceTools] ❌ TOOL CALL: add_object_at_position failed - no position`, { correlationId })
         return `Position is required for spatial object creation`
       }
 
+      console.log(`[MemoryPalaceTools] 📍 TOOL CALL: adding object at position to room`, {
+        correlationId,
+        roomId: currentState.currentRoom.id,
+        roomName: currentState.currentRoom.name,
+        objectName: name,
+        position
+      })
+
       const object = await this.core.addObject(name, info, position)
+      
+      console.log(`[MemoryPalaceTools] ✅ TOOL CALL: add_object_at_position completed successfully`, {
+        correlationId,
+        objectId: object.id,
+        objectName: object.name,
+        roomId: object.roomId,
+        position: object.position,
+        timestamp: new Date().toISOString()
+      })
+
       return `Successfully created object "${name}" at the clicked location with info: ${info}`
     } catch (error) {
+      console.error(`[MemoryPalaceTools] ❌ TOOL CALL: add_object_at_position failed`, {
+        correlationId,
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      })
       return `Failed to create object "${name}" at position: ${error.message}`
     }
   }

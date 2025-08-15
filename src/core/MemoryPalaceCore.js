@@ -421,16 +421,44 @@ export class MemoryPalaceCore extends EventEmitter {
    * @returns {Promise<Object>} Created object
    */
   async addObject(name, information, position = null) {
+    console.log(`[MemoryPalaceCore] 🏛️ CORE: addObject called`, {
+      name,
+      information: information?.substring(0, 100) + (information?.length > 100 ? '...' : ''),
+      position,
+      timestamp: new Date().toISOString()
+    })
+
     if (!this.objectManager || !this.roomManager) {
+      console.error(`[MemoryPalaceCore] ❌ CORE: addObject failed - managers not initialized`, {
+        hasObjectManager: !!this.objectManager,
+        hasRoomManager: !!this.roomManager
+      })
       throw new Error('Managers not initialized')
     }
     
     const currentRoomId = this.roomManager.currentRoomId
     if (!currentRoomId) {
+      console.error(`[MemoryPalaceCore] ❌ CORE: addObject failed - no current room`)
       throw new Error('No current room')
     }
     
-    return this.objectManager.addObject(currentRoomId, name, information, position)
+    console.log(`[MemoryPalaceCore] 📍 CORE: passing object to ObjectManager`, {
+      currentRoomId,
+      objectName: name,
+      hasPosition: !!position
+    })
+
+    const result = await this.objectManager.addObject(currentRoomId, name, information, position)
+    
+    console.log(`[MemoryPalaceCore] ✅ CORE: addObject completed`, {
+      objectId: result.id,
+      objectName: result.name,
+      roomId: result.roomId,
+      position: result.position,
+      timestamp: new Date().toISOString()
+    })
+
+    return result
   }
 
   /**

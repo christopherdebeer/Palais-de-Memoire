@@ -283,13 +283,53 @@ export class StateManager extends EventEmitter {
    * @param {Object} object - Object data
    */
   async setObject(object) {
+    console.log(`[StateManager] 💾 STATE_MGR: setObject called`, {
+      objectId: object.id,
+      objectName: object.name,
+      roomId: object.roomId,
+      hasPosition: !!object.position,
+      timestamp: new Date().toISOString()
+    })
+
     const objects = this.getObjects()
-    objects.set(object.id, {
+    const isNewObject = !objects.has(object.id)
+    
+    const objectWithTimestamp = {
       ...object,
       updatedAt: new Date().toISOString()
+    }
+    
+    objects.set(object.id, objectWithTimestamp)
+    
+    console.log(`[StateManager] 🗃️ STATE_MGR: object ${isNewObject ? 'added to' : 'updated in'} objects collection`, {
+      objectId: object.id,
+      objectName: object.name,
+      totalObjectsInState: objects.size,
+      isNewObject
     })
+
     await this.set(StateKeys.OBJECTS, objects)
+    
+    console.log(`[StateManager] 💾 STATE_MGR: objects collection persisted to storage`, {
+      objectId: object.id,
+      totalObjects: objects.size
+    })
+
+    console.log(`[StateManager] 📡 STATE_MGR: emitting OBJECT_UPDATED event`, {
+      objectId: object.id,
+      objectName: object.name,
+      eventType: EventTypes.OBJECT_UPDATED,
+      timestamp: new Date().toISOString()
+    })
+
     this.emit(EventTypes.OBJECT_UPDATED, object)
+    
+    console.log(`[StateManager] ✅ STATE_MGR: setObject completed`, {
+      objectId: object.id,
+      objectName: object.name,
+      roomId: object.roomId,
+      timestamp: new Date().toISOString()
+    })
   }
 
   /**
