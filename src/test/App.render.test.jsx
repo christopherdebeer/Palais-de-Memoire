@@ -146,6 +146,27 @@ vi.mock('../core/MemoryPalaceCore.js', () => ({
   }))
 }))
 
+// Create a mock core instance for testing
+const createMockCore = () => ({
+  isInitialized: false,
+  isRunning: false,
+  roomManager: null,
+  objectManager: null,
+  initialize: vi.fn().mockResolvedValue(true),
+  start: vi.fn().mockResolvedValue(true),
+  dispose: vi.fn().mockResolvedValue(true),
+  attemptRecovery: vi.fn().mockResolvedValue(true),
+  on: vi.fn(),
+  off: vi.fn(),
+  emit: vi.fn(),
+  getCurrentState: vi.fn().mockReturnValue({
+    objects: [],
+    rooms: [],
+    currentRoom: null,
+    cameraPosition: { x: 0, y: 0, z: 0 }
+  })
+})
+
 describe('App Component Rendering', () => {
   beforeEach(() => {
     // Clear all mocks before each test
@@ -171,13 +192,15 @@ describe('App Component Rendering', () => {
 
   it('should render without crashing', async () => {
     // This test will catch React hooks violations and other rendering issues
+    const mockCore = createMockCore()
     expect(() => {
-      render(<App />)
+      render(<App core={mockCore} />)
     }).not.toThrow()
   })
 
   it('should render core UI elements', async () => {
-    render(<App />)
+    const mockCore = createMockCore()
+    render(<App core={mockCore} />)
     
     // Wait for component to finish initial render
     await waitFor(() => {
@@ -189,7 +212,8 @@ describe('App Component Rendering', () => {
   })
 
   it('should handle component lifecycle without errors', async () => {
-    const { unmount } = render(<App />)
+    const mockCore = createMockCore()
+    const { unmount } = render(<App core={mockCore} />)
     
     // Wait for initial render and effects
     await waitFor(() => {
@@ -205,8 +229,9 @@ describe('App Component Rendering', () => {
   it('should not have React hooks violations', async () => {
     // This specifically tests for the hooks violation that was fixed
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mockCore = createMockCore()
     
-    render(<App />)
+    render(<App core={mockCore} />)
     
     await waitFor(() => {
       expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
@@ -224,10 +249,12 @@ describe('App Component Rendering', () => {
 
   it('should handle React StrictMode double rendering', async () => {
     // Simulate StrictMode by rendering twice quickly
-    const { unmount: unmount1 } = render(<App />)
+    const mockCore1 = createMockCore()
+    const { unmount: unmount1 } = render(<App core={mockCore1} />)
     unmount1()
     
-    const { unmount: unmount2 } = render(<App />)
+    const mockCore2 = createMockCore()
+    const { unmount: unmount2 } = render(<App core={mockCore2} />)
     
     await waitFor(() => {
       expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
@@ -239,7 +266,8 @@ describe('App Component Rendering', () => {
   })
 
   it('should initialize memory palace core without state inconsistencies', async () => {
-    render(<App />)
+    const mockCore = createMockCore()
+    render(<App core={mockCore} />)
     
     await waitFor(() => {
       expect(screen.getByTestId('memory-palace')).toBeInTheDocument()
@@ -255,8 +283,9 @@ describe('App Component Error Boundaries', () => {
   it('should handle component errors gracefully', async () => {
     // Mock console.error to prevent error output in test
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mockCore = createMockCore()
     
-    render(<App />)
+    render(<App core={mockCore} />)
     
     // Component should render even if some internal operations fail
     await waitFor(() => {
