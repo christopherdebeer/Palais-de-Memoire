@@ -84,75 +84,53 @@ export class VoiceManager {
   /**
    * Initialize voice discovery with proper async handling
    */
-  initializeVoices() {
+  async initializeVoices() {
     if (this.loadingPromise) {
       return this.loadingPromise
     }
 
-    this.loadingPromise = new Promise(async (resolve) => {
-      if (!('speechSynthesis' in window)) {
-        console.warn('[VoiceManager] Speech Synthesis not supported')
-        this.voices = []
+    this.loadingPromise = this._loadVoicesAsync()
+    return this.loadingPromise
+  }
+
+  async _loadVoicesAsync() {
+    if (!('speechSynthesis' in window)) {
+      console.warn('[VoiceManager] Speech Synthesis not supported')
+      this.voices = []
+      this.voicesLoaded = true
+      this.notifyListeners('voices_loaded', [])
+      return []
+    }
+
+    // Helper to load voices synchronously
+    const loadVoices = () => {
+      const list = window.speechSynthesis.getVoices() || []
+      if (list.length > 0) {
+        this.voices = list
         this.voicesLoaded = true
-        this.notifyListeners('voices_loaded', [])
-        resolve([])
-        return
+        this.notifyListeners('voices_loaded', list)
+        return list
       }
+      return null
+    }
 
-      let attempts = 0
-      const maxRetries = 10
-      const baseDelay = 100
+    // Try immediate load
+    const immediateResult = loadVoices()
+    if (immediateResult) return immediateResult
 
-      const loadVoices = () => {
-        const list = window.speechSynthesis.getVoices() || []
-        console.log(`[VoiceManager] Voices loaded (attempt ${attempts + 1}):`, list.length, list)
-
-        if (list.length > 0) {
-          this.voices = list
-          this.voicesLoaded = true
-          this.notifyListeners('voices_loaded', list)
-          resolve(list)
-          return true
-        }
-        return false
-      }
-
-      const retry = async () => {
-        if (loadVoices()) return
-
-        attempts++
-
-        // If iOS and still empty, try the “dummy speak” prime once.
-        if (this.isIOSWebKit && attempts === 1) {
-          await this._primeIOSVoicesOnce()
-          // Re-check immediately after priming
-          if (loadVoices()) return
-        }
-
-        if (attempts < maxRetries) {
-          const delay = baseDelay * (attempts) // gentle backoff
-          setTimeout(retry, delay)
-        } else {
-          console.warn('[VoiceManager] Failed to load voices after', maxRetries, 'attempts')
-          this.voices = []
-          this.voicesLoaded = true
-          this.notifyListeners('voices_loaded', [])
-          resolve([])
-        }
-      }
-
-      // Try immediately
-      if (loadVoices()) return
-
-      // Listen for voiceschanged where it’s reliable (Chrome/Safari desktop)
+    // Set up event listener for voiceschanged
+    const voicesChangedPromise = new Promise((resolve) => {
       const handleVoicesChanged = () => {
         console.log('[VoiceManager] voiceschanged event fired')
-        if (!this.voicesLoaded && loadVoices()) {
+        const list = loadVoices()
+        if (list) {
+          // Clean up listener
           if (window.speechSynthesis.removeEventListener) {
             window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged)
           } else {
             window.speechSynthesis.onvoiceschanged = null
           }
+          resolve(list)
         }
       }
 
@@ -161,12 +139,44 @@ export class VoiceManager {
       } else if (window.speechSynthesis.onvoiceschanged !== undefined) {
         window.speechSynthesis.onvoiceschanged = handleVoicesChanged
       }
-
-      // Begin retries (and iOS prime on first pass)
-      retry()
     })
 
-    return this.loadingPromise
+    // Retry with backoff
+    const retryPromise = this._retryLoadVoices(loadVoices)
+
+    // Race between voiceschanged event and retry attempts
+    return Promise.race([voicesChangedPromise, retryPromise])
+  }
+
+  async _retryLoadVoices(loadVoices) {
+    const maxRetries = 10
+    const baseDelay = 100
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // If iOS and first attempt, try priming
+      if (this.isIOSWebKit && attempt === 1) {
+        await this._primeIOSVoicesOnce()
+        const list = loadVoices()
+        if (list) return list
+      }
+
+      // Wait with exponential backoff
+      await this._sleep(baseDelay * attempt)
+
+      console.log(`[VoiceManager] Voices loaded (attempt ${attempt}):`)
+      const list = loadVoices()
+      if (list) return list
+    }
+
+    console.warn('[VoiceManager] Failed to load voices after', maxRetries, 'attempts')
+    this.voices = []
+    this.voicesLoaded = true
+    this.notifyListeners('voices_loaded', [])
+    return []
+  }
+
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 
   /**
@@ -273,22 +283,23 @@ export class VoiceManager {
    * Test a voice by speaking sample text
    */
   async testVoice(voice, sampleText = "Hello, this is a voice test.", options = {}) {
+    if (!('speechSynthesis' in window)) {
+      throw new Error('Speech synthesis not supported')
+    }
+
+    window.speechSynthesis.cancel()
+
+    const utterance = new SpeechSynthesisUtterance(sampleText)
+    utterance.voice = voice // IMPORTANT: set the actual object
+    utterance.rate = options.rate ?? 1.0
+    utterance.pitch = options.pitch ?? 1.0
+    utterance.volume = options.volume ?? 0.8
+
     return new Promise((resolve, reject) => {
-      if (!('speechSynthesis' in window)) {
-        reject(new Error('Speech synthesis not supported'))
-        return
-      }
-
-      window.speechSynthesis.cancel()
-
-      const utterance = new SpeechSynthesisUtterance(sampleText)
-      utterance.voice = voice // IMPORTANT: set the actual object
-      utterance.rate = options.rate ?? 1.0
-      utterance.pitch = options.pitch ?? 1.0
-      utterance.volume = options.volume ?? 0.8
-
-      utterance.onend = () => resolve(true)
-      utterance.onerror = (event) => reject(new Error(`Voice test failed: ${event.error}`))
+      utterance.addEventListener('end', () => resolve(true))
+      utterance.addEventListener('error', (event) => {
+        reject(new Error(`Voice test failed: ${event.error}`))
+      })
 
       window.speechSynthesis.speak(utterance)
     })
