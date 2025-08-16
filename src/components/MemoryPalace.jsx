@@ -51,8 +51,9 @@ const MemoryPalace = forwardRef(({
     
     const context = canvas.getContext('2d')
     
-    // Initialize with transparent canvas
-    context.clearRect(0, 0, canvas.width, canvas.height)
+    // Initialize with transparent black canvas so painted areas are visible
+    context.fillStyle = 'rgba(0, 0, 0, 0)' // Fully transparent
+    context.fillRect(0, 0, canvas.width, canvas.height)
     
     // Store references
     paintCanvasRef.current = canvas
@@ -72,44 +73,71 @@ const MemoryPalace = forwardRef(({
   }
 
   const enablePaintMode = () => {
-    if (!skyboxMaterialRef.current) return
+    if (!skyboxMaterialRef.current || !skyboxSphereRef.current) return
     
     console.log('[MemoryPalace] Enabling paint mode')
     
     // Initialize paint canvas if not already done
     initializePaintCanvas()
     
-    // Apply paint texture as overlay on skybox
-    if (paintTextureRef.current) {
+    // Create a separate paint sphere that overlays on the skybox
+    if (paintTextureRef.current && !skyboxSphereRef.current.userData.paintSphere) {
       // Store original skybox state
       if (!skyboxMaterialRef.current.userData.originalMap) {
         skyboxMaterialRef.current.userData.originalMap = skyboxMaterialRef.current.map
+        skyboxMaterialRef.current.userData.originalTransparent = skyboxMaterialRef.current.transparent
       }
       
-      // Create a combined material that blends the original skybox with paint
+      // Create paint material with transparency
       const paintMaterial = new THREE.MeshBasicMaterial({
-        map: skyboxMaterialRef.current.userData.originalMap,
+        map: paintTextureRef.current,
         transparent: true,
-        side: THREE.DoubleSide
+        opacity: 0.8,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false
       })
       
-      // Apply paint texture as alpha map for now (simple approach)
-      skyboxMaterialRef.current.alphaMap = paintTextureRef.current
-      skyboxMaterialRef.current.transparent = true
-      skyboxMaterialRef.current.needsUpdate = true
+      // Create paint sphere slightly larger than skybox to overlay
+      const paintGeometry = new THREE.SphereGeometry(501, 60, 40) // Slightly larger than skybox (500)
+      paintGeometry.scale(-1, 1, 1) // Flip inside out like skybox
+      
+      const paintSphere = new THREE.Mesh(paintGeometry, paintMaterial)
+      sceneRef.current.add(paintSphere)
+      
+      // Store reference for cleanup
+      skyboxSphereRef.current.userData.paintSphere = paintSphere
+      skyboxSphereRef.current.userData.paintMaterial = paintMaterial
+      skyboxSphereRef.current.userData.paintGeometry = paintGeometry
+      
+      console.log('[MemoryPalace] Paint overlay sphere created')
     }
   }
 
   const disablePaintMode = () => {
-    if (!skyboxMaterialRef.current) return
+    if (!skyboxMaterialRef.current || !skyboxSphereRef.current) return
     
     console.log('[MemoryPalace] Disabling paint mode')
     
-    // Restore original skybox
-    if (skyboxMaterialRef.current.userData.originalMap) {
-      skyboxMaterialRef.current.alphaMap = null
-      skyboxMaterialRef.current.transparent = false
-      skyboxMaterialRef.current.needsUpdate = true
+    // Remove paint sphere overlay
+    if (skyboxSphereRef.current.userData.paintSphere) {
+      const paintSphere = skyboxSphereRef.current.userData.paintSphere
+      const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
+      const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
+      
+      // Remove from scene
+      sceneRef.current.remove(paintSphere)
+      
+      // Dispose resources
+      if (paintGeometry) paintGeometry.dispose()
+      if (paintMaterial) paintMaterial.dispose()
+      
+      // Clear references
+      skyboxSphereRef.current.userData.paintSphere = null
+      skyboxSphereRef.current.userData.paintMaterial = null
+      skyboxSphereRef.current.userData.paintGeometry = null
+      
+      console.log('[MemoryPalace] Paint overlay sphere removed')
     }
   }
 
@@ -146,8 +174,18 @@ const MemoryPalace = forwardRef(({
         // Paint with brush
         const brushSize = 50 // Adjustable brush size
         
-        // Generate unique color for each paint session (simple approach)
-        const paintColor = `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.8)`
+        // Generate bright, vivid colors that will be visible against the skybox
+        const colors = [
+          'rgba(255, 0, 0, 0.9)',     // Bright red
+          'rgba(0, 255, 0, 0.9)',     // Bright green  
+          'rgba(0, 0, 255, 0.9)',     // Bright blue
+          'rgba(255, 255, 0, 0.9)',   // Bright yellow
+          'rgba(255, 0, 255, 0.9)',   // Bright magenta
+          'rgba(0, 255, 255, 0.9)',   // Bright cyan
+          'rgba(255, 165, 0, 0.9)',   // Orange
+          'rgba(128, 0, 128, 0.9)'    // Purple
+        ]
+        const paintColor = colors[Math.floor(Math.random() * colors.length)]
         
         context.fillStyle = paintColor
         context.beginPath()
@@ -1742,6 +1780,16 @@ const MemoryPalace = forwardRef(({
       offScreenIndicatorsRef.current.clear()
       
       // Clean up paint resources
+      if (skyboxSphereRef.current?.userData.paintSphere) {
+        const paintSphere = skyboxSphereRef.current.userData.paintSphere
+        const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
+        const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
+        
+        if (sceneRef.current) sceneRef.current.remove(paintSphere)
+        if (paintGeometry) paintGeometry.dispose()
+        if (paintMaterial) paintMaterial.dispose()
+      }
+      
       if (paintTextureRef.current) {
         paintTextureRef.current.dispose()
         paintTextureRef.current = null
