@@ -6,12 +6,33 @@
 import { generateId, saveState } from './stateUtils.js'
 
 /**
+ * @typedef {Object} Position3D
+ * @property {number} x - X coordinate
+ * @property {number} y - Y coordinate  
+ * @property {number} z - Z coordinate
+ */
+
+/**
+ * @typedef {Object} MemoryObject
+ * @property {string} id - Object ID
+ * @property {string} roomId - Room ID where object is located
+ * @property {string} userId - User ID who created the object
+ * @property {string} name - Object name/label
+ * @property {string} information - Memory information
+ * @property {Position3D} position - 3D position
+ * @property {number} objectCounter - Object counter
+ * @property {string} createdAt - Creation timestamp
+ * @property {string} updatedAt - Update timestamp
+ * @property {string} [targetRoomId] - Target room ID for doors/connections
+ */
+
+/**
  * Add a memory object to a room
  * @param {Object} state - Application state
  * @param {string} name - Object name/label
  * @param {string} information - Memory information to associate
- * @param {Object} position - 3D position {x, y, z}
- * @returns {Object} Created object
+ * @param {Position3D|null} position - 3D position {x, y, z}
+ * @returns {Promise<MemoryObject>} Created object
  */
 export async function addObject(state, name, information, position = null) {
   const currentRoomId = state.user.currentRoomId
@@ -217,7 +238,7 @@ export function generateDefaultPosition(state, roomId) {
  * @param {number} clientY - Screen Y coordinate in pixels 
  * @param {Object} camera - THREE.js camera
  * @param {Object} sphere - THREE.js sphere mesh to intersect with
- * @returns {Object|null} Intersection point {x, y, z} or null if no intersection
+ * @returns {Position3D|null} Intersection point {x, y, z} or null if no intersection
  */
 export function performRayCasting(clientX, clientY, camera, sphere) {
   if (typeof window === 'undefined' || !window.THREE) {
@@ -253,9 +274,9 @@ export function performRayCasting(clientX, clientY, camera, sphere) {
  * Convert screen coordinates to world position on sphere surface using ray casting
  * @param {number} screenX - Screen X coordinate (0-1, normalized)
  * @param {number} screenY - Screen Y coordinate (0-1, normalized) 
- * @param {number} [sphereRadius] - Sphere radius (default 500 to match the skybox)
- * @param {Object} [camera] - THREE.js camera for proper ray casting (optional)
- * @returns {Object} 3D position {x, y, z} on sphere surface
+ * @param {number} [sphereRadius=500] - Sphere radius (default 500 to match the skybox)
+ * @param {Object} [camera=null] - THREE.js camera for proper ray casting (optional)
+ * @returns {Position3D} 3D position {x, y, z} on sphere surface
  */
 export function screenToWorldPosition(screenX, screenY, sphereRadius = 500, camera = null) {
   // If camera is available, use proper ray casting (preferred method)
@@ -313,10 +334,10 @@ export function screenToWorldPosition(screenX, screenY, sphereRadius = 500, came
 
 /**
  * Position an object on the sphere surface
- * @param {Object} position - Input position {x, y, z}
- * @param {number} [sphereRadius] - Sphere radius (default 500)
- * @param {number} [offsetMultiplier] - Multiplier for positioning slightly outside surface (default 1.0)
- * @returns {Object} Position on sphere surface {x, y, z}
+ * @param {Position3D} position - Input position {x, y, z}
+ * @param {number} [sphereRadius=500] - Sphere radius (default 500)
+ * @param {number} [offsetMultiplier=1.0] - Multiplier for positioning slightly outside surface (default 1.0)
+ * @returns {Position3D} Position on sphere surface {x, y, z}
  */
 export function positionOnSphere(position, sphereRadius = 500, offsetMultiplier = 1.0) {
   if (typeof window !== 'undefined' && window.THREE) {
