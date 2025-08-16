@@ -203,9 +203,11 @@ const MemoryPalace = forwardRef(({
         const canvas = paintCanvasRef.current
         const context = paintContextRef.current
         
-        // Account for equirectangular offset (matching skybox texture)
-        let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width
-        let canvasY = uv.y * canvas.height
+        // Convert UV coordinates to canvas coordinates
+        // UV coordinates: u=0 is left edge, v=0 is bottom edge
+        // Canvas coordinates: x=0 is left edge, y=0 is top edge
+        let canvasX = uv.x * canvas.width
+        let canvasY = (1.0 - uv.y) * canvas.height  // Flip Y-axis
         
         // Paint with brush
         const brushSize = 50 // Adjustable brush size
