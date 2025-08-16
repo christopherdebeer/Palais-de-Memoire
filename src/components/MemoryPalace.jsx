@@ -87,7 +87,7 @@ const MemoryPalace = forwardRef(({
     paintTexture.mapping = THREE.EquirectangularReflectionMapping
     paintTexture.wrapS = THREE.RepeatWrapping
     paintTexture.wrapT = THREE.ClampToEdgeWrapping
-    paintTexture.offset.x = 0.5 // Match skybox offset
+    // Remove offset to fix coordinate system and seam positioning
     paintTexture.needsUpdate = true
     
     paintTextureRef.current = paintTexture
@@ -271,8 +271,8 @@ const MemoryPalace = forwardRef(({
       const uv = intersects[0].uv
       if (uv) {
         const canvas = paintCanvasRef.current
-        let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width
-        let canvasY = uv.y * canvas.height
+        let canvasX = uv.x * canvas.width
+        let canvasY = (1.0 - uv.y) * canvas.height
         
         // Find closest painted area (simplified approach)
         let closestArea = null
