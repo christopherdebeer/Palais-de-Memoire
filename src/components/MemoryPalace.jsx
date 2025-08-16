@@ -88,19 +88,47 @@ const MemoryPalace = forwardRef(({
         skyboxMaterialRef.current.userData.originalTransparent = skyboxMaterialRef.current.transparent
       }
       
-      // Create paint material with transparency
+      // DEBUG: Create a test texture with visible pattern to verify sphere rendering
+      const debugCanvas = document.createElement('canvas')
+      debugCanvas.width = 512
+      debugCanvas.height = 256
+      const debugContext = debugCanvas.getContext('2d')
+      
+      // Fill with semi-transparent red for visibility test
+      debugContext.fillStyle = 'rgba(255, 0, 0, 0.3)'
+      debugContext.fillRect(0, 0, debugCanvas.width, debugCanvas.height)
+      
+      // Add some pattern to make it obvious
+      debugContext.strokeStyle = 'rgba(255, 255, 0, 0.8)'
+      debugContext.lineWidth = 4
+      for (let i = 0; i < debugCanvas.width; i += 50) {
+        debugContext.beginPath()
+        debugContext.moveTo(i, 0)
+        debugContext.lineTo(i, debugCanvas.height)
+        debugContext.stroke()
+      }
+      
+      const debugTexture = new THREE.CanvasTexture(debugCanvas)
+      debugTexture.mapping = THREE.UVMapping // Use standard UV mapping instead of equirectangular
+      debugTexture.wrapS = THREE.RepeatWrapping
+      debugTexture.wrapT = THREE.ClampToEdgeWrapping
+      debugTexture.needsUpdate = true
+      
+      console.log('[MemoryPalace] DEBUG: Created visible test texture for paint sphere')
+      
+      // Create paint material with debug texture for visibility test
       const paintMaterial = new THREE.MeshBasicMaterial({
-        map: paintTextureRef.current,
+        map: debugTexture, // Use debug texture instead of paint texture for now
         transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide,
+        opacity: 1.0, // Full opacity for visibility test
+        side: THREE.BackSide, // Only render inside faces since we're viewing from center
         depthTest: false,
         depthWrite: false
       })
       
       // Create paint sphere inside the skybox for inside viewing
       const paintGeometry = new THREE.SphereGeometry(499, 60, 40) // Inside skybox (500)
-      paintGeometry.scale(-1, 1, 1) // Flip inside out like skybox
+      // DON'T flip inside out - use BackSide material instead
       
       const paintSphere = new THREE.Mesh(paintGeometry, paintMaterial)
       sceneRef.current.add(paintSphere)
@@ -109,8 +137,9 @@ const MemoryPalace = forwardRef(({
       skyboxSphereRef.current.userData.paintSphere = paintSphere
       skyboxSphereRef.current.userData.paintMaterial = paintMaterial
       skyboxSphereRef.current.userData.paintGeometry = paintGeometry
+      skyboxSphereRef.current.userData.debugTexture = debugTexture
       
-      console.log('[MemoryPalace] Paint overlay sphere created')
+      console.log('[MemoryPalace] Paint overlay sphere created with debug texture - sphere should be visible with red/yellow pattern')
     }
   }
 
@@ -124,6 +153,7 @@ const MemoryPalace = forwardRef(({
       const paintSphere = skyboxSphereRef.current.userData.paintSphere
       const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
       const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
+      const debugTexture = skyboxSphereRef.current.userData.debugTexture
       
       // Remove from scene
       sceneRef.current.remove(paintSphere)
@@ -131,23 +161,34 @@ const MemoryPalace = forwardRef(({
       // Dispose resources
       if (paintGeometry) paintGeometry.dispose()
       if (paintMaterial) paintMaterial.dispose()
+      if (debugTexture) debugTexture.dispose()
       
       // Clear references
       skyboxSphereRef.current.userData.paintSphere = null
       skyboxSphereRef.current.userData.paintMaterial = null
       skyboxSphereRef.current.userData.paintGeometry = null
+      skyboxSphereRef.current.userData.debugTexture = null
       
       console.log('[MemoryPalace] Paint overlay sphere removed')
     }
   }
 
   const paintOnSkybox = (event) => {
+    console.log('[MemoryPalace] DEBUG: paintOnSkybox called', {
+      paintModeEnabled,
+      hasContext: !!paintContextRef.current,
+      hasCamera: !!cameraRef.current,
+      hasSkyboxSphere: !!skyboxSphereRef.current
+    })
+    
     if (!paintModeEnabled || !paintContextRef.current || !cameraRef.current) return
     
     // Calculate mouse position in normalized device coordinates
     const mouse = new THREE.Vector2()
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+    
+    console.log('[MemoryPalace] DEBUG: Mouse position', { clientX: event.clientX, clientY: event.clientY, normalizedX: mouse.x, normalizedY: mouse.y })
     
     // Create raycaster
     const raycaster = new THREE.Raycaster()
@@ -157,6 +198,7 @@ const MemoryPalace = forwardRef(({
     if (!skyboxSphereRef.current) return
     
     const intersects = raycaster.intersectObject(skyboxSphereRef.current)
+    console.log('[MemoryPalace] DEBUG: Raycast intersections with skybox:', intersects.length)
     
     if (intersects.length > 0) {
       const intersectionPoint = intersects[0].point
@@ -1218,12 +1260,14 @@ const MemoryPalace = forwardRef(({
       if (isDragging) {
         // In paint mode, paint while dragging instead of rotating camera
         if (paintModeEnabled) {
+          console.log('[MemoryPalace] DEBUG: Paint mode mouse move - painting instead of camera rotation')
           paintOnSkybox(event)
           lastMouseX = event.clientX
           lastMouseY = event.clientY
           isClick = false // Dragging paint stroke is not a click
           event.preventDefault() // Prevent any other event handling
-          return false // Stop event propagation
+          event.stopPropagation() // Stop event bubbling
+          return // Early return - don't execute camera rotation code below
         }
         
         const deltaX = (event.clientX - lastMouseX) * mouseSensitivity
@@ -1269,6 +1313,8 @@ const MemoryPalace = forwardRef(({
     }
 
     const handleMouseDown = (event) => {
+      console.log('[MemoryPalace] DEBUG: Mouse down event', { button: event.button, paintModeEnabled })
+      
       // Prevent context menu on right click
       if (event.button === 2) {
         event.preventDefault()
@@ -1280,7 +1326,13 @@ const MemoryPalace = forwardRef(({
       mouseDownTime = Date.now()
       lastMouseX = event.clientX
       lastMouseY = event.clientY
-      renderer.domElement.style.cursor = 'grabbing'
+      
+      if (!paintModeEnabled) {
+        renderer.domElement.style.cursor = 'grabbing'
+      } else {
+        console.log('[MemoryPalace] DEBUG: In paint mode - setting paint cursor')
+        renderer.domElement.style.cursor = 'crosshair'
+      }
       
       // Prevent text selection while dragging
       event.preventDefault()
@@ -1489,6 +1541,7 @@ const MemoryPalace = forwardRef(({
 
     // Touch event handlers
     const handleTouchStart = (event) => {
+      console.log('[MemoryPalace] DEBUG: Touch start event', { touchCount: event.touches.length, paintModeEnabled })
       event.preventDefault()
       if (event.touches.length === 1) {
         isDragging = true
@@ -1504,6 +1557,7 @@ const MemoryPalace = forwardRef(({
       if (event.touches.length === 1 && isDragging) {
         // In paint mode, paint while dragging instead of rotating camera
         if (paintModeEnabled) {
+          console.log('[MemoryPalace] DEBUG: Paint mode touch move - painting instead of camera rotation')
           const touchEvent = {
             clientX: event.touches[0].clientX,
             clientY: event.touches[0].clientY
@@ -1512,7 +1566,8 @@ const MemoryPalace = forwardRef(({
           lastMouseX = event.touches[0].clientX
           lastMouseY = event.touches[0].clientY
           isClick = false // Dragging paint stroke is not a tap
-          return false // Stop event propagation
+          event.stopPropagation() // Stop event bubbling
+          return // Early return - don't execute camera rotation code below
         }
         
         const deltaX = (event.touches[0].clientX - lastMouseX) * touchSensitivity
