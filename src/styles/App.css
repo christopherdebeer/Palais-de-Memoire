@@ -47,6 +47,24 @@
   margin: 0 auto var(--space-md);
 }
 
+/* Small loading spinner for image generation */
+.loading-spinner-small {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--color-white-30);
+  border-radius: var(--radius-full);
+  border-top-color: var(--color-primary);
+  animation: spin 1s ease-in-out infinite;
+}
+
+.image-generation-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs);
+  margin-right: var(--space-sm);
+}
+
 /* App Header */
 .app-header {
   position: fixed;
