@@ -369,7 +369,7 @@ const MemoryPalace = forwardRef(({
     })
 
     // Create arrow geometry pointing in the direction of the object
-    const arrowGeometry = new THREE.ConeGeometry(0.5, 1.2, 8) // Much smaller size
+    const arrowGeometry = new THREE.ConeGeometry(0.25, 0.6, 8) // Half the previous size
     const isDoor = obj.targetRoomId !== undefined
     
     // Use same color scheme as object markers
@@ -395,10 +395,21 @@ const MemoryPalace = forwardRef(({
     const tempVector = directionFromCamera.clone()
     tempVector.project(camera)
     
-    // Clamp to screen edges with margin
+    // Find closest edge position instead of simple clamping
     const margin = 0.85 // Keep indicators within 85% of screen edge
-    tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
-    tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+    const absX = Math.abs(tempVector.x)
+    const absY = Math.abs(tempVector.y)
+    
+    // Determine which edge is closest and position on that edge
+    if (absX > absY) {
+      // Object is more to the left/right - position on vertical edges
+      tempVector.x = tempVector.x > 0 ? margin : -margin
+      tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+    } else {
+      // Object is more up/down - position on horizontal edges  
+      tempVector.y = tempVector.y > 0 ? margin : -margin
+      tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+    }
     tempVector.z = 0.1 // Near the camera
     
     // Convert back to world space at fixed distance
@@ -408,8 +419,9 @@ const MemoryPalace = forwardRef(({
     
     arrow.position.copy(indicatorPosition)
     
-    // Point arrow toward the object
-    arrow.lookAt(objectWorldPos)
+    // Point arrow toward the object from its current position
+    const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
+    arrow.lookAt(indicatorPosition.clone().add(directionToObject))
     
     // Add distance text sprite
     const distance = camera.position.distanceTo(objectWorldPos)
@@ -434,7 +446,7 @@ const MemoryPalace = forwardRef(({
       depthTest: false
     })
     const sprite = new THREE.Sprite(spriteMaterial)
-    sprite.scale.set(1.5, 0.75, 1) // Much smaller sprite
+    sprite.scale.set(0.75, 0.375, 1) // Half the previous size
     
     // Position sprite slightly behind arrow
     const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
@@ -535,10 +547,21 @@ const MemoryPalace = forwardRef(({
         const tempVector = directionFromCamera.clone()
         tempVector.project(camera)
         
-        // Clamp to screen edges with margin
+        // Find closest edge position instead of simple clamping
         const margin = 0.85
-        tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
-        tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+        const absX = Math.abs(tempVector.x)
+        const absY = Math.abs(tempVector.y)
+        
+        // Determine which edge is closest and position on that edge
+        if (absX > absY) {
+          // Object is more to the left/right - position on vertical edges
+          tempVector.x = tempVector.x > 0 ? margin : -margin
+          tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+        } else {
+          // Object is more up/down - position on horizontal edges  
+          tempVector.y = tempVector.y > 0 ? margin : -margin
+          tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+        }
         tempVector.z = 0.1
         
         // Convert back to world space at fixed distance
@@ -549,7 +572,9 @@ const MemoryPalace = forwardRef(({
         
         // Update arrow position and rotation
         indicator.arrow.position.copy(indicatorPosition)
-        indicator.arrow.lookAt(objectWorldPos)
+        // Point arrow toward the object from its current position
+        const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
+        indicator.arrow.lookAt(indicatorPosition.clone().add(directionToObject))
         
         // Update sprite position
         const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
