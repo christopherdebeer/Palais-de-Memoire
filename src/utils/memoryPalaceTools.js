@@ -180,12 +180,17 @@ export class MemoryPalaceToolManager {
         this.core.state.connections.set(forwardConnection.id, forwardConnection)
         await this.core.saveState()
         
-        // Create return door in the new room - place at user's "feet"
+        // Create return door in the new room - place at user's "feet" on sphere surface
         // When entering a new room, the user should see the return door at ground level, facing them
+        // Calculate position as normalized vector on sphere surface (radius 500)
+        const direction = { x: 1, y: -0.9, z: 0 } // Forward and down (ground level)
+        const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z)
+        const sphereRadius = 500
+        
         const returnPosition = {
-          x: 450, // Place in front of user (positive X faces forward)
-          y: -200, // At ground level (user's feet)
-          z: 0     // Center horizontally
+          x: (direction.x / magnitude) * sphereRadius,  // Normalized to sphere surface
+          y: (direction.y / magnitude) * sphereRadius,  // Ground level relative to sphere
+          z: (direction.z / magnitude) * sphereRadius   // Center horizontally
         }
         
         const returnConnection = {

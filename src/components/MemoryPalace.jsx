@@ -140,8 +140,10 @@ const MemoryPalace = forwardRef(({
     
     if (obj.position?.x !== undefined && obj.position?.y !== undefined && obj.position?.z !== undefined) {
       if (isDoor) {
-        // For doors, use the exact position coordinates - they're already positioned correctly
-        marker.position.set(obj.position.x, obj.position.y, obj.position.z)
+        // For doors, normalize position to sphere surface (same as objects)
+        // This ensures all doors are properly positioned on the sphere boundary
+        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
+        marker.position.copy(direction.multiplyScalar(baseRadius))
         
         // Orient door to face the user's view (toward center)
         const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
