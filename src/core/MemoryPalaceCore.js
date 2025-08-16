@@ -375,10 +375,14 @@ export class MemoryPalaceCore extends EventEmitter {
   }
 
   /**
-   * Convert screen coordinates to world position
+   * Convert screen coordinates to world position on sphere surface using ray casting
+   * @param {number} screenX - Screen X coordinate (0-1, normalized)
+   * @param {number} screenY - Screen Y coordinate (0-1, normalized)
+   * @param {number} [sphereRadius] - Sphere radius (default 500 to match skybox)
+   * @param {Object} [camera] - THREE.js camera for proper ray casting
    */
-  screenToWorldPosition(screenX, screenY, distance = 400) {
-    return objectUtils.screenToWorldPosition(screenX, screenY, distance)
+  screenToWorldPosition(screenX, screenY, sphereRadius = 500, camera = null) {
+    return objectUtils.screenToWorldPosition(screenX, screenY, sphereRadius, camera)
   }
 
   /**
@@ -591,7 +595,7 @@ export class MemoryPalaceCore extends EventEmitter {
       getRoomObjects: (roomId) => this.getRoomObjects(roomId),
       getObject: (objectId) => this.state.objects.get(objectId) || null,
       findObjectsByName: (name, roomId) => this.findObjectsByName(name, roomId),
-      screenToWorldPosition: (screenX, screenY, distance) => this.screenToWorldPosition(screenX, screenY, distance),
+      screenToWorldPosition: (screenX, screenY, sphereRadius, camera) => this.screenToWorldPosition(screenX, screenY, sphereRadius, camera),
       generateDefaultPosition: (roomId) => this.generateDefaultPosition(roomId)
     }
   }
