@@ -119,7 +119,7 @@ const MemoryPalace = forwardRef(({
       
       // Create paint material with actual paint canvas texture
       const paintMaterial = new THREE.MeshBasicMaterial({
-        map: paintTextureRef.current, // Use actual paint texture for real painting
+        map: debugTexture, //paintTextureRef.current, // Use actual paint texture for real painting
         transparent: true,
         opacity: 1.0, // Full opacity 
         side: THREE.BackSide, // Only render inside faces since we're viewing from center
