@@ -7,7 +7,7 @@
 export { MemoryPalaceCore } from './MemoryPalaceCore.js'
 
 // Essential types only
-export { EventTypes } from './types.js'
+export { EventTypes } from './types.ts'
 
 // Default export
 export { MemoryPalaceCore as default } from './MemoryPalaceCore.js'

@@ -8,7 +8,7 @@ import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
-import { EventTypes } from './core/types.js'
+import { EventTypes } from './core/types.ts'
 import MobileMotionController from './utils/MobileMotionController.js'
 import SettingsManager from './services/SettingsManager.js'
 

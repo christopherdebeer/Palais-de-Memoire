@@ -1,5 +1,5 @@
 import { EventEmitter } from './EventEmitter.js'
-import { EventTypes } from './types.js'
+import { EventTypes } from './types.ts'
 import * as stateUtils from '../utils/stateUtils.js'
 import * as roomUtils from '../utils/roomUtils.js'
 import * as objectUtils from '../utils/objectUtils.js'
