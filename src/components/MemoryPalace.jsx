@@ -34,6 +34,7 @@ const MemoryPalace = forwardRef(({
   const paintTextureRef = useRef(null)
   const paintContextRef = useRef(null)
   const paintedGroupsRef = useRef(new Map()) // Store painted object groups
+  const paintModeEnabledRef = useRef(paintModeEnabled) // Ref for current paint mode state
   
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
@@ -116,11 +117,11 @@ const MemoryPalace = forwardRef(({
       
       console.log('[MemoryPalace] DEBUG: Created visible test texture for paint sphere')
       
-      // Create paint material with debug texture for visibility test
+      // Create paint material with actual paint canvas texture
       const paintMaterial = new THREE.MeshBasicMaterial({
-        map: debugTexture, // Use debug texture instead of paint texture for now
+        map: paintTextureRef.current, // Use actual paint texture for real painting
         transparent: true,
-        opacity: 1.0, // Full opacity for visibility test
+        opacity: 1.0, // Full opacity 
         side: THREE.BackSide, // Only render inside faces since we're viewing from center
         depthTest: false,
         depthWrite: false
@@ -181,7 +182,7 @@ const MemoryPalace = forwardRef(({
       hasSkyboxSphere: !!skyboxSphereRef.current
     })
     
-    if (!paintModeEnabled || !paintContextRef.current || !cameraRef.current) return
+    if (!paintModeEnabledRef.current || !paintContextRef.current || !cameraRef.current) return
     
     // Calculate mouse position in normalized device coordinates
     const mouse = new THREE.Vector2()
@@ -257,7 +258,7 @@ const MemoryPalace = forwardRef(({
   }
 
   const getPaintedObjectAt = (event) => {
-    if (!paintModeEnabled) return null
+    if (!paintModeEnabledRef.current) return null
     
     // Calculate mouse position and find painted object
     const mouse = new THREE.Vector2()
@@ -1258,8 +1259,9 @@ const MemoryPalace = forwardRef(({
 
     const handleMouseMove = (event) => {
       if (isDragging) {
+        const currentPaintMode = paintModeEnabledRef.current
         // In paint mode, paint while dragging instead of rotating camera
-        if (paintModeEnabled) {
+        if (currentPaintMode) {
           console.log('[MemoryPalace] DEBUG: Paint mode mouse move - painting instead of camera rotation')
           paintOnSkybox(event)
           lastMouseX = event.clientX
@@ -1313,7 +1315,16 @@ const MemoryPalace = forwardRef(({
     }
 
     const handleMouseDown = (event) => {
-      console.log('[MemoryPalace] DEBUG: Mouse down event', { button: event.button, paintModeEnabled })
+      const currentPaintMode = paintModeEnabledRef.current
+      console.log('[MemoryPalace] DEBUG: Mouse down event', { button: event.button, paintModeEnabled: currentPaintMode })
+      
+      // In paint mode, prevent all default behaviors and stop propagation
+      if (currentPaintMode) {
+        event.preventDefault()
+        event.stopPropagation()
+        console.log('[MemoryPalace] DEBUG: Paint mode - prevented defaults and stopped propagation')
+        return false
+      }
       
       // Prevent context menu on right click
       if (event.button === 2) {
@@ -1327,7 +1338,7 @@ const MemoryPalace = forwardRef(({
       lastMouseX = event.clientX
       lastMouseY = event.clientY
       
-      if (!paintModeEnabled) {
+      if (!currentPaintMode) {
         renderer.domElement.style.cursor = 'grabbing'
       } else {
         console.log('[MemoryPalace] DEBUG: In paint mode - setting paint cursor')
@@ -1353,8 +1364,9 @@ const MemoryPalace = forwardRef(({
 
     const handleClick = (event) => {
       if (!isDragging) {
+        const currentPaintMode = paintModeEnabledRef.current
         // Check if we're in paint mode - paint instead of other interactions
-        if (paintModeEnabled) {
+        if (currentPaintMode) {
           console.log('[MemoryPalace] Paint mode click detected')
           paintOnSkybox(event)
           return
@@ -1541,7 +1553,25 @@ const MemoryPalace = forwardRef(({
 
     // Touch event handlers
     const handleTouchStart = (event) => {
-      console.log('[MemoryPalace] DEBUG: Touch start event', { touchCount: event.touches.length, paintModeEnabled })
+      const currentPaintMode = paintModeEnabledRef.current
+      console.log('[MemoryPalace] DEBUG: Touch start event', { touchCount: event.touches.length, paintModeEnabled: currentPaintMode })
+      
+      // In paint mode, prevent all defaults and stop propagation
+      if (currentPaintMode) {
+        event.preventDefault()
+        event.stopPropagation()
+        console.log('[MemoryPalace] DEBUG: Paint mode touch - prevented defaults and stopped propagation')
+        // Still process the touch for painting
+        if (event.touches.length === 1) {
+          isDragging = true
+          isClick = true
+          mouseDownTime = Date.now()
+          lastMouseX = event.touches[0].clientX
+          lastMouseY = event.touches[0].clientY
+        }
+        return false
+      }
+      
       event.preventDefault()
       if (event.touches.length === 1) {
         isDragging = true
@@ -1555,8 +1585,9 @@ const MemoryPalace = forwardRef(({
     const handleTouchMove = (event) => {
       event.preventDefault()
       if (event.touches.length === 1 && isDragging) {
+        const currentPaintMode = paintModeEnabledRef.current
         // In paint mode, paint while dragging instead of rotating camera
-        if (paintModeEnabled) {
+        if (currentPaintMode) {
           console.log('[MemoryPalace] DEBUG: Paint mode touch move - painting instead of camera rotation')
           const touchEvent = {
             clientX: event.touches[0].clientX,
@@ -1952,6 +1983,7 @@ const MemoryPalace = forwardRef(({
 
   // Handle paint mode toggle
   useEffect(() => {
+    paintModeEnabledRef.current = paintModeEnabled // Update ref when prop changes
     if (paintModeEnabled) {
       enablePaintMode()
     } else {
