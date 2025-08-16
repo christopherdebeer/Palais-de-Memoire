@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faTimes, faCheck, faSpinner } from '@fortawesome/free-solid-svg-icons'
+import { getFormDataProvider } from '../services/FormDataProvider.js'
 
 const ActionFormModal = ({ 
   isOpen, 
@@ -82,60 +83,16 @@ const ActionFormModal = ({
   }
 
   const getSelectOptions = (field, state) => {
+    const dataProvider = getFormDataProvider()
+    
     if (field.key === 'roomName') {
-      // Get rooms from the memory palace core state
-      if (state && state.roomManager) {
-        const rooms = state.roomManager.getAllRooms() || [];
-        return rooms.map(room => ({
-          value: room.name,
-          label: `${room.name} - ${room.description.substring(0, 30)}...`
-        }));
-      } else if (state && state.core && state.core.getAllRooms) {
-        // Try alternative access pattern
-        const rooms = state.core.getAllRooms() || [];
-        return rooms.map(room => ({
-          value: room.name,
-          label: `${room.name} - ${room.description.substring(0, 30)}...`
-        }));
-      } else {
-        // If we can't access rooms through normal means,
-        // try to use the state directly if it contains rooms array
-        const coreState = window.memoryPalaceCore?.getCurrentState();
-        if (coreState && window.memoryPalaceCore && window.memoryPalaceCore.getAllRooms) {
-          const rooms = window.memoryPalaceCore.getAllRooms();
-          return rooms.map(room => ({
-            value: room.name,
-            label: `${room.name} - ${room.description.substring(0, 30)}...`
-          }));
-        }
-        
-        console.warn('Could not retrieve rooms for dropdown', state);
-        return [];
-      }
+      return dataProvider.getRoomOptions(state)
     }
+    
     if (field.key === 'name' && action === 'remove_object') {
-      // Get objects from the current room state
-      if (state && state.currentRoom && state.core && state.core.getCurrentRoomObjects) {
-        const objects = state.core.getCurrentRoomObjects() || [];
-        return objects.map(obj => ({
-          value: obj.name,
-          label: obj.name
-        }));
-      } else {
-        // If we can't access objects through normal means
-        const coreState = window.memoryPalaceCore?.getCurrentState();
-        if (coreState && window.memoryPalaceCore && window.memoryPalaceCore.getCurrentRoomObjects) {
-          const objects = window.memoryPalaceCore.getCurrentRoomObjects();
-          return objects.map(obj => ({
-            value: obj.name,
-            label: obj.name
-          }));
-        }
-        
-        console.warn('Could not retrieve objects for dropdown', state);
-        return [];
-      }
+      return dataProvider.getObjectOptions(state)
     }
+    
     return []
   }
 
