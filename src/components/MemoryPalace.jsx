@@ -35,14 +35,16 @@ const MemoryPalace = forwardRef(({
   const paintContextRef = useRef(null)
   const paintedGroupsRef = useRef(new Map()) // Store painted object groups
   const paintModeEnabledRef = useRef(paintModeEnabled) // Ref for current paint mode state
+  const paintInitializedRef = useRef(false) // Prevent double initialization in strict mode
   
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
 
   // Paint mode functions
   const initializePaintCanvas = () => {
-    if (paintCanvasRef.current) return // Already initialized
+    if (paintCanvasRef.current || paintInitializedRef.current) return // Already initialized or initializing
     
+    paintInitializedRef.current = true // Prevent double initialization
     console.log('[MemoryPalace] Initializing paint canvas system')
     
     // Create canvas for painting - high resolution for detail
@@ -52,9 +54,29 @@ const MemoryPalace = forwardRef(({
     
     const context = canvas.getContext('2d')
     
-    // Initialize with transparent black canvas so painted areas are visible
-    context.fillStyle = 'rgba(0, 0, 0, 0)' // Fully transparent
+    // Initialize with subtle visible base pattern so we can see if the texture is rendering
+    // Start with very subtle transparent overlay
+    context.fillStyle = 'rgba(0, 0, 0, 0)' // Fully transparent base
     context.fillRect(0, 0, canvas.width, canvas.height)
+    
+    // Add very subtle grid pattern to confirm texture visibility 
+    context.strokeStyle = 'rgba(255, 255, 255, 0.05)' // Very faint white lines
+    context.lineWidth = 2
+    
+    // Add sparse grid lines for debugging visibility
+    const gridSpacing = 200
+    for (let x = 0; x < canvas.width; x += gridSpacing) {
+      context.beginPath()
+      context.moveTo(x, 0)
+      context.lineTo(x, canvas.height)
+      context.stroke()
+    }
+    for (let y = 0; y < canvas.height; y += gridSpacing) {
+      context.beginPath()
+      context.moveTo(0, y)
+      context.lineTo(canvas.width, y)
+      context.stroke()
+    }
     
     // Store references
     paintCanvasRef.current = canvas
@@ -70,7 +92,7 @@ const MemoryPalace = forwardRef(({
     
     paintTextureRef.current = paintTexture
     
-    console.log('[MemoryPalace] Paint canvas system initialized')
+    console.log('[MemoryPalace] Paint canvas system initialized with subtle grid pattern for visibility testing')
   }
 
   const enablePaintMode = () => {
@@ -89,37 +111,11 @@ const MemoryPalace = forwardRef(({
         skyboxMaterialRef.current.userData.originalTransparent = skyboxMaterialRef.current.transparent
       }
       
-      // DEBUG: Create a test texture with visible pattern to verify sphere rendering
-      const debugCanvas = document.createElement('canvas')
-      debugCanvas.width = 512
-      debugCanvas.height = 256
-      const debugContext = debugCanvas.getContext('2d')
-      
-      // Fill with semi-transparent red for visibility test
-      debugContext.fillStyle = 'rgba(255, 0, 0, 0.3)'
-      debugContext.fillRect(0, 0, debugCanvas.width, debugCanvas.height)
-      
-      // Add some pattern to make it obvious
-      debugContext.strokeStyle = 'rgba(255, 255, 0, 0.8)'
-      debugContext.lineWidth = 4
-      for (let i = 0; i < debugCanvas.width; i += 50) {
-        debugContext.beginPath()
-        debugContext.moveTo(i, 0)
-        debugContext.lineTo(i, debugCanvas.height)
-        debugContext.stroke()
-      }
-      
-      const debugTexture = new THREE.CanvasTexture(debugCanvas)
-      debugTexture.mapping = THREE.UVMapping // Use standard UV mapping instead of equirectangular
-      debugTexture.wrapS = THREE.RepeatWrapping
-      debugTexture.wrapT = THREE.ClampToEdgeWrapping
-      debugTexture.needsUpdate = true
-      
-      console.log('[MemoryPalace] DEBUG: Created visible test texture for paint sphere')
+      console.log('[MemoryPalace] Paint mode enabled - using actual paint canvas texture')
       
       // Create paint material with actual paint canvas texture
       const paintMaterial = new THREE.MeshBasicMaterial({
-        map: debugTexture, //paintTextureRef.current, // Use actual paint texture for real painting
+        map: paintTextureRef.current, // Use actual paint texture for painting
         transparent: true,
         opacity: 1.0, // Full opacity 
         side: THREE.BackSide, // Only render inside faces since we're viewing from center
@@ -138,9 +134,8 @@ const MemoryPalace = forwardRef(({
       skyboxSphereRef.current.userData.paintSphere = paintSphere
       skyboxSphereRef.current.userData.paintMaterial = paintMaterial
       skyboxSphereRef.current.userData.paintGeometry = paintGeometry
-      skyboxSphereRef.current.userData.debugTexture = debugTexture
       
-      console.log('[MemoryPalace] Paint overlay sphere created with debug texture - sphere should be visible with red/yellow pattern')
+      console.log('[MemoryPalace] Paint overlay sphere created with actual paint canvas texture - should show subtle grid pattern')
     }
   }
 
@@ -154,7 +149,6 @@ const MemoryPalace = forwardRef(({
       const paintSphere = skyboxSphereRef.current.userData.paintSphere
       const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
       const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
-      const debugTexture = skyboxSphereRef.current.userData.debugTexture
       
       // Remove from scene
       sceneRef.current.remove(paintSphere)
@@ -162,13 +156,12 @@ const MemoryPalace = forwardRef(({
       // Dispose resources
       if (paintGeometry) paintGeometry.dispose()
       if (paintMaterial) paintMaterial.dispose()
-      if (debugTexture) debugTexture.dispose()
+      // Note: Don't dispose paintTextureRef.current as it's managed separately
       
       // Clear references
       skyboxSphereRef.current.userData.paintSphere = null
       skyboxSphereRef.current.userData.paintMaterial = null
       skyboxSphereRef.current.userData.paintGeometry = null
-      skyboxSphereRef.current.userData.debugTexture = null
       
       console.log('[MemoryPalace] Paint overlay sphere removed')
     }
