@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye } from '@fortawesome/free-solid-svg-icons'
+import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye, faPaintBrush } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
 import VoiceInterface from './components/VoiceInterface'
 import voiceManager from './utils/VoiceManager.js'
@@ -23,6 +23,7 @@ function App({core}) {
   const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
   const [wireframeEnabled, setWireframeEnabled] = useState(settingsManager.get('wireframeMode')) // Read from settings
   const [nippleEnabled, setNippleEnabled] = useState(false)
+  const [paintModeEnabled, setPaintModeEnabled] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -309,6 +310,11 @@ function App({core}) {
   const handleNippleToggle = (enabled) => {
     setNippleEnabled(enabled)
     console.log(`Nipple controls ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  const handlePaintModeToggle = (enabled) => {
+    setPaintModeEnabled(enabled)
+    console.log(`Paint mode ${enabled ? 'enabled' : 'disabled'}`)
   }
 
   const handleMenuToggle = () => {
@@ -995,6 +1001,7 @@ function App({core}) {
         ref={memoryPalaceRef}
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
+        paintModeEnabled={paintModeEnabled}
         onCreationModeTriggered={handleCreationModeTriggered}
         onObjectSelected={handleObjectSelected}
         selectedObjectId={selectedObject?.id}
@@ -1255,6 +1262,14 @@ function App({core}) {
               <div className="loading-spinner-small"></div>
             </div>
           )}
+          <button 
+            className={`paint-mode-toggle ${paintModeEnabled ? 'active' : ''}`}
+            onClick={() => handlePaintModeToggle(!paintModeEnabled)}
+            aria-label="Toggle paint mode"
+            title="Paint Mode - Paint on the skybox to create objects"
+          >
+            <FontAwesomeIcon icon={faPaintBrush} />
+          </button>
           <button 
             className="menu-toggle"
             onClick={handleMenuToggle}
