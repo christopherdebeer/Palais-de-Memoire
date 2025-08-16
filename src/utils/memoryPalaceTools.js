@@ -180,11 +180,12 @@ export class MemoryPalaceToolManager {
         this.core.state.connections.set(forwardConnection.id, forwardConnection)
         await this.core.saveState()
         
-        // Create return door in the new room
+        // Create return door in the new room - place at user's "feet"
+        // When entering a new room, the user should see the return door at ground level, facing them
         const returnPosition = {
-          x: position.x !== undefined ? -position.x : 0,
-          y: position.y !== undefined ? position.y : 1.5,
-          z: position.z !== undefined ? -position.z : -2
+          x: 450, // Place in front of user (positive X faces forward)
+          y: -200, // At ground level (user's feet)
+          z: 0     // Center horizontally
         }
         
         const returnConnection = {
