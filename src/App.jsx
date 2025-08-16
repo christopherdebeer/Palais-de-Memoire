@@ -41,6 +41,7 @@ function App({core}) {
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [isCreationMode, setIsCreationMode] = useState(false)
   const [pendingCreationPosition, setPendingCreationPosition] = useState(null)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   
   // Object interaction state
   const [selectedObject, setSelectedObject] = useState(null)
@@ -151,6 +152,17 @@ function App({core}) {
             if (error.type === 'initialization_error' || error.type === 'startup_error') {
               handleCaptionUpdate(`Error: ${error.error}. Please try refreshing the application.`, 'synthesis')
             }
+          }));
+          
+          // Add image generation loading state listeners
+          unsubscribers.push(core.on('room_image_generation_started', (data) => {
+            console.log('[App] Image generation started:', data)
+            setIsGeneratingImage(true)
+          }));
+          
+          unsubscribers.push(core.on('room_image_generation_completed', (data) => {
+            console.log('[App] Image generation completed:', data)
+            setIsGeneratingImage(false)
           }));
           
           // Return unsubscribe function that cleans up all listeners
@@ -1237,6 +1249,12 @@ function App({core}) {
       <div className="app-header">
         <h1>{memoryPalaceCore?.getCurrentState()?.currentRoom?.name || "Palais de Mémoire"}</h1>
         <div className="header-buttons">
+          {/* Loading spinner for image generation */}
+          {isGeneratingImage && (
+            <div className="image-generation-loading" title="Generating room image...">
+              <div className="loading-spinner-small"></div>
+            </div>
+          )}
           <button 
             className="menu-toggle"
             onClick={handleMenuToggle}

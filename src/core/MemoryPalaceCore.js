@@ -153,9 +153,11 @@ export class MemoryPalaceCore extends EventEmitter {
       this.metrics.roomsCreated++
       this.emit(EventTypes.ROOM_CREATED, result)
       
-      // Generate room image if needed
+      // Generate room image if needed - AWAIT completion
       if (!result.imageUrl) {
-        this.generateRoomImage(result.id, result.description)
+        console.log('[MemoryPalaceCore] Starting default room image generation and awaiting completion...')
+        await this.generateRoomImage(result.id, result.description)
+        console.log('[MemoryPalaceCore] Default room image generation completed')
       }
     }
     
@@ -182,9 +184,11 @@ export class MemoryPalaceCore extends EventEmitter {
     this.metrics.roomsCreated++
     this.emit(EventTypes.ROOM_CREATED, room)
     
-    // Generate room image if needed
+    // Generate room image if needed - AWAIT completion before returning
     if (!room.imageUrl && !options.skipImageGeneration) {
-      this.generateRoomImage(room.id, description)
+      console.log('[MemoryPalaceCore] Starting room image generation and awaiting completion...')
+      await this.generateRoomImage(room.id, description)
+      console.log('[MemoryPalaceCore] Room image generation completed')
     }
 
     return room
@@ -245,6 +249,9 @@ export class MemoryPalaceCore extends EventEmitter {
     }
 
     this.isGeneratingImage = true
+    
+    // Emit loading state start
+    this.emit('room_image_generation_started', { roomId, description })
 
     try {
       const result = await imageGeneration.generateAndUpdateRoomImage(
@@ -281,6 +288,9 @@ export class MemoryPalaceCore extends EventEmitter {
       return false
     } finally {
       this.isGeneratingImage = false
+      
+      // Emit loading state end
+      this.emit('room_image_generation_completed', { roomId })
     }
   }
 
@@ -404,6 +414,7 @@ export class MemoryPalaceCore extends EventEmitter {
     return {
       isInitialized: this.isInitialized,
       isRunning: this.isRunning,
+      isGeneratingImage: this.isGeneratingImage, // Add loading state
       currentRoom,
       objects, // Include both objects AND doors
       userState: this.state.user,
