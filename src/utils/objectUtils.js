@@ -212,22 +212,138 @@ export function generateDefaultPosition(state, roomId) {
 }
 
 /**
- * Convert screen coordinates to world position
- * @param {number} screenX - Screen X coordinate (0-1)
- * @param {number} screenY - Screen Y coordinate (0-1)
- * @param {number} [distance] - Distance from origin (default 400)
- * @returns {Object} 3D position {x, y, z}
+ * Perform ray casting from screen coordinates to find sphere intersection
+ * @param {number} clientX - Screen X coordinate in pixels
+ * @param {number} clientY - Screen Y coordinate in pixels 
+ * @param {Object} camera - THREE.js camera
+ * @param {Object} sphere - THREE.js sphere mesh to intersect with
+ * @returns {Object|null} Intersection point {x, y, z} or null if no intersection
  */
-export function screenToWorldPosition(screenX, screenY, distance = 400) {
-  // Convert screen coordinates to spherical coordinates
-  const phi = (screenX - 0.5) * Math.PI * 2 // Azimuth (horizontal)
-  const theta = (screenY - 0.5) * Math.PI    // Elevation (vertical)
+export function performRayCasting(clientX, clientY, camera, sphere) {
+  if (typeof window === 'undefined' || !window.THREE) {
+    return null
+  }
   
-  // Convert to Cartesian coordinates
+  const THREE = window.THREE
+  
+  // Convert screen coordinates to normalized device coordinates (-1 to +1)
+  const mouse = new THREE.Vector2()
+  mouse.x = (clientX / window.innerWidth) * 2 - 1
+  mouse.y = -(clientY / window.innerHeight) * 2 + 1
+
+  // Create raycaster and find intersection
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(mouse, camera)
+  
+  const intersects = raycaster.intersectObject(sphere)
+  
+  if (intersects.length > 0) {
+    const intersectionPoint = intersects[0].point
+    return {
+      x: intersectionPoint.x,
+      y: intersectionPoint.y,
+      z: intersectionPoint.z
+    }
+  }
+  
+  return null
+}
+
+/**
+ * Convert screen coordinates to world position on sphere surface using ray casting
+ * @param {number} screenX - Screen X coordinate (0-1, normalized)
+ * @param {number} screenY - Screen Y coordinate (0-1, normalized) 
+ * @param {number} [sphereRadius] - Sphere radius (default 500 to match the skybox)
+ * @param {Object} [camera] - THREE.js camera for proper ray casting (optional)
+ * @returns {Object} 3D position {x, y, z} on sphere surface
+ */
+export function screenToWorldPosition(screenX, screenY, sphereRadius = 500, camera = null) {
+  // If camera is available, use proper ray casting (preferred method)
+  if (camera && typeof window !== 'undefined' && window.THREE) {
+    const THREE = window.THREE
+    
+    // Convert normalized screen coordinates to NDC (-1 to +1)
+    const mouse = new THREE.Vector2()
+    mouse.x = screenX * 2 - 1
+    mouse.y = -(screenY * 2 - 1)
+    
+    // Create raycaster
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, camera)
+    
+    // Create sphere geometry for intersection testing
+    const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 32, 16)
+    const sphereMesh = new THREE.Mesh(sphereGeometry)
+    
+    // Find intersection with sphere
+    const intersects = raycaster.intersectObject(sphereMesh)
+    
+    // Cleanup
+    sphereGeometry.dispose()
+    
+    if (intersects.length > 0) {
+      const intersectionPoint = intersects[0].point
+      return {
+        x: intersectionPoint.x,
+        y: intersectionPoint.y, 
+        z: intersectionPoint.z
+      }
+    }
+  }
+  
+  // Fallback: Improved spherical coordinate conversion
+  // This assumes a forward-facing camera at origin (0,0,0)
+  
+  // Convert screen coordinates to spherical angles
+  // Map screen coordinates to sphere surface more accurately
+  const phi = (screenX - 0.5) * Math.PI * 1.8  // Horizontal (reduced from 2π for better distribution)
+  const theta = (screenY - 0.5) * Math.PI * 0.9 // Vertical (reduced to avoid poles)
+  
+  // Convert spherical to Cartesian coordinates
+  // Using standard spherical coordinate system: (r, θ, φ)
+  // where θ is polar angle from positive Y, φ is azimuthal angle from positive X
+  const polarAngle = Math.PI/2 + theta  // Offset so center of screen maps to horizon
+  
   return {
-    x: distance * Math.sin(theta) * Math.cos(phi),
-    y: distance * Math.cos(theta),
-    z: distance * Math.sin(theta) * Math.sin(phi)
+    x: sphereRadius * Math.sin(polarAngle) * Math.cos(phi),
+    y: sphereRadius * Math.cos(polarAngle), 
+    z: sphereRadius * Math.sin(polarAngle) * Math.sin(phi)
+  }
+}
+
+/**
+ * Position an object on the sphere surface
+ * @param {Object} position - Input position {x, y, z}
+ * @param {number} [sphereRadius] - Sphere radius (default 500)
+ * @param {number} [offsetMultiplier] - Multiplier for positioning slightly outside surface (default 1.0)
+ * @returns {Object} Position on sphere surface {x, y, z}
+ */
+export function positionOnSphere(position, sphereRadius = 500, offsetMultiplier = 1.0) {
+  if (typeof window !== 'undefined' && window.THREE) {
+    const THREE = window.THREE
+    
+    // Normalize position to sphere surface
+    const direction = new THREE.Vector3(position.x, position.y, position.z).normalize()
+    const finalPosition = direction.multiplyScalar(sphereRadius * offsetMultiplier)
+    
+    return {
+      x: finalPosition.x,
+      y: finalPosition.y,
+      z: finalPosition.z
+    }
+  }
+  
+  // Fallback without THREE.js
+  const magnitude = Math.sqrt(position.x * position.x + position.y * position.y + position.z * position.z)
+  if (magnitude === 0) {
+    return { x: sphereRadius * offsetMultiplier, y: 0, z: 0 }
+  }
+  
+  const normalizedRadius = (sphereRadius * offsetMultiplier) / magnitude
+  return {
+    x: position.x * normalizedRadius,
+    y: position.y * normalizedRadius,
+    z: position.z * normalizedRadius
   }
 }
 
