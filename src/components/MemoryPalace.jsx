@@ -98,8 +98,8 @@ const MemoryPalace = forwardRef(({
         depthWrite: false
       })
       
-      // Create paint sphere slightly larger than skybox to overlay
-      const paintGeometry = new THREE.SphereGeometry(501, 60, 40) // Slightly larger than skybox (500)
+      // Create paint sphere inside the skybox for inside viewing
+      const paintGeometry = new THREE.SphereGeometry(499, 60, 40) // Inside skybox (500)
       paintGeometry.scale(-1, 1, 1) // Flip inside out like skybox
       
       const paintSphere = new THREE.Mesh(paintGeometry, paintMaterial)
@@ -1222,7 +1222,8 @@ const MemoryPalace = forwardRef(({
           lastMouseX = event.clientX
           lastMouseY = event.clientY
           isClick = false // Dragging paint stroke is not a click
-          return
+          event.preventDefault() // Prevent any other event handling
+          return false // Stop event propagation
         }
         
         const deltaX = (event.clientX - lastMouseX) * mouseSensitivity
@@ -1501,6 +1502,19 @@ const MemoryPalace = forwardRef(({
     const handleTouchMove = (event) => {
       event.preventDefault()
       if (event.touches.length === 1 && isDragging) {
+        // In paint mode, paint while dragging instead of rotating camera
+        if (paintModeEnabled) {
+          const touchEvent = {
+            clientX: event.touches[0].clientX,
+            clientY: event.touches[0].clientY
+          }
+          paintOnSkybox(touchEvent)
+          lastMouseX = event.touches[0].clientX
+          lastMouseY = event.touches[0].clientY
+          isClick = false // Dragging paint stroke is not a tap
+          return false // Stop event propagation
+        }
+        
         const deltaX = (event.touches[0].clientX - lastMouseX) * touchSensitivity
         const deltaY = (event.touches[0].clientY - lastMouseY) * touchSensitivity
         
