@@ -169,7 +169,7 @@ const MemoryPalace = forwardRef(({
 
   const paintOnSkybox = (event) => {
     console.log('[MemoryPalace] DEBUG: paintOnSkybox called', {
-      paintModeEnabled: paintModeEnabledRef.current, // Fix: use ref value for accurate debugging
+      paintModeEnabled,
       hasContext: !!paintContextRef.current,
       hasCamera: !!cameraRef.current,
       hasSkyboxSphere: !!skyboxSphereRef.current
@@ -240,40 +240,12 @@ const MemoryPalace = forwardRef(({
         
         paintedGroupsRef.current.set(paintedArea.id, paintedArea)
         
-        // Force GPU texture update - critical for visibility!
+        // Update texture
         if (paintTextureRef.current) {
           paintTextureRef.current.needsUpdate = true
-          // Force a more aggressive texture update by recreating the texture
-          const currentCanvas = paintCanvasRef.current
-          if (currentCanvas) {
-            const newTexture = new THREE.CanvasTexture(currentCanvas)
-            newTexture.mapping = THREE.EquirectangularReflectionMapping
-            newTexture.wrapS = THREE.RepeatWrapping
-            newTexture.wrapT = THREE.ClampToEdgeWrapping
-            newTexture.offset.x = 0.5
-            newTexture.needsUpdate = true
-            
-            // Update paint sphere material if it exists
-            if (skyboxSphereRef.current?.userData.paintSphere?.material) {
-              const oldTexture = skyboxSphereRef.current.userData.paintSphere.material.map
-              skyboxSphereRef.current.userData.paintSphere.material.map = newTexture
-              skyboxSphereRef.current.userData.paintSphere.material.needsUpdate = true
-              
-              // Dispose old texture to prevent memory leaks
-              if (oldTexture && oldTexture !== paintTextureRef.current) {
-                oldTexture.dispose()
-              }
-            }
-            
-            // Update the stored reference
-            if (paintTextureRef.current !== newTexture) {
-              paintTextureRef.current.dispose()
-              paintTextureRef.current = newTexture
-            }
-          }
         }
         
-        console.log('[MemoryPalace] Painted area created with forced texture update:', paintedArea)
+        console.log('[MemoryPalace] Painted area created:', paintedArea)
       }
     }
   }
