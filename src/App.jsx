@@ -825,7 +825,7 @@ function App({core}) {
   }
 
   // Object interaction handlers
-  const handleObjectSelected = (objectId) => {
+  const handleObjectSelected = async (objectId) => {
     console.log('[App] Object selected:', objectId)
     if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) return
     
@@ -833,8 +833,20 @@ function App({core}) {
     const object = objects.find(obj => obj.id === objectId)
     
     if (object) {
-      setSelectedObject(object)
-      setObjectInspectorOpen(true)
+      // Check if this is a door (has targetRoomId)
+      if (object.targetRoomId) {
+        console.log('[App] Door clicked, navigating to room:', object.targetRoomId)
+        try {
+          await memoryPalaceCore.navigateToRoom(object.targetRoomId)
+          updatePalaceState(memoryPalaceCore)
+        } catch (error) {
+          console.error('[App] Failed to navigate through door:', error)
+        }
+      } else {
+        // Regular object - show inspector
+        setSelectedObject(object)
+        setObjectInspectorOpen(true)
+      }
     }
   }
 

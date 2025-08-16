@@ -139,9 +139,20 @@ const MemoryPalace = forwardRef(({
     const baseRadius = 500
     
     if (obj.position?.x !== undefined && obj.position?.y !== undefined && obj.position?.z !== undefined) {
-      // Use stored 3D coordinates but extend them outward
-      const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
-      marker.position.copy(direction.multiplyScalar(baseRadius))
+      if (isDoor) {
+        // For doors, normalize position to sphere surface (same as objects)
+        // This ensures all doors are properly positioned on the sphere boundary
+        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
+        marker.position.copy(direction.multiplyScalar(baseRadius))
+        
+        // Orient door to face the user's view (toward center)
+        const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
+        marker.lookAt(marker.position.clone().add(lookDirection))
+      } else {
+        // For objects, use stored 3D coordinates but extend them outward to sphere surface
+        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
+        marker.position.copy(direction.multiplyScalar(baseRadius))
+      }
       
       console.log(`[MemoryPalace] 📍 SCENE: marker positioned using object coordinates`, {
         objectId: obj.id,
@@ -274,9 +285,20 @@ const MemoryPalace = forwardRef(({
             })
             
             // Update marker position
-            const baseRadius = 500
-            const direction = new THREE.Vector3(newPos.x, newPos.y, newPos.z).normalize()
-            marker.position.copy(direction.multiplyScalar(baseRadius))
+            const isDoor = obj.targetRoomId !== undefined
+            if (isDoor) {
+              // For doors, use exact position coordinates
+              marker.position.set(newPos.x, newPos.y, newPos.z)
+              
+              // Orient door to face the user's view (toward center)
+              const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
+              marker.lookAt(marker.position.clone().add(lookDirection))
+            } else {
+              // For objects, extend to sphere surface
+              const baseRadius = 500
+              const direction = new THREE.Vector3(newPos.x, newPos.y, newPos.z).normalize()
+              marker.position.copy(direction.multiplyScalar(baseRadius))
+            }
             
             // Update particle system position
             if (marker.userData.particleSystem) {
