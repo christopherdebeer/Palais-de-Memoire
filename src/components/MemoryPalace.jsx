@@ -87,7 +87,7 @@ const MemoryPalace = forwardRef(({
     paintTexture.mapping = THREE.EquirectangularReflectionMapping
     paintTexture.wrapS = THREE.RepeatWrapping
     paintTexture.wrapT = THREE.ClampToEdgeWrapping
-    // Remove offset to fix coordinate system and seam positioning
+    paintTexture.offset.x = 0.5 // Apply same 180° offset as all skybox textures for coordinate system alignment
     paintTexture.needsUpdate = true
     
     paintTextureRef.current = paintTexture
@@ -206,7 +206,8 @@ const MemoryPalace = forwardRef(({
         // Convert UV coordinates to canvas coordinates
         // UV coordinates: u=0 is left edge, v=0 is bottom edge
         // Canvas coordinates: x=0 is left edge, y=0 is top edge
-        let canvasX = uv.x * canvas.width
+        // Account for the 0.5 texture offset applied to paint texture (same as skybox textures)
+        let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width  // Apply 180° offset compensation
         let canvasY = (1.0 - uv.y) * canvas.height  // Flip Y-axis
         
         // Paint with brush
