@@ -1028,10 +1028,10 @@ function App({core}) {
           paintedItem.description + ' (Click to configure destination)',
           paintedItem.position,
           { 
+            type: 'door',
             isPaintedDoor: true, 
             paintData: paintedItem.paintData,
-            needsConfiguration: true,
-            type: 'door'
+            needsConfiguration: true
           }
         )
         
@@ -1043,7 +1043,11 @@ function App({core}) {
           paintedItem.name,
           paintedItem.information,
           paintedItem.position,
-          { isPaintedObject: true, paintData: paintedItem.paintData }
+          { 
+            type: 'object',
+            isPaintedObject: true, 
+            paintData: paintedItem.paintData 
+          }
         )
         
         console.log('[App] Painted object added to memory palace:', addedObject)

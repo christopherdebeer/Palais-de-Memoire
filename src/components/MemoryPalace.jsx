@@ -202,7 +202,8 @@ const MemoryPalace = forwardRef(({
           paintData: {
             areas: group,
             canvasPosition: groupData.canvasCenter,
-            color: 'rgba(0, 0, 255, 0.9)' // Blue for doors
+            color: 'rgba(0, 0, 255, 0.9)', // Blue for doors
+            dimensions: groupData.dimensions
           }
         }
         
@@ -225,7 +226,8 @@ const MemoryPalace = forwardRef(({
           paintData: {
             areas: group,
             canvasPosition: groupData.canvasCenter,
-            color: 'rgba(255, 0, 0, 0.9)' // Red for objects
+            color: 'rgba(255, 0, 0, 0.9)', // Red for objects
+            dimensions: groupData.dimensions
           }
         }
         
@@ -297,6 +299,21 @@ const MemoryPalace = forwardRef(({
     const centerX = group.reduce((sum, area) => sum + area.center.x, 0) / group.length
     const centerY = group.reduce((sum, area) => sum + area.center.y, 0) / group.length
     
+    // Calculate bounding box of painted areas to determine geometry size
+    const minX = Math.min(...group.map(area => area.center.x - area.size))
+    const maxX = Math.max(...group.map(area => area.center.x + area.size))
+    const minY = Math.min(...group.map(area => area.center.y - area.size))
+    const maxY = Math.max(...group.map(area => area.center.y + area.size))
+    
+    const paintedWidth = maxX - minX
+    const paintedHeight = maxY - minY
+    
+    // Convert canvas dimensions to world scale
+    // Canvas is 4096x2048, representing 360° x 180° view
+    const canvasToWorldScale = 1000 / 2048 // Approximate scale factor
+    const worldWidth = Math.max(paintedWidth * canvasToWorldScale, 50) // Minimum 50 units
+    const worldHeight = Math.max(paintedHeight * canvasToWorldScale, 50) // Minimum 50 units
+    
     // Calculate average world position
     const avgWorldPos = group.reduce((sum, area) => {
       return {
@@ -318,10 +335,16 @@ const MemoryPalace = forwardRef(({
         ? `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`
         : `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. This door needs a destination room. Double-click to configure.`,
       position: avgWorldPos,
-      canvasCenter: { x: centerX, y: centerY }
+      canvasCenter: { x: centerX, y: centerY },
+      dimensions: {
+        width: worldWidth,
+        height: worldHeight,
+        canvasWidth: paintedWidth,
+        canvasHeight: paintedHeight
+      }
     }
     
-    console.log('[MemoryPalace] Created object data:', objectData)
+    console.log('[MemoryPalace] Created object data with dimensions:', objectData)
     return objectData
   }
 
@@ -514,21 +537,33 @@ const MemoryPalace = forwardRef(({
       timestamp: new Date().toISOString()
     })
     
-    // Determine marker type based on object properties
-    const isDoor = obj.targetRoomId !== undefined
+    // Determine marker type based on explicit type property or fallback to targetRoomId
+    const isDoor = obj.type === 'door' || obj.targetRoomId !== undefined
+    const isPaintedObject = obj.isPaintedObject || obj.isPaintedDoor
     
     console.log(`[MemoryPalace] 🎯 SCENE: marker type determined`, {
       objectId: obj.id,
+      explicitType: obj.type,
       isDoor,
-      markerType: isDoor ? 'door' : 'object'
+      isPaintedObject,
+      markerType: isDoor ? 'door' : 'object',
+      hasPaintData: !!obj.paintData
     })
     
-    // Create appropriate geometry for marker type (matching prototype)
+    // Create appropriate geometry for marker type
     let markerGeometry, markerMaterial
     
     if (isDoor) {
-      // Door markers are larger, rectangular, and golden
-      markerGeometry = new THREE.BoxGeometry(200, 300, 10)
+      // For doors, check if painted and use dimensions from paint data
+      if (isPaintedObject && obj.paintData?.dimensions) {
+        const width = Math.max(obj.paintData.dimensions.width, 100) // Minimum door width
+        const height = Math.max(obj.paintData.dimensions.height, 150) // Minimum door height
+        markerGeometry = new THREE.PlaneGeometry(width, height)
+        console.log(`[MemoryPalace] Using painted door geometry: ${width}x${height}`)
+      } else {
+        // Default door geometry
+        markerGeometry = new THREE.BoxGeometry(200, 300, 10)
+      }
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0xffd700,
         transparent: true,
@@ -538,8 +573,16 @@ const MemoryPalace = forwardRef(({
         wireframe: true,
       })
     } else {
-      // Object markers are smaller, spherical, and blue
-      markerGeometry = new THREE.SphereGeometry(50, 8, 6)
+      // For objects, check if painted and use dimensions from paint data
+      if (isPaintedObject && obj.paintData?.dimensions) {
+        const width = Math.max(obj.paintData.dimensions.width, 50)
+        const height = Math.max(obj.paintData.dimensions.height, 50)
+        markerGeometry = new THREE.PlaneGeometry(width, height)
+        console.log(`[MemoryPalace] Using painted object geometry: ${width}x${height}`)
+      } else {
+        // Default object geometry
+        markerGeometry = new THREE.SphereGeometry(50, 8, 6)
+      }
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
@@ -556,20 +599,20 @@ const MemoryPalace = forwardRef(({
     const baseRadius = 500
     
     if (obj.position?.x !== undefined && obj.position?.y !== undefined && obj.position?.z !== undefined) {
-      if (isDoor) {
-        // For doors, normalize position to sphere surface (same as objects)
-        // This ensures all doors are properly positioned on the sphere boundary
-        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
-        marker.position.copy(direction.multiplyScalar(baseRadius))
-        
-        // Orient door to face the user's view (toward center)
+      const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
+      marker.position.copy(direction.multiplyScalar(baseRadius))
+      
+      // Orient plane geometries to face toward camera (center)
+      if (isPaintedObject && obj.paintData?.dimensions) {
+        // For plane geometries, ensure they face toward the camera
         const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
         marker.lookAt(marker.position.clone().add(lookDirection))
-      } else {
-        // For objects, use stored 3D coordinates but extend them outward to sphere surface
-        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
-        marker.position.copy(direction.multiplyScalar(baseRadius))
+      } else if (isDoor) {
+        // For doors (including non-painted), orient to face the user's view
+        const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
+        marker.lookAt(marker.position.clone().add(lookDirection))
       }
+      // Objects with sphere geometry don't need special orientation
       
       console.log(`[MemoryPalace] 📍 SCENE: marker positioned using object coordinates`, {
         objectId: obj.id,
