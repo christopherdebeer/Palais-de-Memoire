@@ -8,6 +8,7 @@ const MemoryPalace = forwardRef(({
   wireframeEnabled = false, 
   nippleEnabled = false,
   paintModeEnabled = false,
+  paintModeType = 'objects',
   onCreationModeTriggered = null,
   onObjectSelected = null,
   onPaintedObjectCreated = null,
@@ -172,48 +173,69 @@ const MemoryPalace = forwardRef(({
   }
 
   const processPaintedAreasIntoObjects = () => {
-    console.log('[MemoryPalace] Processing painted areas into objects')
+    console.log('[MemoryPalace] Processing painted areas into objects/doors, mode:', paintModeType)
     
     if (!paintCanvasRef.current || paintedGroupsRef.current.size === 0) {
       console.log('[MemoryPalace] No painted areas to process')
       return
     }
     
-    // Group painted areas by proximity to create contiguous objects
+    // Group painted areas by proximity to create contiguous objects/doors
     const paintedAreas = Array.from(paintedGroupsRef.current.values())
     const groups = groupContiguousPaintAreas(paintedAreas)
     
     console.log(`[MemoryPalace] Found ${groups.length} contiguous paint groups from ${paintedAreas.length} paint areas`)
     
-    // Convert each group to a memory palace object
+    // Convert each group to a memory palace object or door based on paint mode type
     groups.forEach((group, index) => {
-      const objectData = createObjectFromPaintGroup(group, index + 1)
+      const groupData = createObjectFromPaintGroup(group, index + 1, paintModeType)
       
-      // Create a unique ID for the painted object
-      const paintedObjectId = `painted_${Date.now()}_${index}`
-      
-      // Create painted object with full data structure
-      const paintedObject = {
-        id: paintedObjectId,
-        name: objectData.name,
-        information: objectData.information,
-        position: objectData.position,
-        isPaintedObject: true,
-        paintData: {
-          areas: group,
-          canvasPosition: objectData.canvasCenter,
-          color: 'rgba(255, 0, 0, 0.9)'
+      if (paintModeType === 'doors') {
+        // Create painted door
+        const paintedDoor = {
+          id: `painted_door_${Date.now()}_${index}`,
+          type: 'door',
+          name: groupData.name,
+          description: groupData.information,
+          position: groupData.position,
+          isPaintedDoor: true,
+          paintData: {
+            areas: group,
+            canvasPosition: groupData.canvasCenter,
+            color: 'rgba(0, 0, 255, 0.9)' // Blue for doors
+          }
         }
-      }
-      
-      console.log('[MemoryPalace] Created painted object:', paintedObject)
-      
-      // Notify parent that a painted object was created
-      if (onPaintedObjectCreated) {
-        console.log('[MemoryPalace] Notifying parent about painted object creation')
-        onPaintedObjectCreated(paintedObject)
+        
+        console.log('[MemoryPalace] Created painted door:', paintedDoor)
+        
+        // Notify parent about painted door creation
+        if (onPaintedObjectCreated) {
+          console.log('[MemoryPalace] Notifying parent about painted door creation')
+          onPaintedObjectCreated(paintedDoor)
+        }
       } else {
-        console.warn('[MemoryPalace] onPaintedObjectCreated callback not provided')
+        // Create painted object (original logic)
+        const paintedObject = {
+          id: `painted_object_${Date.now()}_${index}`,
+          type: 'object',
+          name: groupData.name,
+          information: groupData.information,
+          position: groupData.position,
+          isPaintedObject: true,
+          paintData: {
+            areas: group,
+            canvasPosition: groupData.canvasCenter,
+            color: 'rgba(255, 0, 0, 0.9)' // Red for objects
+          }
+        }
+        
+        console.log('[MemoryPalace] Created painted object:', paintedObject)
+        
+        // Notify parent about painted object creation
+        if (onPaintedObjectCreated) {
+          console.log('[MemoryPalace] Notifying parent about painted object creation')
+          onPaintedObjectCreated(paintedObject)
+        }
       }
     })
     
@@ -268,8 +290,8 @@ const MemoryPalace = forwardRef(({
     return groups
   }
 
-  const createObjectFromPaintGroup = (group, groupNumber) => {
-    console.log('[MemoryPalace] Creating object from paint group:', group.length, 'areas')
+  const createObjectFromPaintGroup = (group, groupNumber, type = 'objects') => {
+    console.log('[MemoryPalace] Creating', type, 'from paint group:', group.length, 'areas')
     
     // Calculate center position of the group
     const centerX = group.reduce((sum, area) => sum + area.center.x, 0) / group.length
@@ -288,9 +310,13 @@ const MemoryPalace = forwardRef(({
     avgWorldPos.y /= group.length
     avgWorldPos.z /= group.length
     
+    // Create different names and information based on type
+    const isObject = type === 'objects'
     const objectData = {
-      name: `Painted Object ${groupNumber}`,
-      information: `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`,
+      name: isObject ? `Painted Object ${groupNumber}` : `Painted Door ${groupNumber}`,
+      information: isObject 
+        ? `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`
+        : `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. This door needs a destination room. Double-click to configure.`,
       position: avgWorldPos,
       canvasCenter: { x: centerX, y: centerY }
     }
@@ -345,8 +371,10 @@ const MemoryPalace = forwardRef(({
         // Paint with brush (50% smaller size)
         const brushSize = 25 // Reduced from 50 to 25 for smaller brush
         
-        // Always use red paint color for object grouping
-        const paintColor = 'rgba(255, 0, 0, 0.9)' // Bright red only
+        // Use different paint colors based on paint mode type
+        const paintColor = paintModeType === 'doors' 
+          ? 'rgba(0, 0, 255, 0.9)'  // Blue for doors
+          : 'rgba(255, 0, 0, 0.9)'  // Red for objects
         
         context.fillStyle = paintColor
         context.beginPath()

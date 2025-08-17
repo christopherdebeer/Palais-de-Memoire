@@ -120,6 +120,42 @@
   box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
 }
 
+/* Paint type toggle button */
+.paint-type-toggle {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-black-40);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--color-white-30);
+  color: var(--color-white);
+  font-size: var(--font-size-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-base);
+  cursor: pointer;
+  margin-left: -0.5rem; /* Slight overlap with paint mode toggle */
+}
+
+.paint-type-toggle:hover {
+  background: var(--color-black-60);
+  transform: scale(1.05);
+}
+
+.paint-type-toggle.objects {
+  background: linear-gradient(135deg, #4ecdc4, #44a08d);
+  border-color: #4ecdc4;
+  box-shadow: 0 0 15px rgba(78, 205, 196, 0.4);
+}
+
+.paint-type-toggle.doors {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-color: #667eea;
+  box-shadow: 0 0 15px rgba(102, 126, 234, 0.4);
+}
+
 .voice-toggle {
   padding: var(--space-sm);
   border-radius: var(--radius-full);

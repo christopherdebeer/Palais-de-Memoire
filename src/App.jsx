@@ -24,6 +24,7 @@ function App({core}) {
   const [wireframeEnabled, setWireframeEnabled] = useState(settingsManager.get('wireframeMode')) // Read from settings
   const [nippleEnabled, setNippleEnabled] = useState(false)
   const [paintModeEnabled, setPaintModeEnabled] = useState(false)
+  const [paintModeType, setPaintModeType] = useState('objects') // 'objects' or 'doors'
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -315,6 +316,12 @@ function App({core}) {
   const handlePaintModeToggle = (enabled) => {
     setPaintModeEnabled(enabled)
     console.log(`Paint mode ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  const handlePaintModeTypeToggle = () => {
+    const newType = paintModeType === 'objects' ? 'doors' : 'objects'
+    setPaintModeType(newType)
+    console.log(`Paint mode type changed to: ${newType}`)
   }
 
   const handleMenuToggle = () => {
@@ -1001,35 +1008,54 @@ function App({core}) {
     }
   }
 
-  // Painted object creation handler
-  const handlePaintedObjectCreated = async (paintedObject) => {
-    console.log('[App] Painted object created:', paintedObject)
+  // Painted object/door creation handler
+  const handlePaintedObjectCreated = async (paintedItem) => {
+    console.log('[App] Painted item created:', paintedItem)
     
     if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) {
-      console.warn('[App] Memory Palace Core not initialized, cannot add painted object')
+      console.warn('[App] Memory Palace Core not initialized, cannot add painted item')
       return
     }
     
     try {
-      // Add painted object to memory palace through core
-      const addedObject = await memoryPalaceCore.addObject(
-        paintedObject.name,
-        paintedObject.information,
-        paintedObject.position,
-        { isPaintedObject: true, paintData: paintedObject.paintData }
-      )
+      if (paintedItem.type === 'door') {
+        console.log('[App] Creating painted door - needs room configuration')
+        
+        // For now, create a basic door object that can be configured later
+        // TODO: In the future, this could trigger a modal for room creation
+        const addedObject = await memoryPalaceCore.addObject(
+          paintedItem.name,
+          paintedItem.description + ' (Click to configure destination)',
+          paintedItem.position,
+          { 
+            isPaintedDoor: true, 
+            paintData: paintedItem.paintData,
+            needsConfiguration: true,
+            type: 'door'
+          }
+        )
+        
+        console.log('[App] Painted door added to memory palace:', addedObject)
+        handleCaptionUpdate(`Painted door "${paintedItem.name}" created successfully`, 'synthesis')
+      } else {
+        // Handle regular painted object
+        const addedObject = await memoryPalaceCore.addObject(
+          paintedItem.name,
+          paintedItem.information,
+          paintedItem.position,
+          { isPaintedObject: true, paintData: paintedItem.paintData }
+        )
+        
+        console.log('[App] Painted object added to memory palace:', addedObject)
+        handleCaptionUpdate(`Painted object "${paintedItem.name}" created successfully`, 'synthesis')
+      }
       
-      console.log('[App] Painted object added to memory palace:', addedObject)
-      
-      // Update palace state to reflect the new object
+      // Update palace state to reflect the new item
       updatePalaceState(memoryPalaceCore)
       
-      // Provide feedback to user
-      handleCaptionUpdate(`Painted object "${paintedObject.name}" created successfully`, 'synthesis')
-      
     } catch (error) {
-      console.error('[App] Error adding painted object:', error)
-      handleCaptionUpdate(`Error creating painted object: ${error.message}`, 'synthesis')
+      console.error('[App] Error adding painted item:', error)
+      handleCaptionUpdate(`Error creating painted item: ${error.message}`, 'synthesis')
     }
   }
 
@@ -1041,6 +1067,7 @@ function App({core}) {
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
         paintModeEnabled={paintModeEnabled}
+        paintModeType={paintModeType}
         onCreationModeTriggered={handleCreationModeTriggered}
         onObjectSelected={handleObjectSelected}
         onPaintedObjectCreated={handlePaintedObjectCreated}
@@ -1070,6 +1097,7 @@ function App({core}) {
         onListeningChange={handleListeningChange}
         speakResponse={speakResponse}
         onCaptionToggle={handleCaptionToggle}
+        captionsEnabled={captionsEnabled}
         memoryPalaceCore={memoryPalaceCore}
         currentPalaceState={currentPalaceState}
         isCreationMode={isCreationMode}
@@ -1310,6 +1338,16 @@ function App({core}) {
           >
             <FontAwesomeIcon icon={faPaintBrush} />
           </button>
+          {paintModeEnabled && (
+            <button 
+              className={`paint-type-toggle ${paintModeType === 'doors' ? 'doors' : 'objects'}`}
+              onClick={handlePaintModeTypeToggle}
+              aria-label={`Switch to paint ${paintModeType === 'objects' ? 'doors' : 'objects'}`}
+              title={`Current: ${paintModeType}. Click to switch to ${paintModeType === 'objects' ? 'doors' : 'objects'}`}
+            >
+              <FontAwesomeIcon icon={paintModeType === 'objects' ? faHome : faArrowRight} />
+            </button>
+          )}
           <button 
             className="menu-toggle"
             onClick={handleMenuToggle}
