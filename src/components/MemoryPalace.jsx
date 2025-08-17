@@ -118,14 +118,14 @@ const MemoryPalace = forwardRef(({
         map: paintTextureRef.current, // Use actual paint texture for painting
         transparent: true,
         opacity: 1.0, // Full opacity 
-        side: THREE.BackSide, // Only render inside faces since we're viewing from center
+        //side: THREE.BackSide, // Only render inside faces since we're viewing from center
         depthTest: false,
         depthWrite: false
       })
       
       // Create paint sphere inside the skybox for inside viewing
       const paintGeometry = new THREE.SphereGeometry(499, 60, 40) // Inside skybox (500)
-      // DON'T flip inside out - use BackSide material instead
+      paintGeometry.scale(-1, 1, 1)
       
       const paintSphere = new THREE.Mesh(paintGeometry, paintMaterial)
       sceneRef.current.add(paintSphere)
