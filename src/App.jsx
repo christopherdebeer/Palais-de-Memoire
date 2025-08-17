@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye } from '@fortawesome/free-solid-svg-icons'
+import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye, faPaintBrush } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
 import VoiceInterface from './components/VoiceInterface'
 import voiceManager from './utils/VoiceManager.js'
@@ -23,6 +23,7 @@ function App({core}) {
   const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
   const [wireframeEnabled, setWireframeEnabled] = useState(settingsManager.get('wireframeMode')) // Read from settings
   const [nippleEnabled, setNippleEnabled] = useState(false)
+  const [paintModeEnabled, setPaintModeEnabled] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -309,6 +310,11 @@ function App({core}) {
   const handleNippleToggle = (enabled) => {
     setNippleEnabled(enabled)
     console.log(`Nipple controls ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  const handlePaintModeToggle = (enabled) => {
+    setPaintModeEnabled(enabled)
+    console.log(`Paint mode ${enabled ? 'enabled' : 'disabled'}`)
   }
 
   const handleMenuToggle = () => {
@@ -837,12 +843,18 @@ function App({core}) {
   }
 
   // Object interaction handlers
-  const handleObjectSelected = async (objectId) => {
-    console.log('[App] Object selected:', objectId)
+  const handleObjectSelected = async (objectId, objectData = null) => {
+    console.log('[App] Object selected:', objectId, objectData)
     if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) return
     
-    const objects = memoryPalaceCore.getCurrentRoomObjects()
-    const object = objects.find(obj => obj.id === objectId)
+    // If objectData is provided (e.g., from painted object), use it directly
+    let object = objectData
+    
+    // Otherwise, find the object in the current room objects
+    if (!object) {
+      const objects = memoryPalaceCore.getCurrentRoomObjects()
+      object = objects.find(obj => obj.id === objectId)
+    }
     
     if (object) {
       // Check if this is a door (has targetRoomId)
@@ -855,7 +867,8 @@ function App({core}) {
           console.error('[App] Failed to navigate through door:', error)
         }
       } else {
-        // Regular object - show inspector
+        // Regular object or painted object - show inspector
+        console.log('[App] Opening inspector for object:', object.isPaintedObject ? 'painted' : 'regular', object.name)
         setSelectedObject(object)
         setObjectInspectorOpen(true)
       }
@@ -988,6 +1001,38 @@ function App({core}) {
     }
   }
 
+  // Painted object creation handler
+  const handlePaintedObjectCreated = async (paintedObject) => {
+    console.log('[App] Painted object created:', paintedObject)
+    
+    if (!memoryPalaceCore || !memoryPalaceCore.isInitialized) {
+      console.warn('[App] Memory Palace Core not initialized, cannot add painted object')
+      return
+    }
+    
+    try {
+      // Add painted object to memory palace through core
+      const addedObject = await memoryPalaceCore.addObject(
+        paintedObject.name,
+        paintedObject.information,
+        paintedObject.position,
+        { isPaintedObject: true, paintData: paintedObject.paintData }
+      )
+      
+      console.log('[App] Painted object added to memory palace:', addedObject)
+      
+      // Update palace state to reflect the new object
+      updatePalaceState(memoryPalaceCore)
+      
+      // Provide feedback to user
+      handleCaptionUpdate(`Painted object "${paintedObject.name}" created successfully`, 'synthesis')
+      
+    } catch (error) {
+      console.error('[App] Error adding painted object:', error)
+      handleCaptionUpdate(`Error creating painted object: ${error.message}`, 'synthesis')
+    }
+  }
+
   return (
     <div className={`app ${isMobile ? 'mobile' : 'desktop'} ${isListening ? 'listening' : ''}`}>
       {/* Always show the MemoryPalace (skybox) as initial state */}
@@ -995,8 +1040,10 @@ function App({core}) {
         ref={memoryPalaceRef}
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
+        paintModeEnabled={paintModeEnabled}
         onCreationModeTriggered={handleCreationModeTriggered}
         onObjectSelected={handleObjectSelected}
+        onPaintedObjectCreated={handlePaintedObjectCreated}
         selectedObjectId={selectedObject?.id}
         cameraRotation={cameraRotation}
         onCameraRotationChange={setCameraRotation}
@@ -1255,6 +1302,14 @@ function App({core}) {
               <div className="loading-spinner-small"></div>
             </div>
           )}
+          <button 
+            className={`paint-mode-toggle ${paintModeEnabled ? 'active' : ''}`}
+            onClick={() => handlePaintModeToggle(!paintModeEnabled)}
+            aria-label="Toggle paint mode"
+            title="Paint Mode - Paint on the skybox to create objects"
+          >
+            <FontAwesomeIcon icon={faPaintBrush} />
+          </button>
           <button 
             className="menu-toggle"
             onClick={handleMenuToggle}

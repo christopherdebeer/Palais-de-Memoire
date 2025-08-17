@@ -90,7 +90,7 @@
   align-items: center;
 }
 
-.menu-toggle, .settings-toggle {
+.menu-toggle, .settings-toggle, .paint-mode-toggle {
   width: 3rem;
   height: 3rem;
   border-radius: var(--radius-full);
@@ -107,9 +107,17 @@
   cursor: pointer;
 }
 
-.menu-toggle:hover, .settings-toggle:hover {
+.menu-toggle:hover, .settings-toggle:hover, .paint-mode-toggle:hover {
   background: var(--color-black-50);
   transform: scale(1.1);
+}
+
+/* Paint mode toggle active state */
+.paint-mode-toggle.active {
+  background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+  border-color: #ff6b6b;
+  color: var(--color-white);
+  box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
 }
 
 .voice-toggle {

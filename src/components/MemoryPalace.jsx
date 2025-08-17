@@ -7,8 +7,10 @@ import SettingsManager from '../services/SettingsManager'
 const MemoryPalace = forwardRef(({ 
   wireframeEnabled = false, 
   nippleEnabled = false,
+  paintModeEnabled = false,
   onCreationModeTriggered = null,
   onObjectSelected = null,
+  onPaintedObjectCreated = null,
   selectedObjectId = null,
   currentRoom = null,
   objects = []
@@ -28,8 +30,395 @@ const MemoryPalace = forwardRef(({
   const animationFrameRef = useRef(null)
   const settingsManagerRef = useRef(new SettingsManager())
   
+  // Paint mode refs
+  const paintCanvasRef = useRef(null)
+  const paintTextureRef = useRef(null)
+  const paintContextRef = useRef(null)
+  const paintedGroupsRef = useRef(new Map()) // Store painted object groups
+  const paintModeEnabledRef = useRef(paintModeEnabled) // Ref for current paint mode state
+  const paintInitializedRef = useRef(false) // Prevent double initialization in strict mode
+  
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
+
+  // Paint mode functions
+  const initializePaintCanvas = () => {
+    if (paintCanvasRef.current || paintInitializedRef.current) return // Already initialized or initializing
+    
+    paintInitializedRef.current = true // Prevent double initialization
+    console.log('[MemoryPalace] Initializing paint canvas system')
+    
+    // Create canvas for painting - high resolution for detail
+    const canvas = document.createElement('canvas')
+    canvas.width = 4096 // High resolution equirectangular
+    canvas.height = 2048
+    
+    const context = canvas.getContext('2d')
+    
+    // Initialize with subtle visible base pattern so we can see if the texture is rendering
+    // Start with very subtle transparent overlay
+    context.fillStyle = 'rgba(0, 0, 0, 0)' // Fully transparent base
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    
+    // Add very subtle grid pattern to confirm texture visibility 
+    context.strokeStyle = 'rgba(255, 255, 255, 0.05)' // Very faint white lines
+    context.lineWidth = 2
+    
+    // Add sparse grid lines for debugging visibility
+    const gridSpacing = 200
+    for (let x = 0; x < canvas.width; x += gridSpacing) {
+      context.beginPath()
+      context.moveTo(x, 0)
+      context.lineTo(x, canvas.height)
+      context.stroke()
+    }
+    for (let y = 0; y < canvas.height; y += gridSpacing) {
+      context.beginPath()
+      context.moveTo(0, y)
+      context.lineTo(canvas.width, y)
+      context.stroke()
+    }
+    
+    // Store references
+    paintCanvasRef.current = canvas
+    paintContextRef.current = context
+    
+    // Create Three.js texture from canvas
+    const paintTexture = new THREE.CanvasTexture(canvas)
+    paintTexture.mapping = THREE.EquirectangularReflectionMapping
+    paintTexture.wrapS = THREE.RepeatWrapping
+    paintTexture.wrapT = THREE.ClampToEdgeWrapping
+    paintTexture.offset.x = 0.5 // Apply same 180° offset as all skybox textures for coordinate system alignment
+    paintTexture.needsUpdate = true
+    
+    paintTextureRef.current = paintTexture
+    
+    console.log('[MemoryPalace] Paint canvas system initialized with subtle grid pattern for visibility testing')
+  }
+
+  const enablePaintMode = () => {
+    if (!skyboxMaterialRef.current || !skyboxSphereRef.current) return
+    
+    console.log('[MemoryPalace] Enabling paint mode')
+    
+    // Initialize paint canvas if not already done
+    initializePaintCanvas()
+    
+    // Create a separate paint sphere that overlays on the skybox
+    if (paintTextureRef.current && !skyboxSphereRef.current.userData.paintSphere) {
+      // Store original skybox state
+      if (!skyboxMaterialRef.current.userData.originalMap) {
+        skyboxMaterialRef.current.userData.originalMap = skyboxMaterialRef.current.map
+        skyboxMaterialRef.current.userData.originalTransparent = skyboxMaterialRef.current.transparent
+      }
+      
+      console.log('[MemoryPalace] Paint mode enabled - using actual paint canvas texture')
+      
+      // Create paint material with actual paint canvas texture
+      const paintMaterial = new THREE.MeshBasicMaterial({
+        map: paintTextureRef.current, // Use actual paint texture for painting
+        transparent: true,
+        opacity: 1.0, // Full opacity 
+        //side: THREE.BackSide, // Only render inside faces since we're viewing from center
+        depthTest: false,
+        depthWrite: false
+      })
+      
+      // Create paint sphere inside the skybox for inside viewing
+      const paintGeometry = new THREE.SphereGeometry(499, 60, 40) // Inside skybox (500)
+      paintGeometry.scale(-1, 1, 1)
+      
+      const paintSphere = new THREE.Mesh(paintGeometry, paintMaterial)
+      sceneRef.current.add(paintSphere)
+      
+      // Store reference for cleanup
+      skyboxSphereRef.current.userData.paintSphere = paintSphere
+      skyboxSphereRef.current.userData.paintMaterial = paintMaterial
+      skyboxSphereRef.current.userData.paintGeometry = paintGeometry
+      
+      console.log('[MemoryPalace] Paint overlay sphere created with actual paint canvas texture - should show subtle grid pattern')
+    }
+  }
+
+  const disablePaintMode = () => {
+    if (!skyboxMaterialRef.current || !skyboxSphereRef.current) return
+    
+    console.log('[MemoryPalace] Disabling paint mode')
+    
+    // Process painted areas into objects before cleanup
+    processPaintedAreasIntoObjects()
+    
+    // Remove paint sphere overlay
+    if (skyboxSphereRef.current.userData.paintSphere) {
+      const paintSphere = skyboxSphereRef.current.userData.paintSphere
+      const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
+      const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
+      
+      // Remove from scene
+      sceneRef.current.remove(paintSphere)
+      
+      // Dispose resources
+      if (paintGeometry) paintGeometry.dispose()
+      if (paintMaterial) paintMaterial.dispose()
+      // Note: Don't dispose paintTextureRef.current as it's managed separately
+      
+      // Clear references
+      skyboxSphereRef.current.userData.paintSphere = null
+      skyboxSphereRef.current.userData.paintMaterial = null
+      skyboxSphereRef.current.userData.paintGeometry = null
+      
+      console.log('[MemoryPalace] Paint overlay sphere removed')
+    }
+  }
+
+  const processPaintedAreasIntoObjects = () => {
+    console.log('[MemoryPalace] Processing painted areas into objects')
+    
+    if (!paintCanvasRef.current || paintedGroupsRef.current.size === 0) {
+      console.log('[MemoryPalace] No painted areas to process')
+      return
+    }
+    
+    // Group painted areas by proximity to create contiguous objects
+    const paintedAreas = Array.from(paintedGroupsRef.current.values())
+    const groups = groupContiguousPaintAreas(paintedAreas)
+    
+    console.log(`[MemoryPalace] Found ${groups.length} contiguous paint groups from ${paintedAreas.length} paint areas`)
+    
+    // Convert each group to a memory palace object
+    groups.forEach((group, index) => {
+      const objectData = createObjectFromPaintGroup(group, index + 1)
+      
+      // Create a unique ID for the painted object
+      const paintedObjectId = `painted_${Date.now()}_${index}`
+      
+      // Create painted object with full data structure
+      const paintedObject = {
+        id: paintedObjectId,
+        name: objectData.name,
+        information: objectData.information,
+        position: objectData.position,
+        isPaintedObject: true,
+        paintData: {
+          areas: group,
+          canvasPosition: objectData.canvasCenter,
+          color: 'rgba(255, 0, 0, 0.9)'
+        }
+      }
+      
+      console.log('[MemoryPalace] Created painted object:', paintedObject)
+      
+      // Notify parent that a painted object was created
+      if (onPaintedObjectCreated) {
+        console.log('[MemoryPalace] Notifying parent about painted object creation')
+        onPaintedObjectCreated(paintedObject)
+      } else {
+        console.warn('[MemoryPalace] onPaintedObjectCreated callback not provided')
+      }
+    })
+    
+    // Clear painted groups after processing
+    paintedGroupsRef.current.clear()
+    console.log('[MemoryPalace] Painted groups cleared after processing')
+  }
+
+  const groupContiguousPaintAreas = (paintedAreas) => {
+    console.log('[MemoryPalace] Grouping contiguous paint areas:', paintedAreas.length)
+    
+    const groups = []
+    const visited = new Set()
+    const proximityThreshold = 75 // Pixels - areas within this distance are considered contiguous
+    
+    paintedAreas.forEach((area, index) => {
+      if (visited.has(index)) return
+      
+      // Start new group with current area
+      const group = []
+      const queue = [index]
+      
+      while (queue.length > 0) {
+        const currentIndex = queue.shift()
+        if (visited.has(currentIndex)) continue
+        
+        visited.add(currentIndex)
+        const currentArea = paintedAreas[currentIndex]
+        group.push(currentArea)
+        
+        // Find nearby areas to add to this group
+        paintedAreas.forEach((otherArea, otherIndex) => {
+          if (visited.has(otherIndex)) return
+          
+          const distance = Math.sqrt(
+            Math.pow(currentArea.center.x - otherArea.center.x, 2) + 
+            Math.pow(currentArea.center.y - otherArea.center.y, 2)
+          )
+          
+          if (distance <= proximityThreshold) {
+            queue.push(otherIndex)
+          }
+        })
+      }
+      
+      if (group.length > 0) {
+        groups.push(group)
+        console.log(`[MemoryPalace] Created group ${groups.length} with ${group.length} areas`)
+      }
+    })
+    
+    return groups
+  }
+
+  const createObjectFromPaintGroup = (group, groupNumber) => {
+    console.log('[MemoryPalace] Creating object from paint group:', group.length, 'areas')
+    
+    // Calculate center position of the group
+    const centerX = group.reduce((sum, area) => sum + area.center.x, 0) / group.length
+    const centerY = group.reduce((sum, area) => sum + area.center.y, 0) / group.length
+    
+    // Calculate average world position
+    const avgWorldPos = group.reduce((sum, area) => {
+      return {
+        x: sum.x + area.worldPosition.x,
+        y: sum.y + area.worldPosition.y,
+        z: sum.z + area.worldPosition.z
+      }
+    }, { x: 0, y: 0, z: 0 })
+    
+    avgWorldPos.x /= group.length
+    avgWorldPos.y /= group.length
+    avgWorldPos.z /= group.length
+    
+    const objectData = {
+      name: `Painted Object ${groupNumber}`,
+      information: `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`,
+      position: avgWorldPos,
+      canvasCenter: { x: centerX, y: centerY }
+    }
+    
+    console.log('[MemoryPalace] Created object data:', objectData)
+    return objectData
+  }
+
+  const paintOnSkybox = (event) => {
+    console.log('[MemoryPalace] DEBUG: paintOnSkybox called', {
+      paintModeEnabled,
+      hasContext: !!paintContextRef.current,
+      hasCamera: !!cameraRef.current,
+      hasSkyboxSphere: !!skyboxSphereRef.current
+    })
+    
+    if (!paintModeEnabledRef.current || !paintContextRef.current || !cameraRef.current) return
+    
+    // Calculate mouse position in normalized device coordinates
+    const mouse = new THREE.Vector2()
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+    
+    console.log('[MemoryPalace] DEBUG: Mouse position', { clientX: event.clientX, clientY: event.clientY, normalizedX: mouse.x, normalizedY: mouse.y })
+    
+    // Create raycaster
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, cameraRef.current)
+    
+    // Check intersection with skybox sphere
+    if (!skyboxSphereRef.current) return
+    
+    const intersects = raycaster.intersectObject(skyboxSphereRef.current)
+    console.log('[MemoryPalace] DEBUG: Raycast intersections with skybox:', intersects.length)
+    
+    if (intersects.length > 0) {
+      const intersectionPoint = intersects[0].point
+      const uv = intersects[0].uv
+      
+      if (uv) {
+        // Convert UV coordinates to canvas coordinates
+        const canvas = paintCanvasRef.current
+        const context = paintContextRef.current
+        
+        // Convert UV coordinates to canvas coordinates
+        // UV coordinates: u=0 is left edge, v=0 is bottom edge
+        // Canvas coordinates: x=0 is left edge, y=0 is top edge
+        // Account for the 0.5 texture offset applied to paint texture (same as skybox textures)
+        let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width  // Apply 180° offset compensation
+        let canvasY = (1.0 - uv.y) * canvas.height  // Flip Y-axis
+        
+        // Paint with brush (50% smaller size)
+        const brushSize = 25 // Reduced from 50 to 25 for smaller brush
+        
+        // Always use red paint color for object grouping
+        const paintColor = 'rgba(255, 0, 0, 0.9)' // Bright red only
+        
+        context.fillStyle = paintColor
+        context.beginPath()
+        context.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2)
+        context.fill()
+        
+        // Store painted area info for later grouping (simplified)
+        const paintedArea = {
+          id: Date.now() + Math.random(),
+          center: { x: canvasX, y: canvasY },
+          size: brushSize,
+          color: paintColor,
+          worldPosition: intersectionPoint.clone(),
+          metadata: { name: `Painted Object ${paintedGroupsRef.current.size + 1}`, info: 'Created with paint tool' }
+        }
+        
+        paintedGroupsRef.current.set(paintedArea.id, paintedArea)
+        
+        // Update texture
+        if (paintTextureRef.current) {
+          paintTextureRef.current.needsUpdate = true
+        }
+        
+        console.log('[MemoryPalace] Painted area created:', paintedArea)
+      }
+    }
+  }
+
+  const getPaintedObjectAt = (event) => {
+    if (!paintModeEnabledRef.current) return null
+    
+    // Calculate mouse position and find painted object
+    const mouse = new THREE.Vector2()
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+    
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, cameraRef.current)
+    
+    if (!skyboxSphereRef.current) return null
+    
+    const intersects = raycaster.intersectObject(skyboxSphereRef.current)
+    
+    if (intersects.length > 0) {
+      const uv = intersects[0].uv
+      if (uv) {
+        const canvas = paintCanvasRef.current
+        let canvasX = uv.x * canvas.width
+        let canvasY = (1.0 - uv.y) * canvas.height
+        
+        // Find closest painted area (simplified approach)
+        let closestArea = null
+        let minDistance = Infinity
+        
+        paintedGroupsRef.current.forEach((area) => {
+          const distance = Math.sqrt(
+            Math.pow(area.center.x - canvasX, 2) + 
+            Math.pow(area.center.y - canvasY, 2)
+          )
+          
+          if (distance < area.size && distance < minDistance) {
+            minDistance = distance
+            closestArea = area
+          }
+        })
+        
+        return closestArea
+      }
+    }
+    
+    return null
+  }
 
   // Skybox update function for room navigation
   const updateSkyboxForRoom = (room) => {
@@ -988,6 +1377,19 @@ const MemoryPalace = forwardRef(({
 
     const handleMouseMove = (event) => {
       if (isDragging) {
+        const currentPaintMode = paintModeEnabledRef.current
+        // In paint mode, paint while dragging instead of rotating camera
+        if (currentPaintMode) {
+          console.log('[MemoryPalace] DEBUG: Paint mode mouse move - painting instead of camera rotation')
+          paintOnSkybox(event)
+          lastMouseX = event.clientX
+          lastMouseY = event.clientY
+          isClick = false // Dragging paint stroke is not a click
+          event.preventDefault() // Prevent any other event handling
+          event.stopPropagation() // Stop event bubbling
+          return // Early return - don't execute camera rotation code below
+        }
+        
         const deltaX = (event.clientX - lastMouseX) * mouseSensitivity
         const deltaY = (event.clientY - lastMouseY) * mouseSensitivity
         
@@ -1031,6 +1433,17 @@ const MemoryPalace = forwardRef(({
     }
 
     const handleMouseDown = (event) => {
+      const currentPaintMode = paintModeEnabledRef.current
+      console.log('[MemoryPalace] DEBUG: Mouse down event', { button: event.button, paintModeEnabled: currentPaintMode })
+      
+      // In paint mode, prevent all default behaviors and stop propagation
+      if (currentPaintMode) {
+        event.preventDefault()
+        event.stopPropagation()
+        console.log('[MemoryPalace] DEBUG: Paint mode - prevented defaults and stopped propagation')
+        return false
+      }
+      
       // Prevent context menu on right click
       if (event.button === 2) {
         event.preventDefault()
@@ -1042,7 +1455,13 @@ const MemoryPalace = forwardRef(({
       mouseDownTime = Date.now()
       lastMouseX = event.clientX
       lastMouseY = event.clientY
-      renderer.domElement.style.cursor = 'grabbing'
+      
+      if (!currentPaintMode) {
+        renderer.domElement.style.cursor = 'grabbing'
+      } else {
+        console.log('[MemoryPalace] DEBUG: In paint mode - setting paint cursor')
+        renderer.domElement.style.cursor = 'crosshair'
+      }
       
       // Prevent text selection while dragging
       event.preventDefault()
@@ -1063,6 +1482,33 @@ const MemoryPalace = forwardRef(({
 
     const handleClick = (event) => {
       if (!isDragging) {
+        const currentPaintMode = paintModeEnabledRef.current
+        // Check if we're in paint mode - paint instead of other interactions
+        if (currentPaintMode) {
+          console.log('[MemoryPalace] Paint mode click detected')
+          paintOnSkybox(event)
+          return
+        }
+        
+        // Check for painted object selection when not in paint mode
+        const paintedObject = getPaintedObjectAt(event)
+        if (paintedObject) {
+          console.log('[MemoryPalace] Painted object clicked:', paintedObject)
+          // Convert painted object to standard object format for existing system
+          const objectData = {
+            id: paintedObject.id,
+            name: paintedObject.metadata.name,
+            information: paintedObject.metadata.info,
+            position: paintedObject.worldPosition,
+            isPaintedObject: true
+          }
+          
+          if (onObjectSelected) {
+            onObjectSelected(paintedObject.id, objectData)
+          }
+          return
+        }
+        
         const currentTime = Date.now()
         const currentPosition = { x: event.clientX, y: event.clientY }
         
@@ -1225,6 +1671,25 @@ const MemoryPalace = forwardRef(({
 
     // Touch event handlers
     const handleTouchStart = (event) => {
+      const currentPaintMode = paintModeEnabledRef.current
+      console.log('[MemoryPalace] DEBUG: Touch start event', { touchCount: event.touches.length, paintModeEnabled: currentPaintMode })
+      
+      // In paint mode, prevent all defaults and stop propagation
+      if (currentPaintMode) {
+        event.preventDefault()
+        event.stopPropagation()
+        console.log('[MemoryPalace] DEBUG: Paint mode touch - prevented defaults and stopped propagation')
+        // Still process the touch for painting
+        if (event.touches.length === 1) {
+          isDragging = true
+          isClick = true
+          mouseDownTime = Date.now()
+          lastMouseX = event.touches[0].clientX
+          lastMouseY = event.touches[0].clientY
+        }
+        return false
+      }
+      
       event.preventDefault()
       if (event.touches.length === 1) {
         isDragging = true
@@ -1238,6 +1703,22 @@ const MemoryPalace = forwardRef(({
     const handleTouchMove = (event) => {
       event.preventDefault()
       if (event.touches.length === 1 && isDragging) {
+        const currentPaintMode = paintModeEnabledRef.current
+        // In paint mode, paint while dragging instead of rotating camera
+        if (currentPaintMode) {
+          console.log('[MemoryPalace] DEBUG: Paint mode touch move - painting instead of camera rotation')
+          const touchEvent = {
+            clientX: event.touches[0].clientX,
+            clientY: event.touches[0].clientY
+          }
+          paintOnSkybox(touchEvent)
+          lastMouseX = event.touches[0].clientX
+          lastMouseY = event.touches[0].clientY
+          isClick = false // Dragging paint stroke is not a tap
+          event.stopPropagation() // Stop event bubbling
+          return // Early return - don't execute camera rotation code below
+        }
+        
         const deltaX = (event.touches[0].clientX - lastMouseX) * touchSensitivity
         const deltaY = (event.touches[0].clientY - lastMouseY) * touchSensitivity
         
@@ -1516,6 +1997,26 @@ const MemoryPalace = forwardRef(({
       })
       offScreenIndicatorsRef.current.clear()
       
+      // Clean up paint resources
+      if (skyboxSphereRef.current?.userData.paintSphere) {
+        const paintSphere = skyboxSphereRef.current.userData.paintSphere
+        const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
+        const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
+        
+        if (sceneRef.current) sceneRef.current.remove(paintSphere)
+        if (paintGeometry) paintGeometry.dispose()
+        if (paintMaterial) paintMaterial.dispose()
+      }
+      
+      if (paintTextureRef.current) {
+        paintTextureRef.current.dispose()
+        paintTextureRef.current = null
+      }
+      
+      paintCanvasRef.current = null
+      paintContextRef.current = null
+      paintedGroupsRef.current.clear()
+      
       // Clear refs
       sceneRef.current = null
       rendererRef.current = null
@@ -1597,6 +2098,16 @@ const MemoryPalace = forwardRef(({
       cleanupNipple()
     }
   }, [nippleEnabled])
+
+  // Handle paint mode toggle
+  useEffect(() => {
+    paintModeEnabledRef.current = paintModeEnabled // Update ref when prop changes
+    if (paintModeEnabled) {
+      enablePaintMode()
+    } else {
+      disablePaintMode()
+    }
+  }, [paintModeEnabled])
 
   // Handle room changes
   useEffect(() => {
