@@ -24,6 +24,7 @@ function App({core}) {
   const [wireframeEnabled, setWireframeEnabled] = useState(settingsManager.get('wireframeMode')) // Read from settings
   const [nippleEnabled, setNippleEnabled] = useState(false)
   const [paintModeEnabled, setPaintModeEnabled] = useState(false)
+  const [paintModeType, setPaintModeType] = useState('object') // 'object' or 'door'
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -315,6 +316,11 @@ function App({core}) {
   const handlePaintModeToggle = (enabled) => {
     setPaintModeEnabled(enabled)
     console.log(`Paint mode ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
+  const handlePaintModeTypeToggle = () => {
+    setPaintModeType(current => current === 'object' ? 'door' : 'object')
+    console.log(`Paint mode type switched to ${paintModeType === 'object' ? 'door' : 'object'}`)
   }
 
   const handleMenuToggle = () => {
@@ -1041,6 +1047,7 @@ function App({core}) {
         wireframeEnabled={wireframeEnabled}
         nippleEnabled={nippleEnabled}
         paintModeEnabled={paintModeEnabled}
+        paintModeType={paintModeType}
         onCreationModeTriggered={handleCreationModeTriggered}
         onObjectSelected={handleObjectSelected}
         onPaintedObjectCreated={handlePaintedObjectCreated}
@@ -1302,14 +1309,26 @@ function App({core}) {
               <div className="loading-spinner-small"></div>
             </div>
           )}
-          <button 
-            className={`paint-mode-toggle ${paintModeEnabled ? 'active' : ''}`}
-            onClick={() => handlePaintModeToggle(!paintModeEnabled)}
-            aria-label="Toggle paint mode"
-            title="Paint Mode - Paint on the skybox to create objects"
-          >
-            <FontAwesomeIcon icon={faPaintBrush} />
-          </button>
+          <div className="paint-mode-controls">
+            <button 
+              className={`paint-mode-toggle ${paintModeEnabled ? 'active' : ''}`}
+              onClick={() => handlePaintModeToggle(!paintModeEnabled)}
+              aria-label="Toggle paint mode"
+              title={`Paint Mode - Paint on the skybox to create ${paintModeType}s`}
+            >
+              <FontAwesomeIcon icon={faPaintBrush} />
+            </button>
+            {paintModeEnabled && (
+              <button 
+                className={`paint-type-toggle ${paintModeType}`}
+                onClick={handlePaintModeTypeToggle}
+                aria-label={`Switch to ${paintModeType === 'object' ? 'door' : 'object'} mode`}
+                title={`Currently creating: ${paintModeType}s. Click to switch to ${paintModeType === 'object' ? 'doors' : 'objects'}`}
+              >
+                {paintModeType === 'object' ? 'OBJ' : 'DOOR'}
+              </button>
+            )}
+          </div>
           <button 
             className="menu-toggle"
             onClick={handleMenuToggle}

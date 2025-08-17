@@ -202,7 +202,18 @@ const MemoryPalace = forwardRef(({
         paintData: {
           areas: group,
           canvasPosition: objectData.canvasCenter,
-          color: 'rgba(255, 0, 0, 0.9)'
+          color: currentPaintType === 'door' ? 'rgba(255, 215, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)',
+          type: currentPaintType
+        }
+      }
+      
+      // Add door-specific properties if needed
+      if (currentPaintType === 'door') {
+        if (objectData.targetRoomId) {
+          paintedObject.targetRoomId = objectData.targetRoomId
+        }
+        if (objectData.needsRoomConfiguration) {
+          paintedObject.needsRoomConfiguration = objectData.needsRoomConfiguration
         }
       }
       
@@ -360,7 +371,11 @@ const MemoryPalace = forwardRef(({
           size: brushSize,
           color: paintColor,
           worldPosition: intersectionPoint.clone(),
-          metadata: { name: `Painted Object ${paintedGroupsRef.current.size + 1}`, info: 'Created with paint tool' }
+          paintType: paintModeTypeRef.current, // Store the current paint mode type
+          metadata: { 
+            name: paintModeTypeRef.current === 'door' ? `Painted Door ${paintedGroupsRef.current.size + 1}` : `Painted Object ${paintedGroupsRef.current.size + 1}`, 
+            info: paintModeTypeRef.current === 'door' ? 'Created with paint tool - Door' : 'Created with paint tool - Object'
+          }
         }
         
         paintedGroupsRef.current.set(paintedArea.id, paintedArea)
@@ -376,8 +391,6 @@ const MemoryPalace = forwardRef(({
   }
 
   const getPaintedObjectAt = (event) => {
-    if (!paintModeEnabledRef.current) return null
-    
     // Calculate mouse position and find painted object
     const mouse = new THREE.Vector2()
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1
@@ -394,10 +407,11 @@ const MemoryPalace = forwardRef(({
       const uv = intersects[0].uv
       if (uv) {
         const canvas = paintCanvasRef.current
-        let canvasX = uv.x * canvas.width
-        let canvasY = (1.0 - uv.y) * canvas.height
+        // Apply same coordinate transformation as in paintOnSkybox
+        let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width  // Apply 180° offset compensation
+        let canvasY = (1.0 - uv.y) * canvas.height  // Flip Y-axis
         
-        // Find closest painted area (simplified approach)
+        // Find closest painted area with improved hit detection
         let closestArea = null
         let minDistance = Infinity
         
@@ -407,7 +421,9 @@ const MemoryPalace = forwardRef(({
             Math.pow(area.center.y - canvasY, 2)
           )
           
-          if (distance < area.size && distance < minDistance) {
+          // Use expanded hit area for better selection
+          const hitRadius = area.size * 1.5 // 50% larger hit area
+          if (distance < hitRadius && distance < minDistance) {
             minDistance = distance
             closestArea = area
           }
@@ -2108,6 +2124,12 @@ const MemoryPalace = forwardRef(({
       disablePaintMode()
     }
   }, [paintModeEnabled])
+
+  // Handle paint mode type changes
+  useEffect(() => {
+    paintModeTypeRef.current = paintModeType // Update ref when prop changes
+    console.log('[MemoryPalace] Paint mode type changed to:', paintModeType)
+  }, [paintModeType])
 
   // Handle room changes
   useEffect(() => {

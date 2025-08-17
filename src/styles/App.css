@@ -112,12 +112,56 @@
   transform: scale(1.1);
 }
 
+/* Paint mode controls container */
+.paint-mode-controls {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
 /* Paint mode toggle active state */
 .paint-mode-toggle.active {
   background: linear-gradient(135deg, #ff6b6b, #ff8e53);
   border-color: #ff6b6b;
   color: var(--color-white);
   box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+}
+
+/* Paint type toggle button */
+.paint-type-toggle {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-base);
+  background: var(--color-black-30);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--color-white-20);
+  color: var(--color-white);
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-semibold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-base);
+  cursor: pointer;
+  min-width: 2.5rem;
+  height: 2rem;
+}
+
+.paint-type-toggle:hover {
+  background: var(--color-black-50);
+  transform: scale(1.05);
+}
+
+.paint-type-toggle.object {
+  background: linear-gradient(135deg, #4dabf7, #339af0);
+  border-color: #4dabf7;
+  color: var(--color-white);
+}
+
+.paint-type-toggle.door {
+  background: linear-gradient(135deg, #ffd700, #ffcc02);
+  border-color: #ffd700;
+  color: #000;
 }
 
 .voice-toggle {
