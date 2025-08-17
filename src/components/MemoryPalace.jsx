@@ -10,6 +10,7 @@ const MemoryPalace = forwardRef(({
   paintModeEnabled = false,
   onCreationModeTriggered = null,
   onObjectSelected = null,
+  onPaintedObjectCreated = null,
   selectedObjectId = null,
   currentRoom = null,
   objects = []
@@ -144,6 +145,9 @@ const MemoryPalace = forwardRef(({
     
     console.log('[MemoryPalace] Disabling paint mode')
     
+    // Process painted areas into objects before cleanup
+    processPaintedAreasIntoObjects()
+    
     // Remove paint sphere overlay
     if (skyboxSphereRef.current.userData.paintSphere) {
       const paintSphere = skyboxSphereRef.current.userData.paintSphere
@@ -165,6 +169,134 @@ const MemoryPalace = forwardRef(({
       
       console.log('[MemoryPalace] Paint overlay sphere removed')
     }
+  }
+
+  const processPaintedAreasIntoObjects = () => {
+    console.log('[MemoryPalace] Processing painted areas into objects')
+    
+    if (!paintCanvasRef.current || paintedGroupsRef.current.size === 0) {
+      console.log('[MemoryPalace] No painted areas to process')
+      return
+    }
+    
+    // Group painted areas by proximity to create contiguous objects
+    const paintedAreas = Array.from(paintedGroupsRef.current.values())
+    const groups = groupContiguousPaintAreas(paintedAreas)
+    
+    console.log(`[MemoryPalace] Found ${groups.length} contiguous paint groups from ${paintedAreas.length} paint areas`)
+    
+    // Convert each group to a memory palace object
+    groups.forEach((group, index) => {
+      const objectData = createObjectFromPaintGroup(group, index + 1)
+      
+      // Create a unique ID for the painted object
+      const paintedObjectId = `painted_${Date.now()}_${index}`
+      
+      // Create painted object with full data structure
+      const paintedObject = {
+        id: paintedObjectId,
+        name: objectData.name,
+        information: objectData.information,
+        position: objectData.position,
+        isPaintedObject: true,
+        paintData: {
+          areas: group,
+          canvasPosition: objectData.canvasCenter,
+          color: 'rgba(255, 0, 0, 0.9)'
+        }
+      }
+      
+      console.log('[MemoryPalace] Created painted object:', paintedObject)
+      
+      // Notify parent that a painted object was created
+      if (onPaintedObjectCreated) {
+        console.log('[MemoryPalace] Notifying parent about painted object creation')
+        onPaintedObjectCreated(paintedObject)
+      } else {
+        console.warn('[MemoryPalace] onPaintedObjectCreated callback not provided')
+      }
+    })
+    
+    // Clear painted groups after processing
+    paintedGroupsRef.current.clear()
+    console.log('[MemoryPalace] Painted groups cleared after processing')
+  }
+
+  const groupContiguousPaintAreas = (paintedAreas) => {
+    console.log('[MemoryPalace] Grouping contiguous paint areas:', paintedAreas.length)
+    
+    const groups = []
+    const visited = new Set()
+    const proximityThreshold = 75 // Pixels - areas within this distance are considered contiguous
+    
+    paintedAreas.forEach((area, index) => {
+      if (visited.has(index)) return
+      
+      // Start new group with current area
+      const group = []
+      const queue = [index]
+      
+      while (queue.length > 0) {
+        const currentIndex = queue.shift()
+        if (visited.has(currentIndex)) continue
+        
+        visited.add(currentIndex)
+        const currentArea = paintedAreas[currentIndex]
+        group.push(currentArea)
+        
+        // Find nearby areas to add to this group
+        paintedAreas.forEach((otherArea, otherIndex) => {
+          if (visited.has(otherIndex)) return
+          
+          const distance = Math.sqrt(
+            Math.pow(currentArea.center.x - otherArea.center.x, 2) + 
+            Math.pow(currentArea.center.y - otherArea.center.y, 2)
+          )
+          
+          if (distance <= proximityThreshold) {
+            queue.push(otherIndex)
+          }
+        })
+      }
+      
+      if (group.length > 0) {
+        groups.push(group)
+        console.log(`[MemoryPalace] Created group ${groups.length} with ${group.length} areas`)
+      }
+    })
+    
+    return groups
+  }
+
+  const createObjectFromPaintGroup = (group, groupNumber) => {
+    console.log('[MemoryPalace] Creating object from paint group:', group.length, 'areas')
+    
+    // Calculate center position of the group
+    const centerX = group.reduce((sum, area) => sum + area.center.x, 0) / group.length
+    const centerY = group.reduce((sum, area) => sum + area.center.y, 0) / group.length
+    
+    // Calculate average world position
+    const avgWorldPos = group.reduce((sum, area) => {
+      return {
+        x: sum.x + area.worldPosition.x,
+        y: sum.y + area.worldPosition.y,
+        z: sum.z + area.worldPosition.z
+      }
+    }, { x: 0, y: 0, z: 0 })
+    
+    avgWorldPos.x /= group.length
+    avgWorldPos.y /= group.length
+    avgWorldPos.z /= group.length
+    
+    const objectData = {
+      name: `Painted Object ${groupNumber}`,
+      information: `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`,
+      position: avgWorldPos,
+      canvasCenter: { x: centerX, y: centerY }
+    }
+    
+    console.log('[MemoryPalace] Created object data:', objectData)
+    return objectData
   }
 
   const paintOnSkybox = (event) => {
@@ -210,21 +342,11 @@ const MemoryPalace = forwardRef(({
         let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width  // Apply 180° offset compensation
         let canvasY = (1.0 - uv.y) * canvas.height  // Flip Y-axis
         
-        // Paint with brush
-        const brushSize = 50 // Adjustable brush size
+        // Paint with brush (50% smaller size)
+        const brushSize = 25 // Reduced from 50 to 25 for smaller brush
         
-        // Generate bright, vivid colors that will be visible against the skybox
-        const colors = [
-          'rgba(255, 0, 0, 0.9)',     // Bright red
-          'rgba(0, 255, 0, 0.9)',     // Bright green  
-          'rgba(0, 0, 255, 0.9)',     // Bright blue
-          'rgba(255, 255, 0, 0.9)',   // Bright yellow
-          'rgba(255, 0, 255, 0.9)',   // Bright magenta
-          'rgba(0, 255, 255, 0.9)',   // Bright cyan
-          'rgba(255, 165, 0, 0.9)',   // Orange
-          'rgba(128, 0, 128, 0.9)'    // Purple
-        ]
-        const paintColor = colors[Math.floor(Math.random() * colors.length)]
+        // Always use red paint color for object grouping
+        const paintColor = 'rgba(255, 0, 0, 0.9)' // Bright red only
         
         context.fillStyle = paintColor
         context.beginPath()
