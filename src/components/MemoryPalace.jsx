@@ -539,13 +539,13 @@ const MemoryPalace = forwardRef(({
     
     // Determine marker type based on explicit type property or fallback to targetRoomId
     const isDoor = obj.type === 'door' || obj.targetRoomId !== undefined
-    const isPaintedObject = obj.isPaintedObject || obj.isPaintedDoor
+    const isPainted = obj.isPaintedObject || obj.isPaintedDoor
     
     console.log(`[MemoryPalace] 🎯 SCENE: marker type determined`, {
       objectId: obj.id,
       explicitType: obj.type,
       isDoor,
-      isPaintedObject,
+      isPainted,
       markerType: isDoor ? 'door' : 'object',
       hasPaintData: !!obj.paintData
     })
@@ -555,7 +555,7 @@ const MemoryPalace = forwardRef(({
     
     if (isDoor) {
       // For doors, check if painted and use dimensions from paint data
-      if (isPaintedObject && obj.paintData?.dimensions) {
+      if (isPainted && obj.paintData?.dimensions) {
         const width = Math.max(obj.paintData.dimensions.width, 100) // Minimum door width
         const height = Math.max(obj.paintData.dimensions.height, 150) // Minimum door height
         markerGeometry = new THREE.PlaneGeometry(width, height)
@@ -574,7 +574,7 @@ const MemoryPalace = forwardRef(({
       })
     } else {
       // For objects, check if painted and use dimensions from paint data
-      if (isPaintedObject && obj.paintData?.dimensions) {
+      if (isPainted && obj.paintData?.dimensions) {
         const width = Math.max(obj.paintData.dimensions.width, 50)
         const height = Math.max(obj.paintData.dimensions.height, 50)
         markerGeometry = new THREE.PlaneGeometry(width, height)
@@ -603,7 +603,7 @@ const MemoryPalace = forwardRef(({
       marker.position.copy(direction.multiplyScalar(baseRadius))
       
       // Orient plane geometries to face toward camera (center)
-      if (isPaintedObject && obj.paintData?.dimensions) {
+      if (isPainted && obj.paintData?.dimensions) {
         // For plane geometries, ensure they face toward the camera
         const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
         marker.lookAt(marker.position.clone().add(lookDirection))
