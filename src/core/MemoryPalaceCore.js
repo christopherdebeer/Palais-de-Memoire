@@ -1,8 +1,8 @@
 import { EventEmitter } from './EventEmitter.js'
-import { EventTypes } from './types.ts'
+import { EventTypes, ObjectType } from '../types/index.ts'
 import * as stateUtils from '../utils/stateUtils.js'
 import * as roomUtils from '../utils/roomUtils.js'
-import * as objectUtils from '../utils/objectUtils.js'
+import * as objectUtils from '../utils/objectUtils.ts'
 import * as imageGeneration from '../utils/imageGeneration.js'
 
 /**
@@ -318,17 +318,37 @@ export class MemoryPalaceCore extends EventEmitter {
   // === OBJECT MANAGEMENT ===
 
   /**
-   * Add an object to current room
+   * Create object with comprehensive parameters
    */
-  async addObject(name, information, position = null) {
-    console.log(`[MemoryPalaceCore] Adding object`, { name, information: information?.substring(0, 100) + '...', position })
+  async createObject(params) {
+    console.log(`[MemoryPalaceCore] Creating ${params.type}`, { 
+      name: params.name, 
+      type: params.type,
+      information: params.information?.substring(0, 100) + '...',
+      position: params.position 
+    })
 
-    const object = await objectUtils.addObject(this.state, name, information, position)
+    const object = await objectUtils.createObject(this.state, params)
     
     this.metrics.objectsCreated++
     this.emit(EventTypes.OBJECT_CREATED, object)
     
-    console.log(`[MemoryPalaceCore] Object added successfully:`, object)
+    console.log(`[MemoryPalaceCore] ${params.type} created successfully:`, object)
+    return object
+  }
+
+  /**
+   * Add an object to current room (simplified interface)
+   */
+  async addObject(name, information, position = null, type = ObjectType.OBJECT) {
+    console.log(`[MemoryPalaceCore] Adding ${type}`, { name, information: information?.substring(0, 100) + '...', position, type })
+
+    const object = await objectUtils.addObject(this.state, name, information, position, type)
+    
+    this.metrics.objectsCreated++
+    this.emit(EventTypes.OBJECT_CREATED, object)
+    
+    console.log(`[MemoryPalaceCore] ${type} added successfully:`, object)
     return object
   }
 
@@ -563,88 +583,6 @@ export class MemoryPalaceCore extends EventEmitter {
     }
   }
 
-  // === LEGACY COMPATIBILITY ===
-  // These methods provide compatibility with the old manager-based system
-
-  /**
-   * Legacy compatibility - provides roomManager-like interface
-   */
-  get roomManager() {
-    return {
-      currentRoomId: this.state.user.currentRoomId,
-      getCurrentRoom: () => this.getCurrentRoom(),
-      getAllRooms: () => this.getAllRooms(),
-      createRoom: (name, description, options) => this.createRoom(name, description, options),
-      editRoom: (roomId, updates) => this.editRoom(roomId, updates),
-      deleteRoom: (roomId) => this.deleteRoom(roomId),
-      navigateToRoom: (roomId) => this.navigateToRoom(roomId),
-      findRoomByName: (name) => this.findRoomByName(name),
-      generateRoomImage: (roomId, description) => this.generateRoomImage(roomId, description)
-    }
-  }
-
-  /**
-   * Legacy compatibility - provides objectManager-like interface
-   */
-  get objectManager() {
-    return {
-      addObject: (roomId, name, information, position) => {
-        // For legacy compatibility, if roomId is provided, temporarily set it as current
-        const originalRoomId = this.state.user.currentRoomId
-        if (roomId !== originalRoomId) {
-          this.state.user.currentRoomId = roomId
-        }
-        const result = this.addObject(name, information, position)
-        // Restore original room
-        if (roomId !== originalRoomId) {
-          this.state.user.currentRoomId = originalRoomId
-        }
-        return result
-      },
-      updateObject: (objectId, updates) => this.updateObject(objectId, updates),
-      deleteObject: (objectId) => this.deleteObject(objectId),
-      getRoomObjects: (roomId) => this.getRoomObjects(roomId),
-      getObject: (objectId) => this.state.objects.get(objectId) || null,
-      findObjectsByName: (name, roomId) => this.findObjectsByName(name, roomId),
-      screenToWorldPosition: (screenX, screenY, sphereRadius, camera) => this.screenToWorldPosition(screenX, screenY, sphereRadius, camera),
-      generateDefaultPosition: (roomId) => this.generateDefaultPosition(roomId)
-    }
-  }
-
-  /**
-   * Legacy compatibility - provides stateManager-like interface
-   */
-  get stateManager() {
-    return {
-      getUserState: () => this.state.user,
-      updateUserState: (updates) => {
-        this.state.user = { ...this.state.user, ...updates }
-        return this.saveState()
-      },
-      getRooms: () => this.state.rooms,
-      getRoom: (roomId) => this.state.rooms.get(roomId),
-      setRoom: (room) => {
-        this.state.rooms.set(room.id, room)
-        return this.saveState()
-      },
-      getObjects: () => this.state.objects,
-      getRoomObjects: (roomId) => this.getRoomObjects(roomId),
-      setObject: (object) => {
-        this.state.objects.set(object.id, object)
-        return this.saveState()
-      },
-      deleteObject: (objectId) => this.deleteObject(objectId),
-      getConnections: () => this.state.connections,
-      setConnection: (connection) => {
-        this.state.connections.set(connection.id, connection)
-        return this.saveState()
-      },
-      generateId: () => this.generateId(),
-      exportState: () => this.exportPalace().data,
-      importState: (data) => this.importPalace({ version: this.version, data }),
-      clearState: () => this.clearPalace()
-    }
-  }
 }
 
 export default MemoryPalaceCore

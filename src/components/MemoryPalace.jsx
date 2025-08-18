@@ -8,6 +8,7 @@ const MemoryPalace = forwardRef(({
   wireframeEnabled = false, 
   nippleEnabled = false,
   paintModeEnabled = false,
+  paintModeType = 'objects',
   onCreationModeTriggered = null,
   onObjectSelected = null,
   onPaintedObjectCreated = null,
@@ -172,48 +173,71 @@ const MemoryPalace = forwardRef(({
   }
 
   const processPaintedAreasIntoObjects = () => {
-    console.log('[MemoryPalace] Processing painted areas into objects')
+    console.log('[MemoryPalace] Processing painted areas into objects/doors, mode:', paintModeType)
     
     if (!paintCanvasRef.current || paintedGroupsRef.current.size === 0) {
       console.log('[MemoryPalace] No painted areas to process')
       return
     }
     
-    // Group painted areas by proximity to create contiguous objects
+    // Group painted areas by proximity to create contiguous objects/doors
     const paintedAreas = Array.from(paintedGroupsRef.current.values())
     const groups = groupContiguousPaintAreas(paintedAreas)
     
     console.log(`[MemoryPalace] Found ${groups.length} contiguous paint groups from ${paintedAreas.length} paint areas`)
     
-    // Convert each group to a memory palace object
+    // Convert each group to a memory palace object or door based on paint mode type
     groups.forEach((group, index) => {
-      const objectData = createObjectFromPaintGroup(group, index + 1)
+      const groupData = createObjectFromPaintGroup(group, index + 1, paintModeType)
       
-      // Create a unique ID for the painted object
-      const paintedObjectId = `painted_${Date.now()}_${index}`
-      
-      // Create painted object with full data structure
-      const paintedObject = {
-        id: paintedObjectId,
-        name: objectData.name,
-        information: objectData.information,
-        position: objectData.position,
-        isPaintedObject: true,
-        paintData: {
-          areas: group,
-          canvasPosition: objectData.canvasCenter,
-          color: 'rgba(255, 0, 0, 0.9)'
+      if (paintModeType === 'doors') {
+        // Create painted door with proper type structure
+        const paintedDoorParams = {
+          name: groupData.name,
+          type: 'door',
+          description: groupData.information,
+          information: groupData.information,
+          position: groupData.position,
+          targetRoomId: '', // Will need to be configured later
+          isPaintedDoor: true,
+          paintData: {
+            areas: group,
+            canvasPosition: groupData.canvasCenter,
+            color: 'rgba(0, 0, 255, 0.9)', // Blue for doors
+            dimensions: groupData.dimensions
+          }
         }
-      }
-      
-      console.log('[MemoryPalace] Created painted object:', paintedObject)
-      
-      // Notify parent that a painted object was created
-      if (onPaintedObjectCreated) {
-        console.log('[MemoryPalace] Notifying parent about painted object creation')
-        onPaintedObjectCreated(paintedObject)
+        
+        console.log('[MemoryPalace] Created painted door params:', paintedDoorParams)
+        
+        // Notify parent about painted door creation
+        if (onPaintedObjectCreated) {
+          console.log('[MemoryPalace] Notifying parent about painted door creation')
+          onPaintedObjectCreated(paintedDoorParams)
+        }
       } else {
-        console.warn('[MemoryPalace] onPaintedObjectCreated callback not provided')
+        // Create painted object with proper type structure
+        const paintedObjectParams = {
+          name: groupData.name,
+          type: 'object',
+          information: groupData.information,
+          position: groupData.position,
+          isPaintedObject: true,
+          paintData: {
+            areas: group,
+            canvasPosition: groupData.canvasCenter,
+            color: 'rgba(255, 0, 0, 0.9)', // Red for objects
+            dimensions: groupData.dimensions
+          }
+        }
+        
+        console.log('[MemoryPalace] Created painted object params:', paintedObjectParams)
+        
+        // Notify parent about painted object creation
+        if (onPaintedObjectCreated) {
+          console.log('[MemoryPalace] Notifying parent about painted object creation')
+          onPaintedObjectCreated(paintedObjectParams)
+        }
       }
     })
     
@@ -268,12 +292,27 @@ const MemoryPalace = forwardRef(({
     return groups
   }
 
-  const createObjectFromPaintGroup = (group, groupNumber) => {
-    console.log('[MemoryPalace] Creating object from paint group:', group.length, 'areas')
+  const createObjectFromPaintGroup = (group, groupNumber, type = 'objects') => {
+    console.log('[MemoryPalace] Creating', type, 'from paint group:', group.length, 'areas')
     
     // Calculate center position of the group
     const centerX = group.reduce((sum, area) => sum + area.center.x, 0) / group.length
     const centerY = group.reduce((sum, area) => sum + area.center.y, 0) / group.length
+    
+    // Calculate bounding box of painted areas to determine geometry size
+    const minX = Math.min(...group.map(area => area.center.x - area.size))
+    const maxX = Math.max(...group.map(area => area.center.x + area.size))
+    const minY = Math.min(...group.map(area => area.center.y - area.size))
+    const maxY = Math.max(...group.map(area => area.center.y + area.size))
+    
+    const paintedWidth = maxX - minX
+    const paintedHeight = maxY - minY
+    
+    // Convert canvas dimensions to world scale
+    // Canvas is 4096x2048, representing 360° x 180° view
+    const canvasToWorldScale = 1000 / 2048 // Approximate scale factor
+    const worldWidth = Math.max(paintedWidth * canvasToWorldScale, 50) // Minimum 50 units
+    const worldHeight = Math.max(paintedHeight * canvasToWorldScale, 50) // Minimum 50 units
     
     // Calculate average world position
     const avgWorldPos = group.reduce((sum, area) => {
@@ -288,14 +327,24 @@ const MemoryPalace = forwardRef(({
     avgWorldPos.y /= group.length
     avgWorldPos.z /= group.length
     
+    // Create different names and information based on type
+    const isObject = type === 'objects'
     const objectData = {
-      name: `Painted Object ${groupNumber}`,
-      information: `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`,
+      name: isObject ? `Painted Object ${groupNumber}` : `Painted Door ${groupNumber}`,
+      information: isObject 
+        ? `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. Double-click to edit this painted memory.`
+        : `Created from ${group.length} paint stroke${group.length > 1 ? 's' : ''}. This door needs a destination room. Double-click to configure.`,
       position: avgWorldPos,
-      canvasCenter: { x: centerX, y: centerY }
+      canvasCenter: { x: centerX, y: centerY },
+      dimensions: {
+        width: worldWidth,
+        height: worldHeight,
+        canvasWidth: paintedWidth,
+        canvasHeight: paintedHeight
+      }
     }
     
-    console.log('[MemoryPalace] Created object data:', objectData)
+    console.log('[MemoryPalace] Created object data with dimensions:', objectData)
     return objectData
   }
 
@@ -345,8 +394,10 @@ const MemoryPalace = forwardRef(({
         // Paint with brush (50% smaller size)
         const brushSize = 25 // Reduced from 50 to 25 for smaller brush
         
-        // Always use red paint color for object grouping
-        const paintColor = 'rgba(255, 0, 0, 0.9)' // Bright red only
+        // Use different paint colors based on paint mode type
+        const paintColor = paintModeType === 'doors' 
+          ? 'rgba(0, 0, 255, 0.9)'  // Blue for doors
+          : 'rgba(255, 0, 0, 0.9)'  // Red for objects
         
         context.fillStyle = paintColor
         context.beginPath()
@@ -478,7 +529,6 @@ const MemoryPalace = forwardRef(({
   // Object rendering functions
   const createObjectMarker = (obj) => {
     if (!sceneRef.current) return null
-
     console.log(`[MemoryPalace] 🏗️ SCENE: createObjectMarker called`, {
       objectId: obj.id,
       objectName: obj.name,
@@ -486,36 +536,56 @@ const MemoryPalace = forwardRef(({
       timestamp: new Date().toISOString()
     })
     
-    // Determine marker type based on object properties
-    const isDoor = obj.targetRoomId !== undefined
+    // Determine marker type based on explicit type property or fallback to targetRoomId
+    const isDoor = obj.type === 'door' || obj.targetRoomId !== undefined
+    const isPainted = obj.isPaintedObject || obj.isPaintedDoor
     
     console.log(`[MemoryPalace] 🎯 SCENE: marker type determined`, {
       objectId: obj.id,
+      explicitType: obj.type,
       isDoor,
-      markerType: isDoor ? 'door' : 'object'
+      isPainted,
+      markerType: isDoor ? 'door' : 'object',
+      hasPaintData: !!obj.paintData
     })
     
-    // Create appropriate geometry for marker type (matching prototype)
+    // Create appropriate geometry for marker type
     let markerGeometry, markerMaterial
     
     if (isDoor) {
-      // Door markers are larger, rectangular, and golden
-      markerGeometry = new THREE.BoxGeometry(200, 300, 10)
+      // For doors, check if painted and use dimensions from paint data
+      if (isPainted && obj.paintData?.dimensions) {
+        const width = Math.max(obj.paintData.dimensions.width, 100) // Minimum door width
+        const height = Math.max(obj.paintData.dimensions.height, 150) // Minimum door height
+        markerGeometry = new THREE.PlaneGeometry(width, height)
+        console.log(`[MemoryPalace] Using painted door geometry: ${width}x${height}`)
+      } else {
+        // Default door geometry
+        markerGeometry = new THREE.BoxGeometry(200, 300, 10)
+      }
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0xffd700,
         transparent: true,
-        opacity: 1.0, // Invisible hit area
+        opacity: 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
       })
     } else {
-      // Object markers are smaller, spherical, and blue
-      markerGeometry = new THREE.SphereGeometry(50, 8, 6)
+      // For objects, check if painted and use dimensions from paint data
+      if (isPainted && obj.paintData?.dimensions) {
+        const width = Math.max(obj.paintData.dimensions.width, 50)
+        const height = Math.max(obj.paintData.dimensions.height, 50)
+        markerGeometry = new THREE.PlaneGeometry(width, height)
+        console.log(`[MemoryPalace] Using painted object geometry: ${width}x${height}`)
+      } else {
+        // Default object geometry
+        markerGeometry = new THREE.SphereGeometry(50, 8, 6)
+      }
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
-        opacity: 1.0, // Invisible hit area
+        opacity: 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -528,20 +598,20 @@ const MemoryPalace = forwardRef(({
     const baseRadius = 500
     
     if (obj.position?.x !== undefined && obj.position?.y !== undefined && obj.position?.z !== undefined) {
-      if (isDoor) {
-        // For doors, normalize position to sphere surface (same as objects)
-        // This ensures all doors are properly positioned on the sphere boundary
-        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
-        marker.position.copy(direction.multiplyScalar(baseRadius))
-        
-        // Orient door to face the user's view (toward center)
+      const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
+      marker.position.copy(direction.multiplyScalar(baseRadius))
+      
+      // Orient plane geometries to face toward camera (center)
+      if (isPainted && obj.paintData?.dimensions) {
+        // For plane geometries, ensure they face toward the camera
         const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
         marker.lookAt(marker.position.clone().add(lookDirection))
-      } else {
-        // For objects, use stored 3D coordinates but extend them outward to sphere surface
-        const direction = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z).normalize()
-        marker.position.copy(direction.multiplyScalar(baseRadius))
+      } else if (isDoor) {
+        // For doors (including non-painted), orient to face the user's view
+        const lookDirection = new THREE.Vector3(0, 0, 0).sub(marker.position).normalize()
+        marker.lookAt(marker.position.clone().add(lookDirection))
       }
+      // Objects with sphere geometry don't need special orientation
       
       console.log(`[MemoryPalace] 📍 SCENE: marker positioned using object coordinates`, {
         objectId: obj.id,
@@ -567,11 +637,27 @@ const MemoryPalace = forwardRef(({
     
     // Create particle system for this marker
     if (particleManagerRef.current) {
+      const width = Math.max(obj.paintData?.dimensions?.width, 50)
+      const height = Math.max(obj.paintData?.dimensions?.height, 50)
       console.log(`[MemoryPalace] ✨ SCENE: creating particle system for marker`, {
         objectId: obj.id,
-        markerPosition: marker.position
+        markerPosition: marker.position,
+        width,
+        height,
       })
-      const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id)
+      
+      
+      
+      const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id, {
+        width,
+        height,
+        shape: "box",
+        density: 0.5,
+        swirlSpeed: 1.7,
+        swirlTightness: 0.0,
+        twinkleSpeed: 0,
+        twinkleIntensity: 2.55
+      })
       sceneRef.current.add(particleSystem)
       
       // Store particle system reference
@@ -723,13 +809,13 @@ const MemoryPalace = forwardRef(({
       }
       
       // Animate object markers (subtle pulsing)
-      objectMarkersRef.current.forEach(marker => {
-        if (marker.userData.originalScale) {
-          const time = Date.now() * 0.001
-          const scale = 1.0 + Math.sin(time * 2) * 0.1 // Gentle pulsing
-          marker.scale.copy(marker.userData.originalScale).multiplyScalar(scale)
-        }
-      })
+      // objectMarkersRef.current.forEach(marker => {
+      //   if (marker.userData.originalScale) {
+      //     const time = Date.now() * 0.001
+      //     const scale = 1.0 + Math.sin(time * 2) * 0.1 // Gentle pulsing
+      //     marker.scale.copy(marker.userData.originalScale).multiplyScalar(scale)
+      //   }
+      // })
       
       // Animate off-screen indicators
       animateOffScreenIndicators()
@@ -963,7 +1049,7 @@ const MemoryPalace = forwardRef(({
         indicator.arrow.position.copy(indicatorPosition)
         // Point arrow toward the object from its current position
         const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
-        indicator.arrow.lookAt(indicatorPosition.clone().add(directionToObject))
+        indicator.arrow.lookAt(objectWorldPos)
         
         // Update sprite position
         const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
@@ -1441,7 +1527,7 @@ const MemoryPalace = forwardRef(({
         event.preventDefault()
         event.stopPropagation()
         console.log('[MemoryPalace] DEBUG: Paint mode - prevented defaults and stopped propagation')
-        return false
+        // return false
       }
       
       // Prevent context menu on right click
