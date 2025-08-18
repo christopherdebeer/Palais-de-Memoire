@@ -1,4 +1,4 @@
-// Minimal Particle System Manager — area-fill + simple lifetimes
+// Simplified Particle System Manager — random particle selection with varied blending modes
 // Public API preserved:
 //   createParticleSystem(position, isDoor=false, objectId=null, options={})
 //   updateParticleSystems()
@@ -12,22 +12,26 @@ export class SimpleParticleManager {
     this.particleSystems = new Map()
     this.texture = this._makeSprite(64)
     this._lastUpdate = performance.now() * 0.001
+    
+    // Available blending modes for visibility across diverse backgrounds
+    this.blendingModes = [
+      THREE.AdditiveBlending,    // Bright particles for dark backgrounds
+      //THREE.SubtractiveBlending, // Dark particles for bright backgrounds
+      //THREE.MultiplyBlending,    // Overlay effect
+      THREE.NormalBlending       // Standard blending
+    ]
   }
 
   /**
-   * Create a simple particle system that fills a box or sphere region.
-   * Particles live a few seconds, then are reset to a new random position.
-   *
+   * Create a simplified particle system with random particle selection and varied blending.
+   * 
    * options:
    *   width, height, depth?: numbers — region size (depth defaults to min(width, height))
    *   shape?: "box" | "sphere"      — default "box" when width/height provided; else "sphere"
-   *   particleCount?: number         — explicit count (overrides density calculation)
-   *   density?: number               — particles per unit area/volume (default 0.8 door / 0.6 object)
-   *   size?: number                  — point size in pixels (default 10 door / 8 object)
-   *   lifetime?: [min,max]           — seconds (default [3,6])
-   *   opacity?: number               — default 0.9 door / 0.8 object
-   *   swirl?: boolean                — enable firefly-like swirling motion (default true)
-   *   swirlSpeed?: number            — motion speed multiplier (default 1.0)
+   *   particleCount?: number         — explicit count (default: 20-40 particles)
+   *   size?: number                  — point size in pixels (default 8-12)
+   *   lifetime?: [min,max]           — seconds (default [2,5])
+   *   opacity?: number               — default 0.6-0.8
    */
   createParticleSystem(position, isDoor = false, objectId = null, options = {}) {
     const {
@@ -35,183 +39,149 @@ export class SimpleParticleManager {
       height,
       depth = Math.min(width ?? 6, height ?? 6),
       shape = (width && height ? 'box' : 'sphere'),
-      particleCount,
-      density = isDoor ? 0.8 : 0.6,
-      size = isDoor ? 10 : 8,
-      lifetime = [3, 6],
-      opacity = isDoor ? 0.4 : 0.4,
-      swirl = true,
-      swirlSpeed = 1.0
+      particleCount = Math.floor(Math.random() * 20) + 20, // Random 20-40 particles
+      size = Math.random() * 4 + 8, // Random size 8-12
+      lifetime = [2, 5],
+      opacity = Math.random() * 0.2 + 0.6 // Random opacity 0.6-0.8
     } = options
 
-    // Calculate particle count based on density if not explicitly provided
-    let calculatedCount
-    if (particleCount !== undefined) {
-      calculatedCount = particleCount
-    } else {
-      if (shape === 'sphere') {
-        const radius = Math.min(width ?? 50, height ?? 50) * 0.5
-        const volume = (4/3) * Math.PI * radius * radius * radius
-        calculatedCount = Math.floor(density * volume * 0.01) // scale factor for reasonable counts
-      } else {
-        const area = (width ?? 100) * (height ?? 100)
-        calculatedCount = Math.floor(density * area * 0.01) // scale factor for reasonable counts
-      }
-      // Apply reasonable bounds
-      calculatedCount = Math.max(5, Math.min(calculatedCount, isDoor ? 80 : 60))
-    }
+    const count = Math.max(10, Math.floor(particleCount))
 
-    const count = Math.max(1, Math.floor(calculatedCount))
+    // Randomly select particles from the region 
+    const selectedPositions = []
+    const totalPossiblePositions = count * 3 // Generate more positions to select from randomly
+    
+    for (let i = 0; i < totalPossiblePositions; i++) {
+      const p = (shape === 'sphere')
+        ? this._randInSphere(width && height ? Math.min(width, height) * 0.5 : 50)
+        : this._randInBox(width ?? 100, height ?? 100, depth ?? 60)
+      
+      selectedPositions.push({
+        x: position.x + p.x,
+        y: position.y + p.y,
+        z: position.z + p.z
+      })
+    }
+    
+    // Randomly pick subset of positions
+    const shuffled = selectedPositions.sort(() => Math.random() - 0.5).slice(0, count)
 
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(count * 3)
     const colors    = new Float32Array(count * 3)
     const sizes     = new Float32Array(count)
     const life      = new Float32Array(count * 2) // current, max
-    const motion    = new Float32Array(count * 4) // phase, radius, speed, direction
+    const velocity  = new Float32Array(count * 3) // vx, vy, vz
+    const motion    = new Float32Array(count * 4) // phase, frequency, amplitude, orbit_radius
+    const alphas    = new Float32Array(count) // individual particle opacity for fade effects
 
-    const baseColor = isDoor ? new THREE.Color(0xffd700) : new THREE.Color(0x4dabf7)
+    // Random color variations for better visibility
+    const colorPalette = [
+      new THREE.Color(0xffd700), // Gold
+      new THREE.Color(0x4dabf7), // Blue  
+      new THREE.Color(0xff6b6b), // Red
+      new THREE.Color(0x51cf66), // Green
+      new THREE.Color(0xff8cc8), // Pink
+      new THREE.Color(0xffd43b)  // Yellow
+    ]
 
-    // Seed initial data
+    // Seed initial data with random selection
     for (let i = 0; i < count; i++) {
       const i3 = i * 3
       const i4 = i * 4
-      const p = (shape === 'sphere')
-        ? this._randInSphere(width && height ? Math.min(width, height) * 0.5 : 50)
-        : this._randInBox(width ?? 100, height ?? 100, depth ?? 60)
+      const pos = shuffled[i]
 
-      positions[i3 + 0] = position.x + p.x
-      positions[i3 + 1] = position.y + p.y
-      positions[i3 + 2] = position.z + p.z
+      positions[i3 + 0] = pos.x
+      positions[i3 + 1] = pos.y
+      positions[i3 + 2] = pos.z
 
-      const cv = 0.85 + Math.random() * 0.3
+      // Randomly pick color from palette
+      const baseColor = colorPalette[Math.floor(Math.random() * colorPalette.length)]
+      const cv = 0.7 + Math.random() * 0.3
       colors[i3 + 0] = baseColor.r * cv
       colors[i3 + 1] = baseColor.g * cv
       colors[i3 + 2] = baseColor.b * cv
 
-      sizes[i] = size * (0.5 + Math.random() * 0.3)
+      sizes[i] = size * (0.8 + Math.random() * 0.4)
+      alphas[i] = 1.0 // Start fully opaque
 
       life[i * 2 + 0] = Math.random() * (lifetime[1] - lifetime[0]) // current
       life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
 
-      // Motion parameters for firefly-like swirling
-      motion[i4 + 0] = Math.random() * Math.PI * 2 // phase offset
-      motion[i4 + 1] = 2 + Math.random() * 8 // swirl radius (2-10 units)
-      motion[i4 + 2] = 0.5 + Math.random() * 1.5 // speed multiplier (0.5-2.0)
-      motion[i4 + 3] = Math.random() < 0.5 ? 1 : -1 // direction (clockwise/counter-clockwise)
+      // Initialize firefly-like movement parameters (2x base speed)
+      velocity[i3 + 0] = (Math.random() - 0.5) * 8.0 // Random initial velocity (2x)
+      velocity[i3 + 1] = (Math.random() - 0.5) * 4.0 // (2x)
+      velocity[i3 + 2] = (Math.random() - 0.5) * 8.0 // (2x)
+
+      motion[i4 + 0] = Math.random() * Math.PI * 2 // Random phase
+      motion[i4 + 1] = 0.5 + Math.random() * 1.5   // Random frequency (0.5-2.0)
+      motion[i4 + 2] = 2 + Math.random() * 18       // Random amplitude (2-20)
+      motion[i4 + 3] = 5 + Math.random() * 35      // Random orbit radius (5-40)
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3))
     geometry.setAttribute('size',     new THREE.BufferAttribute(sizes, 1))
     geometry.setAttribute('life',     new THREE.BufferAttribute(life, 2))
+    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocity, 3))
     geometry.setAttribute('motion',   new THREE.BufferAttribute(motion, 4))
+    geometry.setAttribute('alpha',    new THREE.BufferAttribute(alphas, 1))
     geometry.computeBoundingSphere()
 
+    // Randomly select blending mode for this particle system to ensure visibility
+    const randomBlendMode = this.blendingModes[Math.floor(Math.random() * this.blendingModes.length)]
+
+    // Create custom shader material for per-particle alpha
     const material = new THREE.ShaderMaterial({
       uniforms: {
-        opacity:     { value: opacity },
-        uPointScale: { value: 800 }, // perspective scale factor (tweak to taste)
-        uMap:        { value: this.texture },
-        uTime:       { value: 0.0 },
-        uSwirl:      { value: swirl ? 1.0 : 0.0 },
-        uSwirlSpeed: { value: swirlSpeed }
+        pointTexture: { value: this.texture },
+        size: { value: size },
+        opacity: { value: opacity }
       },
       vertexShader: `
+        attribute float alpha;
         attribute float size;
-        attribute vec2  life; // current, max
-        attribute vec4  motion; // phase, radius, speed, direction
-
-        uniform float opacity;
-        uniform float uPointScale;
-        uniform float uTime;
-        uniform float uSwirl;
-        uniform float uSwirlSpeed;
-
-        varying vec3  vColor;
+        varying vec3 vColor;
         varying float vAlpha;
-
+        
         void main() {
-          // Simple life envelope: fade in/out across lifetime
-          float t = clamp(life.x / max(life.y, 0.0001), 0.0, 1.0);
-          float a = min(t / 0.15, (1.0 - t) / 0.25); // quick fade in, slower fade out
-          a = clamp(a, 0.0, 1.0);
-
           vColor = color;
-          vAlpha = a * opacity;
-
-          // Base position
-          vec3 pos = position;
-
-          // Add firefly-like swirling motion if enabled
-          if (uSwirl > 0.5) {
-            float phase = motion.x;
-            float radius = motion.y;
-            float speed = motion.z * uSwirlSpeed;
-            float direction = motion.w;
-            
-            // Create time-based swirling motion
-            float timePhase = uTime * speed * direction + phase;
-            
-            // Gentle figure-8 or circular motion with vertical oscillation
-            float swirlX = sin(timePhase) * radius * 0.3;
-            float swirlY = sin(timePhase * 0.7 + phase) * radius * 0.2; // slower vertical oscillation
-            float swirlZ = cos(timePhase) * radius * 0.3;
-            
-            // Add subtle drift
-            float driftX = sin(timePhase * 0.3) * radius * 0.1;
-            float driftZ = cos(timePhase * 0.4) * radius * 0.1;
-            
-            pos.x += swirlX + driftX;
-            pos.y += swirlY;
-            pos.z += swirlZ + driftZ;
-          }
-
-          vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-          gl_Position = projectionMatrix * mv;
-
-          float dist = max(1.0, length(mv.xyz));
-          float psize = size * (uPointScale / dist);
-          gl_PointSize = clamp(psize, 2.0, 80.0);
+          vAlpha = alpha;
+          
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
-        uniform sampler2D uMap;
-        varying vec3  vColor;
+        uniform sampler2D pointTexture;
+        uniform float opacity;
+        varying vec3 vColor;
         varying float vAlpha;
-
+        
         void main() {
-          // soft circular sprite
-          vec2 uv = gl_PointCoord;
-          vec4 tex = texture2D(uMap, uv);
-
-          // clip to circle (texture already fades; this ensures clean edge)
-          vec2 c = uv - 0.5;
-          if (length(c) > 0.5) discard;
-
-          gl_FragColor = vec4(vColor * tex.rgb, vAlpha * tex.a);
+          vec4 texColor = texture2D(pointTexture, gl_PointCoord);
+          gl_FragColor = vec4(vColor * texColor.rgb, texColor.a * vAlpha * opacity);
         }
       `,
       transparent: true,
       depthWrite: false,
       depthTest: true,
-      blending: THREE.AdditiveBlending,
+      blending: randomBlendMode,
       vertexColors: true
     })
 
     const ps = new THREE.Points(geometry, material)
     ps.frustumCulled = false
 
-    // Keep minimal data needed for resets
+    // Keep minimal data needed for resets - much simplified
     ps.userData = {
       isDoor, objectId,
-      baseColor: baseColor.clone(),
       region: { shape, width, height, depth },
       anchor: position.clone(),
       count,
-      swirl,
-      swirlSpeed,
-      lifetime
+      lifetime,
+      blendMode: randomBlendMode // Store the chosen blend mode
     }
 
     if (objectId) this.particleSystems.set(objectId, ps)
@@ -229,27 +199,24 @@ export class SimpleParticleManager {
       const geo = ps.geometry
       const life = geo.getAttribute('life').array
       const pos  = geo.getAttribute('position').array
-      const motion = geo.getAttribute('motion')?.array
+      const vel  = geo.getAttribute('velocity').array
+      const mot  = geo.getAttribute('motion').array
+      const alphas = geo.getAttribute('alpha').array
 
       const { count, region, anchor, lifetime } = ps.userData
       const { shape, width, height, depth } = region
 
-      // Update time uniform for swirling animation
-      if (ps.material.uniforms.uTime) {
-        ps.material.uniforms.uTime.value = now
-      }
-
-      // Advance life and respawn expired particles at a new random position
+      // Firefly-like particle movement and lifecycle
       for (let i = 0; i < count; i++) {
         const li = i * 2
+        const i3 = i * 3
+        const i4 = i * 4
         let cur = life[li]
         const max = life[li + 1]
 
         cur += dt
         if (cur >= max) {
-          // respawn
-          const i3 = i * 3
-          const i4 = i * 4
+          // Respawn at new random position with new movement parameters
           const p = (shape === 'sphere')
             ? this._randInSphere(Math.min(width ?? 100, height ?? 100) * 0.5)
             : this._randInBox(width ?? 100, height ?? 100, (depth ?? Math.min(width ?? 60, height ?? 60)))
@@ -258,30 +225,83 @@ export class SimpleParticleManager {
           pos[i3 + 1] = anchor.y + p.y
           pos[i3 + 2] = anchor.z + p.z
 
-          // reset lifetime
-          const minL = lifetime?.[0] ?? 3.0
-          const maxL = lifetime?.[1] ?? 6.0
+          // Reset movement parameters for variety (2x base speed)
+          vel[i3 + 0] = (Math.random() - 0.5) * 4.0 // (2x)
+          vel[i3 + 1] = (Math.random() - 0.5) * 2.0 // (2x)
+          vel[i3 + 2] = (Math.random() - 0.5) * 4.0 // (2x)
+          
+          mot[i4 + 0] = Math.random() * Math.PI * 2 // New phase
+          mot[i4 + 1] = 0.5 + Math.random() * 1.5   // New frequency
+          mot[i4 + 2] = 2 + Math.random() * 8       // New amplitude
+          mot[i4 + 3] = 5 + Math.random() * 15      // New orbit radius
+
+          // Reset lifetime and alpha
+          const minL = lifetime?.[0] ?? 2.0
+          const maxL = lifetime?.[1] ?? 5.0
           life[li + 0] = 0.0
           life[li + 1] = minL + Math.random() * (maxL - minL)
-
-          // reset motion parameters for new particle
-          if (motion) {
-            motion[i4 + 0] = Math.random() * Math.PI * 2 // new phase offset
-            motion[i4 + 1] = 2 + Math.random() * 8 // new swirl radius
-            motion[i4 + 2] = 0.5 + Math.random() * 1.5 // new speed multiplier
-            motion[i4 + 3] = Math.random() < 0.5 ? 1 : -1 // new direction
-          }
+          alphas[i] = 0.0 // Start fade-in
         } else {
           life[li] = cur
+          
+          // Calculate fade in/out based on lifecycle
+          const ageRatio = cur / max
+          const fadeInTime = 0.15  // First 15% of life
+          const fadeOutTime = 0.25 // Last 25% of life
+          
+          if (ageRatio < fadeInTime) {
+            // Fade in
+            alphas[i] = ageRatio / fadeInTime
+          } else if (ageRatio > (1.0 - fadeOutTime)) {
+            // Fade out
+            const fadeProgress = (ageRatio - (1.0 - fadeOutTime)) / fadeOutTime
+            alphas[i] = 1.0 - fadeProgress
+          } else {
+            // Full opacity
+            alphas[i] = 1.0
+          }
+          
+          // Organic firefly movement: combination of sine wave motion and gradual drift
+          const phase = mot[i4 + 0] + cur * mot[i4 + 1]
+          const amplitude = mot[i4 + 2]
+          const orbitalRadius = mot[i4 + 3]
+          
+          // Apply organic swirling motion using sine waves
+          const swirl_x = Math.sin(phase) * amplitude * dt
+          const swirl_y = Math.cos(phase * 1.3) * amplitude * 0.7 * dt  // Different frequency for Y
+          const swirl_z = Math.sin(phase * 0.8) * amplitude * 0.5 * dt  // Subtle Z movement
+          
+          // Add orbital motion around anchor point
+          const distFromCenter = Math.sqrt(
+            Math.pow(pos[i3 + 0] - anchor.x, 2) + 
+            Math.pow(pos[i3 + 2] - anchor.z, 2)
+          )
+          
+          if (distFromCenter > orbitalRadius) {
+            // Gently pull back toward center if too far
+            const pullStrength = 0.5 * dt
+            vel[i3 + 0] += (anchor.x - pos[i3 + 0]) * pullStrength / distFromCenter
+            vel[i3 + 2] += (anchor.z - pos[i3 + 2]) * pullStrength / distFromCenter
+          }
+          
+          // Apply damping to prevent runaway velocity
+          const damping = 0.98
+          vel[i3 + 0] = (vel[i3 + 0] + swirl_x) * damping
+          vel[i3 + 1] = (vel[i3 + 1] + swirl_y) * damping  
+          vel[i3 + 2] = (vel[i3 + 2] + swirl_z) * damping
+          
+          // Update positions based on velocity
+          pos[i3 + 0] += vel[i3 + 0] * dt
+          pos[i3 + 1] += vel[i3 + 1] * dt
+          pos[i3 + 2] += vel[i3 + 2] * dt
         }
       }
 
       geo.attributes.position.needsUpdate = true
       geo.attributes.life.needsUpdate = true
-      if (motion) {
-        geo.attributes.motion.needsUpdate = true
-      }
-      // bounding sphere is generous enough; no need to recompute each frame
+      geo.attributes.velocity.needsUpdate = true
+      geo.attributes.motion.needsUpdate = true
+      geo.attributes.alpha.needsUpdate = true
     })
   }
 
