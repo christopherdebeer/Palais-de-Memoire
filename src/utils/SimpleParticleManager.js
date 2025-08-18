@@ -1,4 +1,4 @@
-// Minimal Particle System Manager — area-fill + simple lifetimes
+// Simplified Particle System Manager — random particle selection with varied blending modes
 // Public API preserved:
 //   createParticleSystem(position, isDoor=false, objectId=null, options={})
 //   updateParticleSystems()
@@ -12,22 +12,26 @@ export class SimpleParticleManager {
     this.particleSystems = new Map()
     this.texture = this._makeSprite(64)
     this._lastUpdate = performance.now() * 0.001
+    
+    // Available blending modes for visibility across diverse backgrounds
+    this.blendingModes = [
+      THREE.AdditiveBlending,    // Bright particles for dark backgrounds
+      THREE.SubtractiveBlending, // Dark particles for bright backgrounds
+      THREE.MultiplyBlending,    // Overlay effect
+      THREE.NormalBlending       // Standard blending
+    ]
   }
 
   /**
-   * Create a simple particle system that fills a box or sphere region.
-   * Particles live a few seconds, then are reset to a new random position.
-   *
+   * Create a simplified particle system with random particle selection and varied blending.
+   * 
    * options:
    *   width, height, depth?: numbers — region size (depth defaults to min(width, height))
    *   shape?: "box" | "sphere"      — default "box" when width/height provided; else "sphere"
-   *   particleCount?: number         — explicit count (overrides density calculation)
-   *   density?: number               — particles per unit area/volume (default 0.8 door / 0.6 object)
-   *   size?: number                  — point size in pixels (default 10 door / 8 object)
-   *   lifetime?: [min,max]           — seconds (default [3,6])
-   *   opacity?: number               — default 0.9 door / 0.8 object
-   *   swirl?: boolean                — enable firefly-like swirling motion (default true)
-   *   swirlSpeed?: number            — motion speed multiplier (default 1.0)
+   *   particleCount?: number         — explicit count (default: 20-40 particles)
+   *   size?: number                  — point size in pixels (default 8-12)
+   *   lifetime?: [min,max]           — seconds (default [2,5])
+   *   opacity?: number               — default 0.6-0.8
    */
   createParticleSystem(position, isDoor = false, objectId = null, options = {}) {
     const {
@@ -35,183 +39,105 @@ export class SimpleParticleManager {
       height,
       depth = Math.min(width ?? 6, height ?? 6),
       shape = (width && height ? 'box' : 'sphere'),
-      particleCount,
-      density = isDoor ? 0.8 : 0.6,
-      size = isDoor ? 10 : 8,
-      lifetime = [3, 6],
-      opacity = isDoor ? 0.4 : 0.4,
-      swirl = true,
-      swirlSpeed = 1.0
+      particleCount = Math.floor(Math.random() * 20) + 20, // Random 20-40 particles
+      size = Math.random() * 4 + 8, // Random size 8-12
+      lifetime = [2, 5],
+      opacity = Math.random() * 0.2 + 0.6 // Random opacity 0.6-0.8
     } = options
 
-    // Calculate particle count based on density if not explicitly provided
-    let calculatedCount
-    if (particleCount !== undefined) {
-      calculatedCount = particleCount
-    } else {
-      if (shape === 'sphere') {
-        const radius = Math.min(width ?? 50, height ?? 50) * 0.5
-        const volume = (4/3) * Math.PI * radius * radius * radius
-        calculatedCount = Math.floor(density * volume * 0.01) // scale factor for reasonable counts
-      } else {
-        const area = (width ?? 100) * (height ?? 100)
-        calculatedCount = Math.floor(density * area * 0.01) // scale factor for reasonable counts
-      }
-      // Apply reasonable bounds
-      calculatedCount = Math.max(5, Math.min(calculatedCount, isDoor ? 80 : 60))
-    }
+    const count = Math.max(10, Math.floor(particleCount))
 
-    const count = Math.max(1, Math.floor(calculatedCount))
+    // Randomly select particles from the region 
+    const selectedPositions = []
+    const totalPossiblePositions = count * 3 // Generate more positions to select from randomly
+    
+    for (let i = 0; i < totalPossiblePositions; i++) {
+      const p = (shape === 'sphere')
+        ? this._randInSphere(width && height ? Math.min(width, height) * 0.5 : 50)
+        : this._randInBox(width ?? 100, height ?? 100, depth ?? 60)
+      
+      selectedPositions.push({
+        x: position.x + p.x,
+        y: position.y + p.y,
+        z: position.z + p.z
+      })
+    }
+    
+    // Randomly pick subset of positions
+    const shuffled = selectedPositions.sort(() => Math.random() - 0.5).slice(0, count)
 
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(count * 3)
     const colors    = new Float32Array(count * 3)
     const sizes     = new Float32Array(count)
     const life      = new Float32Array(count * 2) // current, max
-    const motion    = new Float32Array(count * 4) // phase, radius, speed, direction
 
-    const baseColor = isDoor ? new THREE.Color(0xffd700) : new THREE.Color(0x4dabf7)
+    // Random color variations for better visibility
+    const colorPalette = [
+      new THREE.Color(0xffd700), // Gold
+      new THREE.Color(0x4dabf7), // Blue  
+      new THREE.Color(0xff6b6b), // Red
+      new THREE.Color(0x51cf66), // Green
+      new THREE.Color(0xff8cc8), // Pink
+      new THREE.Color(0xffd43b)  // Yellow
+    ]
 
-    // Seed initial data
+    // Seed initial data with random selection
     for (let i = 0; i < count; i++) {
       const i3 = i * 3
-      const i4 = i * 4
-      const p = (shape === 'sphere')
-        ? this._randInSphere(width && height ? Math.min(width, height) * 0.5 : 50)
-        : this._randInBox(width ?? 100, height ?? 100, depth ?? 60)
+      const pos = shuffled[i]
 
-      positions[i3 + 0] = position.x + p.x
-      positions[i3 + 1] = position.y + p.y
-      positions[i3 + 2] = position.z + p.z
+      positions[i3 + 0] = pos.x
+      positions[i3 + 1] = pos.y
+      positions[i3 + 2] = pos.z
 
-      const cv = 0.85 + Math.random() * 0.3
+      // Randomly pick color from palette
+      const baseColor = colorPalette[Math.floor(Math.random() * colorPalette.length)]
+      const cv = 0.7 + Math.random() * 0.3
       colors[i3 + 0] = baseColor.r * cv
       colors[i3 + 1] = baseColor.g * cv
       colors[i3 + 2] = baseColor.b * cv
 
-      sizes[i] = size * (0.5 + Math.random() * 0.3)
+      sizes[i] = size * (0.8 + Math.random() * 0.4)
 
       life[i * 2 + 0] = Math.random() * (lifetime[1] - lifetime[0]) // current
       life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
-
-      // Motion parameters for firefly-like swirling
-      motion[i4 + 0] = Math.random() * Math.PI * 2 // phase offset
-      motion[i4 + 1] = 2 + Math.random() * 8 // swirl radius (2-10 units)
-      motion[i4 + 2] = 0.5 + Math.random() * 1.5 // speed multiplier (0.5-2.0)
-      motion[i4 + 3] = Math.random() < 0.5 ? 1 : -1 // direction (clockwise/counter-clockwise)
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3))
     geometry.setAttribute('size',     new THREE.BufferAttribute(sizes, 1))
     geometry.setAttribute('life',     new THREE.BufferAttribute(life, 2))
-    geometry.setAttribute('motion',   new THREE.BufferAttribute(motion, 4))
     geometry.computeBoundingSphere()
 
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        opacity:     { value: opacity },
-        uPointScale: { value: 800 }, // perspective scale factor (tweak to taste)
-        uMap:        { value: this.texture },
-        uTime:       { value: 0.0 },
-        uSwirl:      { value: swirl ? 1.0 : 0.0 },
-        uSwirlSpeed: { value: swirlSpeed }
-      },
-      vertexShader: `
-        attribute float size;
-        attribute vec2  life; // current, max
-        attribute vec4  motion; // phase, radius, speed, direction
+    // Randomly select blending mode for this particle system to ensure visibility
+    const randomBlendMode = this.blendingModes[Math.floor(Math.random() * this.blendingModes.length)]
 
-        uniform float opacity;
-        uniform float uPointScale;
-        uniform float uTime;
-        uniform float uSwirl;
-        uniform float uSwirlSpeed;
-
-        varying vec3  vColor;
-        varying float vAlpha;
-
-        void main() {
-          // Simple life envelope: fade in/out across lifetime
-          float t = clamp(life.x / max(life.y, 0.0001), 0.0, 1.0);
-          float a = min(t / 0.15, (1.0 - t) / 0.25); // quick fade in, slower fade out
-          a = clamp(a, 0.0, 1.0);
-
-          vColor = color;
-          vAlpha = a * opacity;
-
-          // Base position
-          vec3 pos = position;
-
-          // Add firefly-like swirling motion if enabled
-          if (uSwirl > 0.5) {
-            float phase = motion.x;
-            float radius = motion.y;
-            float speed = motion.z * uSwirlSpeed;
-            float direction = motion.w;
-            
-            // Create time-based swirling motion
-            float timePhase = uTime * speed * direction + phase;
-            
-            // Gentle figure-8 or circular motion with vertical oscillation
-            float swirlX = sin(timePhase) * radius * 0.3;
-            float swirlY = sin(timePhase * 0.7 + phase) * radius * 0.2; // slower vertical oscillation
-            float swirlZ = cos(timePhase) * radius * 0.3;
-            
-            // Add subtle drift
-            float driftX = sin(timePhase * 0.3) * radius * 0.1;
-            float driftZ = cos(timePhase * 0.4) * radius * 0.1;
-            
-            pos.x += swirlX + driftX;
-            pos.y += swirlY;
-            pos.z += swirlZ + driftZ;
-          }
-
-          vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-          gl_Position = projectionMatrix * mv;
-
-          float dist = max(1.0, length(mv.xyz));
-          float psize = size * (uPointScale / dist);
-          gl_PointSize = clamp(psize, 2.0, 80.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D uMap;
-        varying vec3  vColor;
-        varying float vAlpha;
-
-        void main() {
-          // soft circular sprite
-          vec2 uv = gl_PointCoord;
-          vec4 tex = texture2D(uMap, uv);
-
-          // clip to circle (texture already fades; this ensures clean edge)
-          vec2 c = uv - 0.5;
-          if (length(c) > 0.5) discard;
-
-          gl_FragColor = vec4(vColor * tex.rgb, vAlpha * tex.a);
-        }
-      `,
+    const material = new THREE.PointsMaterial({
+      map: this.texture,
       transparent: true,
       depthWrite: false,
       depthTest: true,
-      blending: THREE.AdditiveBlending,
-      vertexColors: true
+      blending: randomBlendMode,
+      vertexColors: true,
+      size: size,
+      sizeAttenuation: true,
+      opacity: opacity,
+      // Add slight randomness to alpha test to create variation
+      alphaTest: Math.random() * 0.1
     })
 
     const ps = new THREE.Points(geometry, material)
     ps.frustumCulled = false
 
-    // Keep minimal data needed for resets
+    // Keep minimal data needed for resets - much simplified
     ps.userData = {
       isDoor, objectId,
-      baseColor: baseColor.clone(),
       region: { shape, width, height, depth },
       anchor: position.clone(),
       count,
-      swirl,
-      swirlSpeed,
-      lifetime
+      lifetime,
+      blendMode: randomBlendMode // Store the chosen blend mode
     }
 
     if (objectId) this.particleSystems.set(objectId, ps)
@@ -229,17 +155,11 @@ export class SimpleParticleManager {
       const geo = ps.geometry
       const life = geo.getAttribute('life').array
       const pos  = geo.getAttribute('position').array
-      const motion = geo.getAttribute('motion')?.array
 
       const { count, region, anchor, lifetime } = ps.userData
       const { shape, width, height, depth } = region
 
-      // Update time uniform for swirling animation
-      if (ps.material.uniforms.uTime) {
-        ps.material.uniforms.uTime.value = now
-      }
-
-      // Advance life and respawn expired particles at a new random position
+      // Simple particle lifecycle - just respawn when expired
       for (let i = 0; i < count; i++) {
         const li = i * 2
         let cur = life[li]
@@ -247,9 +167,8 @@ export class SimpleParticleManager {
 
         cur += dt
         if (cur >= max) {
-          // respawn
+          // Respawn at new random position
           const i3 = i * 3
-          const i4 = i * 4
           const p = (shape === 'sphere')
             ? this._randInSphere(Math.min(width ?? 100, height ?? 100) * 0.5)
             : this._randInBox(width ?? 100, height ?? 100, (depth ?? Math.min(width ?? 60, height ?? 60)))
@@ -258,19 +177,11 @@ export class SimpleParticleManager {
           pos[i3 + 1] = anchor.y + p.y
           pos[i3 + 2] = anchor.z + p.z
 
-          // reset lifetime
-          const minL = lifetime?.[0] ?? 3.0
-          const maxL = lifetime?.[1] ?? 6.0
+          // Reset lifetime
+          const minL = lifetime?.[0] ?? 2.0
+          const maxL = lifetime?.[1] ?? 5.0
           life[li + 0] = 0.0
           life[li + 1] = minL + Math.random() * (maxL - minL)
-
-          // reset motion parameters for new particle
-          if (motion) {
-            motion[i4 + 0] = Math.random() * Math.PI * 2 // new phase offset
-            motion[i4 + 1] = 2 + Math.random() * 8 // new swirl radius
-            motion[i4 + 2] = 0.5 + Math.random() * 1.5 // new speed multiplier
-            motion[i4 + 3] = Math.random() < 0.5 ? 1 : -1 // new direction
-          }
         } else {
           life[li] = cur
         }
@@ -278,10 +189,6 @@ export class SimpleParticleManager {
 
       geo.attributes.position.needsUpdate = true
       geo.attributes.life.needsUpdate = true
-      if (motion) {
-        geo.attributes.motion.needsUpdate = true
-      }
-      // bounding sphere is generous enough; no need to recompute each frame
     })
   }
 
