@@ -8,7 +8,7 @@ import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
-import { EventTypes } from './types/index.ts'
+import { EventTypes, ApplicationState, MemoryPalaceObject } from './types/index.js'
 import MobileMotionController from './utils/MobileMotionController.js'
 import SettingsManager from './services/SettingsManager.js'
 
@@ -17,7 +17,11 @@ const settingsManager = new SettingsManager()
 import './styles/App.css'
 import './styles/ActionFormModal.css'
 
-function App({core}) {
+interface AppProps {
+  core: any;
+}
+
+function App({core}: AppProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(true) // Voice enabled by default
@@ -31,22 +35,22 @@ function App({core}) {
 
   // captions and TTS
   const [captionText, setCaptionText] = useState('')
-  const [captionMode, setCaptionMode] = useState(null) // 'recognition', 'synthesis', null
+  const [captionMode, setCaptionMode] = useState<'recognition' | 'synthesis' | null>(null)
   const [captionsEnabled, setCaptionsEnabled] = useState(true)
 
   
   const [memoryPalaceCore, setMemoryPalaceCore] = useState(core)
-  const [currentPalaceState, setCurrentPalaceState] = useState(null)
+  const [currentPalaceState, setCurrentPalaceState] = useState<ApplicationState | null>(null)
   const coreInitializationRef = useRef(false)
   const [actionModalOpen, setActionModalOpen] = useState(false)
-  const [currentAction, setCurrentAction] = useState(null)
+  const [currentAction, setCurrentAction] = useState<any>(null)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
   const [isCreationMode, setIsCreationMode] = useState(false)
-  const [pendingCreationPosition, setPendingCreationPosition] = useState(null)
+  const [pendingCreationPosition, setPendingCreationPosition] = useState<any>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   
   // Object interaction state
-  const [selectedObject, setSelectedObject] = useState(null)
+  const [selectedObject, setSelectedObject] = useState<MemoryPalaceObject | null>(null)
   const [objectInspectorOpen, setObjectInspectorOpen] = useState(false)
   const [isProcessingObjectAction, setIsProcessingObjectAction] = useState(false)
   
@@ -100,27 +104,27 @@ function App({core}) {
       try {
         // Set up event listeners for state updates BEFORE initialization
         // This ensures we don't miss any events during the initialization process
-        const setupEventListeners = (core) => {
+        const setupEventListeners = (core: any) => {
           // Store unsubscribe functions to prevent memory leaks
-          const unsubscribers = [];
+          const unsubscribers: Array<() => void> = [];
           
-          unsubscribers.push(core.on('room_created', (room) => {
+          unsubscribers.push(core.on('room_created', (room: any) => {
             console.log('[App] Room created:', room)
             updatePalaceState(core)
           }));
           
-          unsubscribers.push(core.on('object_created', (object) => {
+          unsubscribers.push(core.on('object_created', (object: any) => {
             console.log('[App] Object created:', object)
             updatePalaceState(core)
           }));
           
-          unsubscribers.push(core.on('room_navigated', (room) => {
+          unsubscribers.push(core.on('room_navigated', (room: any) => {
             console.log('[App] Navigated to room:', room)
             updatePalaceState(core)
           }));
 
           // Listen for ROOM_CHANGED events for TTS/captions
-          unsubscribers.push(core.on(EventTypes.ROOM_CHANGED, (roomChangeData) => {
+          unsubscribers.push(core.on(EventTypes.ROOM_CHANGED, (roomChangeData: any) => {
             console.log('[App] Room changed:', roomChangeData)
             updatePalaceState(core)
             
@@ -148,7 +152,7 @@ function App({core}) {
           }));
           
           // Add error event listener
-          unsubscribers.push(core.on(EventTypes.ERROR_OCCURRED, (error) => {
+          unsubscribers.push(core.on(EventTypes.ERROR_OCCURRED, (error: any) => {
             console.error('[App] Core error:', error)
             // Provide user feedback for critical errors
             if (error.type === 'initialization_error' || error.type === 'startup_error') {
@@ -157,12 +161,12 @@ function App({core}) {
           }));
           
           // Add image generation loading state listeners
-          unsubscribers.push(core.on('room_image_generation_started', (data) => {
+          unsubscribers.push(core.on('room_image_generation_started', (data: any) => {
             console.log('[App] Image generation started:', data)
             setIsGeneratingImage(true)
           }));
           
-          unsubscribers.push(core.on('room_image_generation_completed', (data) => {
+          unsubscribers.push(core.on('room_image_generation_completed', (data: any) => {
             console.log('[App] Image generation completed:', data)
             setIsGeneratingImage(false)
           }));
@@ -283,37 +287,37 @@ function App({core}) {
   }, [memoryPalaceCore])
 
   // Helper function to update palace state
-  const updatePalaceState = (core) => {
+  const updatePalaceState = (core: any) => {
     if (core) {
       try {
         const state = core.getCurrentState()
         setCurrentPalaceState(state)
         console.log('[App] Palace state updated:', state)
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[App] Error updating palace state:', error)
       }
     }
   }
 
-  const handleVoiceToggle = (enabled) => {
+  const handleVoiceToggle = (enabled: boolean) => {
     setVoiceEnabled(enabled)
   }
 
-  const handleListeningChange = (listening) => {
+  const handleListeningChange = (listening: boolean) => {
     setIsListening(listening)
   }
 
-  const handleWireframeToggle = (enabled) => {
+  const handleWireframeToggle = (enabled: boolean) => {
     setWireframeEnabled(enabled)
     console.log(`Wireframe mode ${enabled ? 'enabled' : 'disabled'}`)
   }
 
-  const handleNippleToggle = (enabled) => {
+  const handleNippleToggle = (enabled: boolean) => {
     setNippleEnabled(enabled)
     console.log(`Nipple controls ${enabled ? 'enabled' : 'disabled'}`)
   }
 
-  const handlePaintModeToggle = (enabled) => {
+  const handlePaintModeToggle = (enabled: boolean) => {
     setPaintModeEnabled(enabled)
     console.log(`Paint mode ${enabled ? 'enabled' : 'disabled'}`)
   }

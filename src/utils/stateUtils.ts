@@ -3,6 +3,8 @@
  * Handles state persistence, serialization, and basic state operations
  */
 
+import { ApplicationState, UserState, Room, MemoryPalaceObject, Connection } from '../types/index.js'
+
 /**
  * State keys for localStorage persistence
  */
@@ -18,7 +20,7 @@ export const StateKeys = {
  * Generate a unique ID
  * @returns {string} Unique identifier
  */
-export function generateId() {
+export function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
@@ -26,7 +28,7 @@ export function generateId() {
  * Load state from localStorage
  * @returns {Object} Loaded state object
  */
-export async function loadState() {
+export async function loadState(): Promise<ApplicationState> {
   const state = {
     user: null,
     rooms: new Map(),
@@ -38,22 +40,22 @@ export async function loadState() {
   try {
     const keys = Object.values(StateKeys)
     
-    keys.forEach(key => {
+    keys.forEach((key: string) => {
       const stored = localStorage.getItem(`palais_${key}`)
       if (stored) {
         try {
           const parsed = JSON.parse(stored)
           if (key === 'rooms' || key === 'objects' || key === 'connections') {
-            state[key] = new Map(Object.entries(parsed))
+            (state as any)[key] = new Map(Object.entries(parsed))
           } else {
-            state[key] = parsed
+            (state as any)[key] = parsed
           }
-        } catch (error) {
+        } catch (error: unknown) {
           console.warn(`Failed to parse stored state for ${key}:`, error)
         }
       }
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to load state:', error)
   }
 
@@ -65,12 +67,12 @@ export async function loadState() {
  * @param {Object} state - State object to save
  * @param {string} [specificKey] - Optional specific key to save
  */
-export async function saveState(state, specificKey = null) {
+export async function saveState(state: ApplicationState, specificKey: string | null = null): Promise<void> {
   try {
     const keysToSave = specificKey ? [specificKey] : Object.values(StateKeys)
     
-    keysToSave.forEach(key => {
-      const value = state[key]
+    keysToSave.forEach((key: string) => {
+      const value = (state as any)[key]
       if (value !== undefined) {
         let serializable = value
         if (value instanceof Map) {
@@ -79,7 +81,7 @@ export async function saveState(state, specificKey = null) {
         localStorage.setItem(`palais_${key}`, JSON.stringify(serializable))
       }
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to save state:', error)
   }
 }
@@ -89,7 +91,7 @@ export async function saveState(state, specificKey = null) {
  * @param {Object} state - State object to validate
  * @returns {Object} State with defaults applied
  */
-export function ensureDefaultState(state) {
+export function ensureDefaultState(state: ApplicationState): ApplicationState {
   // Initialize user state if not exists
   if (!state.user) {
     state.user = {
@@ -108,12 +110,12 @@ export function ensureDefaultState(state) {
 
   // Initialize collections if not exist
   const collections = ['rooms', 'objects', 'connections']
-  collections.forEach(key => {
-    if (!state[key]) {
-      state[key] = new Map()
-    } else if (!(state[key] instanceof Map)) {
+  collections.forEach((key: string) => {
+    if (!(state as any)[key]) {
+      (state as any)[key] = new Map()
+    } else if (!((state as any)[key] instanceof Map)) {
       // Convert plain objects back to Maps if loaded from storage
-      state[key] = new Map(Object.entries(state[key] || {}))
+      (state as any)[key] = new Map(Object.entries((state as any)[key] || {}))
     }
   })
 
