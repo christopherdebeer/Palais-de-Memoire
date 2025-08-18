@@ -48,6 +48,7 @@ function App({core}) {
   
   // Object interaction state
   const [selectedObject, setSelectedObject] = useState(null)
+  const [paintedAreas, setPaintedAreas] = useState(null) // Store painted areas for LLM context
   const [objectInspectorOpen, setObjectInspectorOpen] = useState(false)
   const [isProcessingObjectAction, setIsProcessingObjectAction] = useState(false)
   
@@ -1050,6 +1051,12 @@ function App({core}) {
     }
   }
 
+  // Painted areas change handler for LLM context
+  const handlePaintedAreasChange = (paintedAreasData) => {
+    console.log('[App] Painted areas changed:', paintedAreasData)
+    setPaintedAreas(paintedAreasData)
+  }
+
   // Painted object/door creation handler
   const handlePaintedObjectCreated = async (paintedItem) => {
     console.log('[App] Painted item created:', paintedItem)
@@ -1119,6 +1126,7 @@ function App({core}) {
         onCreationModeTriggered={handleCreationModeTriggered}
         onObjectSelected={handleObjectSelected}
         onPaintedObjectCreated={handlePaintedObjectCreated}
+        onPaintedAreasChange={handlePaintedAreasChange}
         onPaintTypeChange={handlePaintTypeChange}
         selectedObjectId={selectedObject?.id}
         cameraRotation={cameraRotation}
@@ -1153,6 +1161,7 @@ function App({core}) {
         currentPalaceState={currentPalaceState}
         isCreationMode={isCreationMode}
         pendingCreationPosition={pendingCreationPosition}
+        paintedAreas={paintedAreas}
         onAiObjectPropertiesUpdate={handleAiObjectPropertiesUpdate}
       />
       

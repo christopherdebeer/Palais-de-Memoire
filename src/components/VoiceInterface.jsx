@@ -8,7 +8,7 @@ import SettingsManager from '../services/SettingsManager.js'
 const settingsManager = new SettingsManager()
 
 
-const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeningChange, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition, onAiObjectPropertiesUpdate }) => {
+const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeningChange, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition, paintedAreas, onAiObjectPropertiesUpdate }) => {
   const [isListening, setIsListening] = useState(false)
   const [isSupported, setIsSupported] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -224,8 +224,8 @@ const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeni
         
         // Get painted area data if in creation mode
         let paintedAreaData = null
-        if (isCreationMode && window.memoryPalacePaintedAreas) {
-          paintedAreaData = window.memoryPalacePaintedAreas
+        if (isCreationMode && paintedAreas) {
+          paintedAreaData = paintedAreas
           console.log('[VoiceInterface] Including painted area data in context:', paintedAreaData)
         }
         
