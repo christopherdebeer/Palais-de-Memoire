@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
+import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import * as THREE from 'three'
 import nipplejs from 'nipplejs'
 import SimpleParticleManager from '../utils/SimpleParticleManager'
@@ -13,6 +13,7 @@ const MemoryPalace = forwardRef(({
   onObjectSelected = null,
   onPaintedObjectCreated = null,
   onPaintTypeChange = null,
+  onPaintedAreasChange = null,
   selectedObjectId = null,
   currentRoom = null,
   objects = [],
@@ -38,7 +39,7 @@ const MemoryPalace = forwardRef(({
   const paintCanvasRef = useRef(null)
   const paintTextureRef = useRef(null)
   const paintContextRef = useRef(null)
-  const paintedGroupsRef = useRef(new Map()) // Store painted object groups
+  const [paintedGroups, setPaintedGroups] = useState(new Map()) // Store painted object groups
   const paintModeEnabledRef = useRef(paintModeEnabled) // Ref for current paint mode state
   const paintInitializedRef = useRef(false) // Prevent double initialization in strict mode
   
@@ -212,13 +213,13 @@ const MemoryPalace = forwardRef(({
   const exposePaintedAreasToLLM = () => {
     console.log('[MemoryPalace] Exposing painted areas to LLM for creation mode')
     
-    if (paintedGroupsRef.current.size === 0) {
+    if (paintedGroups.size === 0) {
       console.log('[MemoryPalace] No painted areas to expose')
       return
     }
     
     // Group painted areas by proximity to create contiguous objects/doors
-    const paintedAreas = Array.from(paintedGroupsRef.current.values())
+    const paintedAreas = Array.from(paintedGroups.values())
     const groups = groupContiguousPaintAreas(paintedAreas)
     
     console.log(`[MemoryPalace] Exposing ${groups.length} painted area groups to LLM`)
@@ -240,25 +241,27 @@ const MemoryPalace = forwardRef(({
       }
     })
     
-    // Make painted area data globally available for LLM context
-    window.memoryPalacePaintedAreas = paintedAreaData
+    // Pass painted area data through callback instead of global
+    if (onPaintedAreasChange) {
+      onPaintedAreasChange(paintedAreaData)
+    }
     
-    console.log('[MemoryPalace] Painted area data exposed globally:', paintedAreaData)
+    console.log('[MemoryPalace] Painted area data passed through callback:', paintedAreaData)
     
     // Don't clear painted groups yet - let LLM process them first
-    // paintedGroupsRef.current.clear()
+    // setPaintedGroups(new Map())
   }
 
   const processPaintedAreasIntoObjects = () => {
     console.log('[MemoryPalace] Processing painted areas into objects/doors, mode:', paintModeType)
     
-    if (!paintCanvasRef.current || paintedGroupsRef.current.size === 0) {
+    if (!paintCanvasRef.current || paintedGroups.size === 0) {
       console.log('[MemoryPalace] No painted areas to process')
       return
     }
     
     // Group painted areas by proximity to create contiguous objects/doors
-    const paintedAreas = Array.from(paintedGroupsRef.current.values())
+    const paintedAreas = Array.from(paintedGroups.values())
     const groups = groupContiguousPaintAreas(paintedAreas)
     
     console.log(`[MemoryPalace] Found ${groups.length} contiguous paint groups from ${paintedAreas.length} paint areas`)
@@ -332,7 +335,7 @@ const MemoryPalace = forwardRef(({
     })
     
     // Clear painted groups after processing to free memory and reduce serialization overhead
-    paintedGroupsRef.current.clear()
+    setPaintedGroups(new Map())
     console.log('[MemoryPalace] Painted groups cleared after processing - stroke data cleanup complete')
   }
 
@@ -531,14 +534,18 @@ const MemoryPalace = forwardRef(({
           color: paintColor,
           worldPosition: intersectionPoint.clone(),
           metadata: { 
-            name: aiObjectProperties?.name || `Painted Object ${paintedGroupsRef.current.size + 1}`, 
+            name: aiObjectProperties?.name || `Painted Object ${paintedGroups.size + 1}`, 
             info: aiObjectProperties?.information || aiObjectProperties?.description || 'Created with paint tool',
             aiGenerated: !!aiObjectProperties
           },
           effectiveType: effectiveType
         }
         
-        paintedGroupsRef.current.set(paintedArea.id, paintedArea)
+        setPaintedGroups(prevGroups => {
+          const newGroups = new Map(prevGroups)
+          newGroups.set(paintedArea.id, paintedArea)
+          return newGroups
+        })
         
         // Update texture
         if (paintTextureRef.current) {
@@ -576,7 +583,7 @@ const MemoryPalace = forwardRef(({
         let closestArea = null
         let minDistance = Infinity
         
-        paintedGroupsRef.current.forEach((area) => {
+        paintedGroups.forEach((area) => {
           const distance = Math.sqrt(
             Math.pow(area.center.x - canvasX, 2) + 
             Math.pow(area.center.y - canvasY, 2)
@@ -1886,7 +1893,7 @@ const MemoryPalace = forwardRef(({
             color: initialColor,
             worldPosition: intersectionPoint.clone(),
             metadata: { 
-              name: `Object ${paintedGroupsRef.current.size + 1}`, 
+              name: `Object ${paintedGroups.size + 1}`, 
               info: 'Created with creation mode',
               aiGenerated: false
             },
@@ -1894,7 +1901,11 @@ const MemoryPalace = forwardRef(({
             isInitialMark: true
           }
           
-          paintedGroupsRef.current.set(initialPaintedArea.id, initialPaintedArea)
+          setPaintedGroups(prevGroups => {
+            const newGroups = new Map(prevGroups)
+            newGroups.set(initialPaintedArea.id, initialPaintedArea)
+            return newGroups
+          })
           
           // Update texture
           if (paintTextureRef.current) {
@@ -2303,7 +2314,7 @@ const MemoryPalace = forwardRef(({
       
       paintCanvasRef.current = null
       paintContextRef.current = null
-      paintedGroupsRef.current.clear()
+      setPaintedGroups(new Map())
       
       // Clear refs
       sceneRef.current = null
