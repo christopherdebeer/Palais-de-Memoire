@@ -73,6 +73,7 @@ export class SimpleParticleManager {
     const life      = new Float32Array(count * 2) // current, max
     const velocity  = new Float32Array(count * 3) // vx, vy, vz
     const motion    = new Float32Array(count * 4) // phase, frequency, amplitude, orbit_radius
+    const alphas    = new Float32Array(count) // individual particle opacity for fade effects
 
     // Random color variations for better visibility
     const colorPalette = [
@@ -102,14 +103,15 @@ export class SimpleParticleManager {
       colors[i3 + 2] = baseColor.b * cv
 
       sizes[i] = size * (0.8 + Math.random() * 0.4)
+      alphas[i] = 1.0 // Start fully opaque
 
       life[i * 2 + 0] = Math.random() * (lifetime[1] - lifetime[0]) // current
       life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
 
-      // Initialize firefly-like movement parameters
-      velocity[i3 + 0] = (Math.random() - 0.5) * 4.0 // Random initial velocity
-      velocity[i3 + 1] = (Math.random() - 0.5) * 2.0
-      velocity[i3 + 2] = (Math.random() - 0.5) * 4.0
+      // Initialize firefly-like movement parameters (2x base speed)
+      velocity[i3 + 0] = (Math.random() - 0.5) * 8.0 // Random initial velocity (2x)
+      velocity[i3 + 1] = (Math.random() - 0.5) * 4.0 // (2x)
+      velocity[i3 + 2] = (Math.random() - 0.5) * 8.0 // (2x)
 
       motion[i4 + 0] = Math.random() * Math.PI * 2 // Random phase
       motion[i4 + 1] = 0.5 + Math.random() * 1.5   // Random frequency (0.5-2.0)
@@ -123,23 +125,50 @@ export class SimpleParticleManager {
     geometry.setAttribute('life',     new THREE.BufferAttribute(life, 2))
     geometry.setAttribute('velocity', new THREE.BufferAttribute(velocity, 3))
     geometry.setAttribute('motion',   new THREE.BufferAttribute(motion, 4))
+    geometry.setAttribute('alpha',    new THREE.BufferAttribute(alphas, 1))
     geometry.computeBoundingSphere()
 
     // Randomly select blending mode for this particle system to ensure visibility
     const randomBlendMode = this.blendingModes[Math.floor(Math.random() * this.blendingModes.length)]
 
-    const material = new THREE.PointsMaterial({
-      map: this.texture,
+    // Create custom shader material for per-particle alpha
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        pointTexture: { value: this.texture },
+        size: { value: size },
+        opacity: { value: opacity }
+      },
+      vertexShader: `
+        attribute float alpha;
+        attribute float size;
+        varying vec3 vColor;
+        varying float vAlpha;
+        
+        void main() {
+          vColor = color;
+          vAlpha = alpha;
+          
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D pointTexture;
+        uniform float opacity;
+        varying vec3 vColor;
+        varying float vAlpha;
+        
+        void main() {
+          vec4 texColor = texture2D(pointTexture, gl_PointCoord);
+          gl_FragColor = vec4(vColor * texColor.rgb, texColor.a * vAlpha * opacity);
+        }
+      `,
       transparent: true,
       depthWrite: false,
       depthTest: true,
       blending: randomBlendMode,
-      vertexColors: true,
-      size: size,
-      sizeAttenuation: true,
-      opacity: opacity,
-      // Add slight randomness to alpha test to create variation
-      alphaTest: Math.random() * 0.1
+      vertexColors: true
     })
 
     const ps = new THREE.Points(geometry, material)
@@ -172,6 +201,7 @@ export class SimpleParticleManager {
       const pos  = geo.getAttribute('position').array
       const vel  = geo.getAttribute('velocity').array
       const mot  = geo.getAttribute('motion').array
+      const alphas = geo.getAttribute('alpha').array
 
       const { count, region, anchor, lifetime } = ps.userData
       const { shape, width, height, depth } = region
@@ -195,23 +225,41 @@ export class SimpleParticleManager {
           pos[i3 + 1] = anchor.y + p.y
           pos[i3 + 2] = anchor.z + p.z
 
-          // Reset movement parameters for variety
-          vel[i3 + 0] = (Math.random() - 0.5) * 2.0
-          vel[i3 + 1] = (Math.random() - 0.5) * 1.0
-          vel[i3 + 2] = (Math.random() - 0.5) * 2.0
+          // Reset movement parameters for variety (2x base speed)
+          vel[i3 + 0] = (Math.random() - 0.5) * 4.0 // (2x)
+          vel[i3 + 1] = (Math.random() - 0.5) * 2.0 // (2x)
+          vel[i3 + 2] = (Math.random() - 0.5) * 4.0 // (2x)
           
           mot[i4 + 0] = Math.random() * Math.PI * 2 // New phase
           mot[i4 + 1] = 0.5 + Math.random() * 1.5   // New frequency
           mot[i4 + 2] = 2 + Math.random() * 8       // New amplitude
           mot[i4 + 3] = 5 + Math.random() * 15      // New orbit radius
 
-          // Reset lifetime
+          // Reset lifetime and alpha
           const minL = lifetime?.[0] ?? 2.0
           const maxL = lifetime?.[1] ?? 5.0
           life[li + 0] = 0.0
           life[li + 1] = minL + Math.random() * (maxL - minL)
+          alphas[i] = 0.0 // Start fade-in
         } else {
           life[li] = cur
+          
+          // Calculate fade in/out based on lifecycle
+          const ageRatio = cur / max
+          const fadeInTime = 0.15  // First 15% of life
+          const fadeOutTime = 0.25 // Last 25% of life
+          
+          if (ageRatio < fadeInTime) {
+            // Fade in
+            alphas[i] = ageRatio / fadeInTime
+          } else if (ageRatio > (1.0 - fadeOutTime)) {
+            // Fade out
+            const fadeProgress = (ageRatio - (1.0 - fadeOutTime)) / fadeOutTime
+            alphas[i] = 1.0 - fadeProgress
+          } else {
+            // Full opacity
+            alphas[i] = 1.0
+          }
           
           // Organic firefly movement: combination of sine wave motion and gradual drift
           const phase = mot[i4 + 0] + cur * mot[i4 + 1]
@@ -253,6 +301,7 @@ export class SimpleParticleManager {
       geo.attributes.life.needsUpdate = true
       geo.attributes.velocity.needsUpdate = true
       geo.attributes.motion.needsUpdate = true
+      geo.attributes.alpha.needsUpdate = true
     })
   }
 
