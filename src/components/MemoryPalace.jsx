@@ -845,6 +845,8 @@ const MemoryPalace = forwardRef(({
 
     // Create arrow geometry pointing in the direction of the object
     const arrowGeometry = new THREE.ConeGeometry(0.25, 0.6, 8) // Half the previous size
+    // Align cone's forward axis (+Z) with look direction
+    arrowGeometry.rotateX(Math.PI / 2)
     const isDoor = obj.targetRoomId !== undefined
     
     // Use same color scheme as object markers
@@ -893,10 +895,18 @@ const MemoryPalace = forwardRef(({
     const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
     
     arrow.position.copy(indicatorPosition)
-    
+
     // Point arrow toward the object from its current position
-    const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
-    arrow.lookAt(indicatorPosition.clone().add(directionToObject))
+    const forward = new THREE.Vector3(0, 0, 1)
+    let directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
+    const cameraForward = new THREE.Vector3()
+    camera.getWorldDirection(cameraForward)
+    if (directionFromCamera.dot(cameraForward) < 0) {
+      // Object is behind camera; use projected indicator direction so arrow
+      // points from screen edge toward the object
+      directionToObject = indicatorDirection.clone().negate()
+    }
+    arrow.quaternion.setFromUnitVectors(forward, directionToObject)
     
     // Add distance text sprite
     const distance = camera.position.distanceTo(objectWorldPos)
@@ -1047,9 +1057,16 @@ const MemoryPalace = forwardRef(({
         
         // Update arrow position and rotation
         indicator.arrow.position.copy(indicatorPosition)
-        // Point arrow toward the object from its current position
-        const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
-        indicator.arrow.lookAt(objectWorldPos)
+        const forward = new THREE.Vector3(0, 0, 1)
+        let directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
+        const cameraForward = new THREE.Vector3()
+        camera.getWorldDirection(cameraForward)
+        if (directionFromCamera.dot(cameraForward) < 0) {
+          // Object is behind camera; use projected indicator direction so arrow
+          // points from screen edge toward the object
+          directionToObject = indicatorDirection.clone().negate()
+        }
+        indicator.arrow.quaternion.setFromUnitVectors(forward, directionToObject)
         
         // Update sprite position
         const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
