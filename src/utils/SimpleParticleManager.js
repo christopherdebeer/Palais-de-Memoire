@@ -1,249 +1,287 @@
-// Simplified Particle System Manager for React Memory Palace
-// Based on prototype/ParticleSystemManager.js but simplified for initial implementation
+// Minimal Particle System Manager — area-fill + simple lifetimes
+// Public API preserved:
+//   createParticleSystem(position, isDoor=false, objectId=null, options={})
+//   updateParticleSystems()
+//   removeParticleSystem(objectId)
+//   dispose()
 
 import * as THREE from 'three'
 
 export class SimpleParticleManager {
   constructor() {
     this.particleSystems = new Map()
+    this.texture = this._makeSprite(64)
+    this._lastUpdate = performance.now() * 0.001
   }
 
   /**
-   * Create a particle system.
-   * @param {THREE.Vector3} position - center of the effect
-   * @param {boolean} isDoor - golden aura if true; blue aura otherwise
-   * @param {string|null} objectId - stored key for later removal
-   * @param {object} options - optional tuning:
-   *   width, height           : area to fill (default: fallback to radial)
-   *   shape                   : "rect" | "circle" (default "rect" if width/height, else radial)
-   *   density                 : particles per 10k area units (default 0.02)
-   *   particleCount           : explicit override (wins over density)
-   *   swirlSpeed              : base swirl angular speed (default 0.9)
-   *   swirlTightness          : radial bias toward center 0..1 (default 0.45)
-   *   drift                   : base random drift amplitude (default 1.2)
-   *   twinkleSpeed            : flicker speed (default 1.4)
-   *   twinkleIntensity        : 0..1 alpha/size modulation (default 0.5)
-   *   sizeBase                : base point size (default 6 door / 4.5 object)
-   *   sizeJitter              : random size spread (default 0.6)
+   * Create a simple particle system that fills a box or sphere region.
+   * Particles live a few seconds, then are reset to a new random position.
+   *
+   * options:
+   *   width, height, depth?: numbers — region size (depth defaults to min(width, height))
+   *   shape?: "box" | "sphere"      — default "box" when width/height provided; else "sphere"
+   *   particleCount?: number         — explicit count (overrides density calculation)
+   *   density?: number               — particles per unit area/volume (default 0.8 door / 0.6 object)
+   *   size?: number                  — point size in pixels (default 10 door / 8 object)
+   *   lifetime?: [min,max]           — seconds (default [3,6])
+   *   opacity?: number               — default 0.9 door / 0.8 object
+   *   swirl?: boolean                — enable firefly-like swirling motion (default true)
+   *   swirlSpeed?: number            — motion speed multiplier (default 1.0)
    */
   createParticleSystem(position, isDoor = false, objectId = null, options = {}) {
     const {
       width,
       height,
-      shape,
-      density = 0.02,                // particles per 10k units area
+      depth = Math.min(width ?? 6, height ?? 6),
+      shape = (width && height ? 'box' : 'sphere'),
       particleCount,
-      swirlSpeed = 0.9,
-      swirlTightness = 0.45,         // 0 center-weighted, 1 edge-weighted
-      drift = 1.2,
-      twinkleSpeed = 1.4,
-      twinkleIntensity = 0.5,
-      sizeBase = isDoor ? 6.0 : 4.5,
-      sizeJitter = 0.6
+      density = isDoor ? 0.8 : 0.6,
+      size = isDoor ? 10 : 8,
+      lifetime = [3, 6],
+      opacity = isDoor ? 0.4 : 0.4,
+      swirl = true,
+      swirlSpeed = 1.0
     } = options
 
-    // Decide particle count
-    let count
-    if (typeof particleCount === "number") {
-      count = Math.max(8, Math.floor(particleCount))
-    } else if (width && height) {
-      const area = width * height
-      count = Math.max(20, Math.floor((area / 10000) * density * 10000))
+    // Calculate particle count based on density if not explicitly provided
+    let calculatedCount
+    if (particleCount !== undefined) {
+      calculatedCount = particleCount
     } else {
-      // radial fallback (original behavior scale)
-      count = isDoor ? 160 : 90
+      if (shape === 'sphere') {
+        const radius = Math.min(width ?? 50, height ?? 50) * 0.5
+        const volume = (4/3) * Math.PI * radius * radius * radius
+        calculatedCount = Math.floor(density * volume * 0.01) // scale factor for reasonable counts
+      } else {
+        const area = (width ?? 100) * (height ?? 100)
+        calculatedCount = Math.floor(density * area * 0.01) // scale factor for reasonable counts
+      }
+      // Apply reasonable bounds
+      calculatedCount = Math.max(5, Math.min(calculatedCount, isDoor ? 80 : 60))
     }
+
+    const count = Math.max(1, Math.floor(calculatedCount))
 
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(count * 3)
     const colors    = new Float32Array(count * 3)
     const sizes     = new Float32Array(count)
-    const phases    = new Float32Array(count) // per-particle phase for swirl/twinkle
-    const seeds     = new Float32Array(count) // extra per-particle seed for variety
-    const radii     = new Float32Array(count) // stored radial factor (0..1) for swirl tightness
+    const life      = new Float32Array(count * 2) // current, max
+    const motion    = new Float32Array(count * 4) // phase, radius, speed, direction
 
     const baseColor = isDoor ? new THREE.Color(0xffd700) : new THREE.Color(0x4dabf7)
 
-    const useArea = (width && height)
-    const useCircle = useArea ? (shape === "circle") : false
-
-    // Spawn points uniformly inside rect or disc; store per-particle attributes
+    // Seed initial data
     for (let i = 0; i < count; i++) {
-      let x = 0, y = 0, z = 0
+      const i3 = i * 3
+      const i4 = i * 4
+      const p = (shape === 'sphere')
+        ? this._randInSphere(width && height ? Math.min(width, height) * 0.5 : 50)
+        : this._randInBox(width ?? 100, height ?? 100, depth ?? 60)
 
-      if (useArea) {
-        if (useCircle) {
-          // Uniform inside circle of radius R = min(width, height)/2
-          const R = Math.min(width, height) * 0.5
-          const t = Math.random() * Math.PI * 2
-          const r = Math.sqrt(Math.random()) * R
-          x = position.x + Math.cos(t) * r
-          z = position.z + Math.sin(t) * r
-          y = position.y + (Math.random() - 0.5) * (isDoor ? 60 : 30)
-          // Normalized radial factor for swirl tightness
-          radii[i] = r / R
-        } else {
-          // Uniform inside rectangle
-          x = position.x + (Math.random() - 0.5) * width
-          z = position.z + (Math.random() - 0.5) * height
-          y = position.y + (Math.random() - 0.5) * (isDoor ? 60 : 30)
+      positions[i3 + 0] = position.x + p.x
+      positions[i3 + 1] = position.y + p.y
+      positions[i3 + 2] = position.z + p.z
 
-          // For rect, estimate "radius" as distance to center normalized by half-diagonal
-          const dx = x - position.x
-          const dz = z - position.z
-          const halfDiag = Math.sqrt((width * width + height * height)) * 0.5
-          radii[i] = Math.min(1.0, Math.sqrt(dx * dx + dz * dz) / Math.max(1e-3, halfDiag))
-        }
-      } else {
-        // Radial fallback like before
-        const angle  = Math.random() * Math.PI * 2
-        const rBase  = isDoor ? 50 : 35
-        const radius = Math.random() * rBase
-        const heightJ = (Math.random() - 0.5) * (isDoor ? 60 : 30)
-        x = position.x + Math.cos(angle) * radius
-        z = position.z + Math.sin(angle) * radius
-        y = position.y + heightJ
-        radii[i] = radius / rBase
-      }
+      const cv = 0.85 + Math.random() * 0.3
+      colors[i3 + 0] = baseColor.r * cv
+      colors[i3 + 1] = baseColor.g * cv
+      colors[i3 + 2] = baseColor.b * cv
 
-      positions[i * 3 + 0] = x
-      positions[i * 3 + 1] = y
-      positions[i * 3 + 2] = z
+      sizes[i] = size * (0.5 + Math.random() * 0.3)
 
-      const colorVariation = 0.85 + Math.random() * 0.3
-      colors[i * 3 + 0] = baseColor.r * colorVariation
-      colors[i * 3 + 1] = baseColor.g * colorVariation
-      colors[i * 3 + 2] = baseColor.b * colorVariation
+      life[i * 2 + 0] = Math.random() * (lifetime[1] - lifetime[0]) // current
+      life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
 
-      sizes[i]  = sizeBase * (0.85 + Math.random() * sizeJitter)
-      phases[i] = Math.random() * Math.PI * 2
-      seeds[i]  = Math.random() * 1000.0
+      // Motion parameters for firefly-like swirling
+      motion[i4 + 0] = Math.random() * Math.PI * 2 // phase offset
+      motion[i4 + 1] = 2 + Math.random() * 8 // swirl radius (2-10 units)
+      motion[i4 + 2] = 0.5 + Math.random() * 1.5 // speed multiplier (0.5-2.0)
+      motion[i4 + 3] = Math.random() < 0.5 ? 1 : -1 // direction (clockwise/counter-clockwise)
     }
 
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
-    geometry.setAttribute("color",    new THREE.BufferAttribute(colors, 3))
-    geometry.setAttribute("size",     new THREE.BufferAttribute(sizes, 1))
-    geometry.setAttribute("phase",    new THREE.BufferAttribute(phases, 1))
-    geometry.setAttribute("seed",     new THREE.BufferAttribute(seeds, 1))
-    geometry.setAttribute("rnorm",    new THREE.BufferAttribute(radii, 1))
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3))
+    geometry.setAttribute('size',     new THREE.BufferAttribute(sizes, 1))
+    geometry.setAttribute('life',     new THREE.BufferAttribute(life, 2))
+    geometry.setAttribute('motion',   new THREE.BufferAttribute(motion, 4))
     geometry.computeBoundingSphere()
 
     const material = new THREE.ShaderMaterial({
       uniforms: {
-        time:       { value: 0 },
-        opacity:    { value: isDoor ? 0.9 : 0.75 },
-        sizeScale:  { value: 1.0 },
-        center:     { value: new THREE.Vector3(position.x, position.y, position.z) },
-        swirlSpeed: { value: swirlSpeed },
-        swirlTight: { value: swirlTightness },
-        driftAmp:   { value: drift },
-        twkSpeed:   { value: twinkleSpeed },
-        twkInt:     { value: twinkleIntensity }
+        opacity:     { value: opacity },
+        uPointScale: { value: 800 }, // perspective scale factor (tweak to taste)
+        uMap:        { value: this.texture },
+        uTime:       { value: 0.0 },
+        uSwirl:      { value: swirl ? 1.0 : 0.0 },
+        uSwirlSpeed: { value: swirlSpeed }
       },
       vertexShader: `
         attribute float size;
-        attribute vec3  color;
-        attribute float phase;
-        attribute float seed;
-        attribute float rnorm; // 0..1 radial factor (center→edge)
-        uniform float time;
-        uniform float sizeScale;
-        uniform vec3  center;
-        uniform float swirlSpeed;
-        uniform float swirlTight;
-        uniform float driftAmp;
-        uniform float twkSpeed;
-        uniform float twkInt;
-        varying vec3  vColor;
-        varying float vTwinkle;
-        varying float vFade;
+        attribute vec2  life; // current, max
+        attribute vec4  motion; // phase, radius, speed, direction
 
-        // small hash-noise
-        float hash(float n){ return fract(sin(n)*43758.5453123); }
+        uniform float opacity;
+        uniform float uPointScale;
+        uniform float uTime;
+        uniform float uSwirl;
+        uniform float uSwirlSpeed;
+
+        varying vec3  vColor;
+        varying float vAlpha;
 
         void main() {
+          // Simple life envelope: fade in/out across lifetime
+          float t = clamp(life.x / max(life.y, 0.0001), 0.0, 1.0);
+          float a = min(t / 0.15, (1.0 - t) / 0.25); // quick fade in, slower fade out
+          a = clamp(a, 0.0, 1.0);
+
           vColor = color;
+          vAlpha = a * opacity;
 
-          // Vector from center to particle (in world space)
-          vec3 base = position - center;
+          // Base position
+          vec3 pos = position;
 
-          // Compute angular rotation amount: per-particle phase + time factor
-          float ang = phase + time * swirlSpeed * (0.7 + 0.6 * hash(seed));
+          // Add firefly-like swirling motion if enabled
+          if (uSwirl > 0.5) {
+            float phase = motion.x;
+            float radius = motion.y;
+            float speed = motion.z * uSwirlSpeed;
+            float direction = motion.w;
+            
+            // Create time-based swirling motion
+            float timePhase = uTime * speed * direction + phase;
+            
+            // Gentle figure-8 or circular motion with vertical oscillation
+            float swirlX = sin(timePhase) * radius * 0.3;
+            float swirlY = sin(timePhase * 0.7 + phase) * radius * 0.2; // slower vertical oscillation
+            float swirlZ = cos(timePhase) * radius * 0.3;
+            
+            // Add subtle drift
+            float driftX = sin(timePhase * 0.3) * radius * 0.1;
+            float driftZ = cos(timePhase * 0.4) * radius * 0.1;
+            
+            pos.x += swirlX + driftX;
+            pos.y += swirlY;
+            pos.z += swirlZ + driftZ;
+          }
 
-          // Tightness: bias radius toward center or edge. 0 → hug center; 1 → hug original radius
-          float radBias = mix(0.25, 1.0, clamp(swirlTight, 0.0, 1.0));
-          vec2 p = base.xz * radBias;
-
-          // Rotate around Y
-          float ca = cos(ang), sa = sin(ang);
-          vec2 swirl = vec2(p.x * ca - p.y * sa, p.x * sa + p.y * ca);
-
-          // Gentle vertical bob
-          float bob = sin(time * (0.8 + 0.5*hash(seed+17.0)) + phase) * (0.6 + 0.6*rnorm);
-
-          // Random drift adds organic motion (per seed)
-          float dx = (hash(seed+3.0)-0.5) * driftAmp;
-          float dz = (hash(seed+7.0)-0.5) * driftAmp;
-
-          vec3 pos = vec3(center.x + swirl.x + dx, center.y + base.y*0.5 + bob, center.z + swirl.y + dz);
-
-          // Per-particle twinkle: smooth sinus flicker 0.7..1.0 scaled by twkInt
-          float tw = 0.85 + 0.5 * sin(time * twkSpeed * (1.0 + 0.8*hash(seed+11.0)) + phase);
-          vTwinkle = mix(1.0, tw, clamp(twkInt, 0.0, 1.0));
-
-          // Project
           vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-
-          // Perspective size attenuation with clamp
-          float baseSize = max(size * sizeScale, 2.0);
-          float atten = 300.0 / max(1.0, -mv.z);
-          gl_PointSize = clamp(baseSize * atten * vTwinkle, 1.0, 48.0);
-
           gl_Position = projectionMatrix * mv;
 
-          // Mild depth fade to avoid hard cutoffs; never fully zero
-          float z = -mv.z;
-          vFade = clamp(1.0 - smoothstep(4000.0, 30000.0, z), 0.3, 1.0);
+          float dist = max(1.0, length(mv.xyz));
+          float psize = size * (uPointScale / dist);
+          gl_PointSize = clamp(psize, 2.0, 80.0);
         }
       `,
       fragmentShader: `
-        uniform float opacity;
+        uniform sampler2D uMap;
         varying vec3  vColor;
-        varying float vTwinkle;
-        varying float vFade;
+        varying float vAlpha;
 
         void main() {
-          vec2  c = gl_PointCoord - vec2(0.5);
-          float d = length(c);
-          if (d > 0.5) discard;
+          // soft circular sprite
+          vec2 uv = gl_PointCoord;
+          vec4 tex = texture2D(uMap, uv);
 
-          float edge = smoothstep(0.5, 0.0, d);
-          float alpha = opacity * vFade * edge * vTwinkle;
+          // clip to circle (texture already fades; this ensures clean edge)
+          vec2 c = uv - 0.5;
+          if (length(c) > 0.5) discard;
 
-          gl_FragColor = vec4(vColor, alpha);
+          gl_FragColor = vec4(vColor * tex.rgb, vAlpha * tex.a);
         }
       `,
       transparent: true,
       depthWrite: false,
       depthTest: true,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
+      vertexColors: true
     })
 
-    const particleSystem = new THREE.Points(geometry, material)
-    particleSystem.frustumCulled = false
+    const ps = new THREE.Points(geometry, material)
+    ps.frustumCulled = false
 
-    particleSystem.userData = { isDoor, objectId }
+    // Keep minimal data needed for resets
+    ps.userData = {
+      isDoor, objectId,
+      baseColor: baseColor.clone(),
+      region: { shape, width, height, depth },
+      anchor: position.clone(),
+      count,
+      swirl,
+      swirlSpeed,
+      lifetime
+    }
 
-    if (objectId) this.particleSystems.set(objectId, particleSystem)
-    return particleSystem
+    if (objectId) this.particleSystems.set(objectId, ps)
+    return ps
   }
 
   updateParticleSystems() {
-    const t = Date.now() * 0.001
+    const now = performance.now() * 0.001
+    let dt = now - this._lastUpdate
+    this._lastUpdate = now
+    // Clamp dt to avoid giant steps after tab focus, etc.
+    dt = Math.min(Math.max(dt, 0.0), 0.1)
+
     this.particleSystems.forEach(ps => {
-      const u = ps.material?.uniforms
-      if (!u) return
-      u.time.value = t
+      const geo = ps.geometry
+      const life = geo.getAttribute('life').array
+      const pos  = geo.getAttribute('position').array
+      const motion = geo.getAttribute('motion')?.array
+
+      const { count, region, anchor, lifetime } = ps.userData
+      const { shape, width, height, depth } = region
+
+      // Update time uniform for swirling animation
+      if (ps.material.uniforms.uTime) {
+        ps.material.uniforms.uTime.value = now
+      }
+
+      // Advance life and respawn expired particles at a new random position
+      for (let i = 0; i < count; i++) {
+        const li = i * 2
+        let cur = life[li]
+        const max = life[li + 1]
+
+        cur += dt
+        if (cur >= max) {
+          // respawn
+          const i3 = i * 3
+          const i4 = i * 4
+          const p = (shape === 'sphere')
+            ? this._randInSphere(Math.min(width ?? 100, height ?? 100) * 0.5)
+            : this._randInBox(width ?? 100, height ?? 100, (depth ?? Math.min(width ?? 60, height ?? 60)))
+
+          pos[i3 + 0] = anchor.x + p.x
+          pos[i3 + 1] = anchor.y + p.y
+          pos[i3 + 2] = anchor.z + p.z
+
+          // reset lifetime
+          const minL = lifetime?.[0] ?? 3.0
+          const maxL = lifetime?.[1] ?? 6.0
+          life[li + 0] = 0.0
+          life[li + 1] = minL + Math.random() * (maxL - minL)
+
+          // reset motion parameters for new particle
+          if (motion) {
+            motion[i4 + 0] = Math.random() * Math.PI * 2 // new phase offset
+            motion[i4 + 1] = 2 + Math.random() * 8 // new swirl radius
+            motion[i4 + 2] = 0.5 + Math.random() * 1.5 // new speed multiplier
+            motion[i4 + 3] = Math.random() < 0.5 ? 1 : -1 // new direction
+          }
+        } else {
+          life[li] = cur
+        }
+      }
+
+      geo.attributes.position.needsUpdate = true
+      geo.attributes.life.needsUpdate = true
+      if (motion) {
+        geo.attributes.motion.needsUpdate = true
+      }
+      // bounding sphere is generous enough; no need to recompute each frame
     })
   }
 
@@ -261,6 +299,48 @@ export class SimpleParticleManager {
   dispose() {
     this.particleSystems.forEach((_, id) => this.removeParticleSystem(id))
     this.particleSystems.clear()
+  }
+
+  // Helpers
+  _makeSprite(size) {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = size
+    const ctx = canvas.getContext('2d')
+
+    const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2)
+    g.addColorStop(0.0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.4, 'rgba(255,255,255,0.65)')
+    g.addColorStop(0.7, 'rgba(255,255,255,0.25)')
+    g.addColorStop(1.0, 'rgba(255,255,255,0.0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, size, size)
+
+    const tex = new THREE.CanvasTexture(canvas)
+    tex.magFilter = THREE.LinearFilter
+    tex.minFilter = THREE.LinearMipMapLinearFilter
+    return tex
+  }
+
+  _randInBox(w, h, d) {
+    return new THREE.Vector3(
+      (Math.random() - 0.5) * w,
+      (Math.random() - 0.5) * h,
+      (Math.random() - 0.5) * d
+    )
+  }
+
+  _randInSphere(r) {
+    // uniform in sphere: pick direction on unit sphere, radius ~ cbrt(u)*R
+    const u = Math.random(), v = Math.random()
+    const theta = 2.0 * Math.PI * u
+    const phi   = Math.acos(2.0 * v - 1.0)
+    const rr    = Math.cbrt(Math.random()) * r
+    const st = Math.sin(phi), ct = Math.cos(phi)
+    return new THREE.Vector3(
+      rr * st * Math.cos(theta),
+      rr * st * Math.sin(theta),
+      rr * ct
+    )
   }
 }
 

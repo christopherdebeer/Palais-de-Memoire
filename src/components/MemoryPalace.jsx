@@ -566,7 +566,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0xffd700,
         transparent: true,
-        opacity: 1.0, // Invisible hit area
+        opacity: 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -585,7 +585,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
-        opacity: 1.0, // Invisible hit area
+        opacity: 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -651,12 +651,12 @@ const MemoryPalace = forwardRef(({
       const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id, {
         width,
         height,
-        shape: "circle",
-        density: 0.15,
-        swirlSpeed: 0.7,
-        swirlTightness: 0.55,
-        twinkleSpeed: 1.6,
-        twinkleIntensity: 0.55
+        shape: "box",
+        density: 0.5,
+        swirlSpeed: 1.7,
+        swirlTightness: 0.0,
+        twinkleSpeed: 0,
+        twinkleIntensity: 2.55
       })
       sceneRef.current.add(particleSystem)
       
@@ -1049,7 +1049,7 @@ const MemoryPalace = forwardRef(({
         indicator.arrow.position.copy(indicatorPosition)
         // Point arrow toward the object from its current position
         const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
-        indicator.arrow.lookAt(indicatorPosition.clone().add(directionToObject))
+        indicator.arrow.lookAt(objectWorldPos)
         
         // Update sprite position
         const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
