@@ -92,7 +92,7 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null, voiceI
     const basePrompt = settingsManager.get('systemPrompt') || 
       'You are a Memory Palace AI assistant. Help users create immersive 3D memory spaces using voice commands.'
     
-    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null } = context
+    const { currentRoom, rooms = [], objects = [], isCreationMode = false, creationPosition = null, paintedAreaData = null } = context
 
     let contextPrompt = basePrompt + '\n\n'
 
@@ -103,7 +103,24 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null, voiceI
       contextPrompt += `They want to create something at this specific location. Listen to their description and determine:\n`
       contextPrompt += `- If it's a MEMORY OBJECT (furniture, items, decorations, books, etc.) → use add_object_at_position\n`
       contextPrompt += `- If it's a DOOR/PASSAGE (doorway, portal, stairs, window to another room) → use create_door_at_position\n`
-      contextPrompt += `IMPORTANT: Use the exact position coordinates provided in the creationPosition for the spatial tools.\n\n`
+      contextPrompt += `IMPORTANT: Use the exact position coordinates provided in the creationPosition for the spatial tools.\n`
+      
+      // Add painted area context if available
+      if (paintedAreaData && paintedAreaData.length > 0) {
+        contextPrompt += `\n🎨 PAINTED AREAS DETECTED:\n`
+        contextPrompt += `The user has painted areas on the skybox that define object dimensions and placement intentions:\n`
+        paintedAreaData.forEach((area, index) => {
+          contextPrompt += `- ${area.name || `Area ${index + 1}`}: ${area.dimensions.width.toFixed(0)}×${area.dimensions.height.toFixed(0)} world units\n`
+          if (area.position) {
+            contextPrompt += `  Position: (${area.position.x.toFixed(2)}, ${area.position.y.toFixed(2)}, ${area.position.z.toFixed(2)})\n`
+          }
+          contextPrompt += `  Type: ${area.paintedType || 'objects'}\n`
+        })
+        contextPrompt += `IMPORTANT: Consider these painted dimensions when creating objects - the user has visually indicated their intended size and placement.\n`
+        contextPrompt += `Use the painted area dimensions to inform your object creation decisions and ensure objects match the user's visual intentions.\n`
+      }
+      
+      contextPrompt += `\n`
     }
 
     // Current room context
