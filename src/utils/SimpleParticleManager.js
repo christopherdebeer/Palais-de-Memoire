@@ -16,8 +16,8 @@ export class SimpleParticleManager {
     // Available blending modes for visibility across diverse backgrounds
     this.blendingModes = [
       THREE.AdditiveBlending,    // Bright particles for dark backgrounds
-      THREE.SubtractiveBlending, // Dark particles for bright backgrounds
-      THREE.MultiplyBlending,    // Overlay effect
+      //THREE.SubtractiveBlending, // Dark particles for bright backgrounds
+      //THREE.MultiplyBlending,    // Overlay effect
       THREE.NormalBlending       // Standard blending
     ]
   }
@@ -107,14 +107,14 @@ export class SimpleParticleManager {
       life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
 
       // Initialize firefly-like movement parameters
-      velocity[i3 + 0] = (Math.random() - 0.5) * 2.0 // Random initial velocity
-      velocity[i3 + 1] = (Math.random() - 0.5) * 1.0
-      velocity[i3 + 2] = (Math.random() - 0.5) * 2.0
+      velocity[i3 + 0] = (Math.random() - 0.5) * 4.0 // Random initial velocity
+      velocity[i3 + 1] = (Math.random() - 0.5) * 2.0
+      velocity[i3 + 2] = (Math.random() - 0.5) * 4.0
 
       motion[i4 + 0] = Math.random() * Math.PI * 2 // Random phase
       motion[i4 + 1] = 0.5 + Math.random() * 1.5   // Random frequency (0.5-2.0)
-      motion[i4 + 2] = 2 + Math.random() * 8       // Random amplitude (2-10)
-      motion[i4 + 3] = 5 + Math.random() * 15      // Random orbit radius (5-20)
+      motion[i4 + 2] = 2 + Math.random() * 18       // Random amplitude (2-20)
+      motion[i4 + 3] = 5 + Math.random() * 35      // Random orbit radius (5-40)
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
