@@ -30,6 +30,12 @@ const MemoryPalace = forwardRef(({
   const offScreenIndicatorsRef = useRef(new Map())
   const animationFrameRef = useRef(null)
   const settingsManagerRef = useRef(new SettingsManager())
+
+  // Track last camera state to detect movement
+  const lastCameraStateRef = useRef({
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion()
+  })
   
   // Paint mode refs
   const paintCanvasRef = useRef(null)
@@ -807,7 +813,21 @@ const MemoryPalace = forwardRef(({
       if (particleManagerRef.current) {
         particleManagerRef.current.updateParticleSystems()
       }
-      
+
+      // Refresh off-screen indicators when camera moves
+      const camera = cameraRef.current
+      if (camera) {
+        const lastState = lastCameraStateRef.current
+        const positionChanged = !lastState.position.equals(camera.position)
+        const rotationChanged = !lastState.quaternion.equals(camera.quaternion)
+
+        if (positionChanged || rotationChanged) {
+          updateOffScreenIndicators(objects)
+          lastState.position.copy(camera.position)
+          lastState.quaternion.copy(camera.quaternion)
+        }
+      }
+
       // Animate object markers (subtle pulsing)
       // objectMarkersRef.current.forEach(marker => {
       //   if (marker.userData.originalScale) {
@@ -1011,60 +1031,90 @@ const MemoryPalace = forwardRef(({
 
     if (!camera) return
 
-    currentIndicators.forEach((indicator, objectId) => {
-      if (indicator.arrow && indicator.sprite) {
-        // Update positions to maintain screen-edge placement as camera moves
-        const obj = indicator.arrow.userData.objectData
-        const objectWorldPos = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
-        const directionFromCamera = objectWorldPos.clone().sub(camera.position).normalize()
-        
-        // Convert to screen space to find edge position
-        const tempVector = directionFromCamera.clone()
-        tempVector.project(camera)
-        
-        // Find closest edge position instead of simple clamping
-        const margin = 0.85
-        const absX = Math.abs(tempVector.x)
-        const absY = Math.abs(tempVector.y)
-        
-        // Determine which edge is closest and position on that edge
-        if (absX > absY) {
-          // Object is more to the left/right - position on vertical edges
-          tempVector.x = tempVector.x > 0 ? margin : -margin
-          tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
-        } else {
-          // Object is more up/down - position on horizontal edges  
-          tempVector.y = tempVector.y > 0 ? margin : -margin
-          tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
-        }
-        tempVector.z = 0.1
-        
-        // Convert back to world space at fixed distance
-        tempVector.unproject(camera)
-        const indicatorDirection = tempVector.sub(camera.position).normalize()
-        const fixedDistance = 8
-        const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
-        
-        // Update arrow position and rotation
-        indicator.arrow.position.copy(indicatorPosition)
-        // Point arrow toward the object from its current position
-        const directionToObject = objectWorldPos.clone().sub(indicatorPosition).normalize()
-        indicator.arrow.lookAt(objectWorldPos)
-        
-        // Update sprite position
-        const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
-        indicator.sprite.position.copy(indicatorPosition.clone().add(spriteOffset))
-        
-        // Gentle pulsing animation
-        const pulse = 0.8 + Math.sin(time * 3) * 0.2
-        indicator.arrow.material.opacity = indicator.arrow.userData.originalOpacity * pulse
-        indicator.sprite.material.opacity = 0.9 * pulse
+    // Build frustum from current camera
+    const frustum = new THREE.Frustum()
+    const cameraMatrix = new THREE.Matrix4()
+    cameraMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    frustum.setFromProjectionMatrix(cameraMatrix)
 
-        // Subtle floating motion (much smaller now)
-        const float = Math.sin(time * 2 + objectId.length) * 0.05
-        indicator.arrow.position.add(new THREE.Vector3(0, float, 0))
-        indicator.sprite.position.add(new THREE.Vector3(0, float, 0))
+    currentIndicators.forEach((indicator, objectId) => {
+      if (!(indicator.arrow && indicator.sprite)) return
+
+      // Compute world position of the target object
+      const obj = indicator.arrow.userData.objectData
+      const objectWorldPos = new THREE.Vector3()
+      const marker = objectMarkersRef.current.get(objectId)
+      if (marker) {
+        marker.getWorldPosition(objectWorldPos)
+      } else if (obj?.position) {
+        objectWorldPos.set(obj.position.x, obj.position.y, obj.position.z)
       }
+
+      // If object is now visible, remove its indicator
+      if (frustum.containsPoint(objectWorldPos)) {
+        if (indicator.arrow) {
+          sceneRef.current.remove(indicator.arrow)
+          if (indicator.arrow.geometry) indicator.arrow.geometry.dispose()
+          if (indicator.arrow.material) indicator.arrow.material.dispose()
+        }
+        if (indicator.sprite) {
+          sceneRef.current.remove(indicator.sprite)
+          if (indicator.sprite.material && indicator.sprite.material.map) {
+            indicator.sprite.material.map.dispose()
+          }
+          if (indicator.sprite.material) indicator.sprite.material.dispose()
+        }
+        currentIndicators.delete(objectId)
+        return
+      }
+
+      // Object remains off-screen – keep existing edge-clamping logic
+      const directionFromCamera = objectWorldPos.clone().sub(camera.position).normalize()
+
+      // Convert to screen space to find edge position
+      const tempVector = directionFromCamera.clone()
+      tempVector.project(camera)
+
+      // Find closest edge position instead of simple clamping
+      const margin = 0.85
+      const absX = Math.abs(tempVector.x)
+      const absY = Math.abs(tempVector.y)
+
+      // Determine which edge is closest and position on that edge
+      if (absX > absY) {
+        // Object is more to the left/right - position on vertical edges
+        tempVector.x = tempVector.x > 0 ? margin : -margin
+        tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+      } else {
+        // Object is more up/down - position on horizontal edges
+        tempVector.y = tempVector.y > 0 ? margin : -margin
+        tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+      }
+      tempVector.z = 0.1
+
+      // Convert back to world space at fixed distance
+      tempVector.unproject(camera)
+      const indicatorDirection = tempVector.sub(camera.position).normalize()
+      const fixedDistance = 8
+      const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
+
+      // Update arrow position and rotation
+      indicator.arrow.position.copy(indicatorPosition)
+      indicator.arrow.lookAt(objectWorldPos)
+
+      // Update sprite position
+      const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
+      indicator.sprite.position.copy(indicatorPosition.clone().add(spriteOffset))
+
+      // Gentle pulsing animation
+      const pulse = 0.8 + Math.sin(time * 3) * 0.2
+      indicator.arrow.material.opacity = indicator.arrow.userData.originalOpacity * pulse
+      indicator.sprite.material.opacity = 0.9 * pulse
+
+      // Subtle floating motion (much smaller now)
+      const float = Math.sin(time * 2 + objectId.length) * 0.05
+      indicator.arrow.position.add(new THREE.Vector3(0, float, 0))
+      indicator.sprite.position.add(new THREE.Vector3(0, float, 0))
     })
   }
 
