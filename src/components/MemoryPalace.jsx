@@ -844,14 +844,14 @@ const MemoryPalace = forwardRef(({
     })
 
     // Create arrow geometry pointing in the direction of the object
-    const arrowGeometry = new THREE.ConeGeometry(0.25, 0.6, 8) // Half the previous size
+    const arrowGeometry = new THREE.ConeGeometry(0.08, 0.4, 4) // Half the previous size
     // Align cone's forward axis (+Z) with look direction
     arrowGeometry.rotateX(Math.PI / 2)
     const isDoor = obj.targetRoomId !== undefined
     
     // Use same color scheme as object markers
     const arrowMaterial = new THREE.MeshBasicMaterial({
-      color: isDoor ? 0xffd700 : 0x4dabf7,
+      color: 0xffffff, // isDoor ? 0xffd700 : 0x4dabf7,
       transparent: true,
       opacity: 0.0,
       depthTest: false,
@@ -917,8 +917,8 @@ const MemoryPalace = forwardRef(({
     canvas.width = 128
     canvas.height = 64
     
-    context.fillStyle = isDoor ? '#ffd700' : '#4dabf7'
-    context.font = 'bold 16px Arial'
+    context.fillStyle = 'white'; // isDoor ? '#ffd700' : '#4dabf7'
+    context.font = 'bold 10px Arial'
     context.textAlign = 'center'
     context.fillText(obj.name, 64, 20)
     // context.fillText(distanceText, 64, 40)
