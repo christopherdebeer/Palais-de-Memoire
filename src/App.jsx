@@ -44,6 +44,7 @@ function App({core}) {
   const [isCreationMode, setIsCreationMode] = useState(false)
   const [pendingCreationPosition, setPendingCreationPosition] = useState(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [aiObjectProperties, setAiObjectProperties] = useState(null)
   
   // Object interaction state
   const [selectedObject, setSelectedObject] = useState(null)
@@ -824,29 +825,60 @@ function App({core}) {
     setPendingCreationPosition(creationData.position)
     setIsCreationMode(true)
     
-    // Show visual feedback
-    handleCaptionUpdate('Double-click detected! Describe what you want to create at this location.', 'synthesis')
-    
-    // Auto-start voice listening for creation mode
-    if (voiceEnabled) {
-      console.log('[App] Auto-starting voice input for creation mode')
-      // The VoiceInterface will detect creation mode and auto-start listening
+    // Enable paint mode automatically when entering creation mode (if initial mark was created)
+    if (creationData.initialPaintMark && !paintModeEnabled) {
+      console.log('[App] Auto-enabling paint mode for creation mode with initial mark')
+      setPaintModeEnabled(true)
     }
     
-    // Auto-exit creation mode after 10 seconds if no voice input
+    // Clear any previous AI properties
+    setAiObjectProperties(null)
+    
+    // Show visual feedback
+    handleCaptionUpdate('Double-click detected! Paint the area, then speak or type what you want to create.', 'synthesis')
+    
+    // Don't auto-start voice - let user paint first, then provide voice/text input
+    console.log('[App] Creation mode active - user should paint area then provide voice/text input')
+    
+    // Auto-exit creation mode after 20 seconds if no voice input (extended for paint-first workflow)
     setTimeout(() => {
       if (isCreationMode) {
         console.log('[App] Creation mode timeout - exiting')
-        setIsCreationMode(false)
-        setPendingCreationPosition(null)
+        handleCreationModeComplete()
       }
-    }, 10000)
+    }, 20000)
   }
 
   const handleCreationModeComplete = () => {
     console.log('[App] Creation mode complete')
     setIsCreationMode(false)
     setPendingCreationPosition(null)
+    setAiObjectProperties(null)
+    
+    // Optionally disable paint mode when exiting creation mode
+    // setPaintModeEnabled(false)
+  }
+
+  const handlePaintTypeChange = (newType) => {
+    console.log('[App] AI-driven paint type change:', newType)
+    setPaintModeType(newType)
+    
+    // Provide user feedback about the AI-determined type
+    const typeDescription = newType === 'doors' ? 'door' : 'object'
+    handleCaptionUpdate(`AI detected: Creating a ${typeDescription}`, 'synthesis')
+  }
+
+  const handleAiObjectPropertiesUpdate = (properties) => {
+    console.log('[App] AI object properties updated:', properties)
+    setAiObjectProperties(properties)
+    
+    // Update paint type if AI has determined the type
+    if (properties?.type) {
+      const paintType = properties.type === 'door' ? 'doors' : 'objects'
+      if (paintType !== paintModeType) {
+        handlePaintTypeChange(paintType)
+      }
+    }
   }
 
   // Object interaction handlers
@@ -1087,11 +1119,14 @@ function App({core}) {
         onCreationModeTriggered={handleCreationModeTriggered}
         onObjectSelected={handleObjectSelected}
         onPaintedObjectCreated={handlePaintedObjectCreated}
+        onPaintTypeChange={handlePaintTypeChange}
         selectedObjectId={selectedObject?.id}
         cameraRotation={cameraRotation}
         onCameraRotationChange={setCameraRotation}
         currentRoom={currentPalaceState?.currentRoom}
         objects={currentPalaceState?.objects || []}
+        creationModeActive={isCreationMode}
+        aiObjectProperties={aiObjectProperties}
       />
       
       {/* Show loading overlay while initializing */}
@@ -1118,6 +1153,7 @@ function App({core}) {
         currentPalaceState={currentPalaceState}
         isCreationMode={isCreationMode}
         pendingCreationPosition={pendingCreationPosition}
+        onAiObjectPropertiesUpdate={handleAiObjectPropertiesUpdate}
       />
       
       {/* Voice Status Indicator - only shown when listening */}

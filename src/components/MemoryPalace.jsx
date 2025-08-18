@@ -12,9 +12,12 @@ const MemoryPalace = forwardRef(({
   onCreationModeTriggered = null,
   onObjectSelected = null,
   onPaintedObjectCreated = null,
+  onPaintTypeChange = null,
   selectedObjectId = null,
   currentRoom = null,
-  objects = []
+  objects = [],
+  creationModeActive = false,
+  aiObjectProperties = null
 }, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
@@ -145,8 +148,14 @@ const MemoryPalace = forwardRef(({
     
     console.log('[MemoryPalace] Disabling paint mode')
     
-    // Process painted areas into objects before cleanup
-    processPaintedAreasIntoObjects()
+    // In creation mode, make painted areas available to LLM instead of directly creating objects
+    if (creationModeActive) {
+      console.log('[MemoryPalace] Creation mode active - making painted areas available to LLM')
+      exposePaintedAreasToLLM()
+    } else {
+      // Normal paint mode - process painted areas into objects directly
+      processPaintedAreasIntoObjects()
+    }
     
     // Remove paint sphere overlay
     if (skyboxSphereRef.current.userData.paintSphere) {
@@ -171,6 +180,46 @@ const MemoryPalace = forwardRef(({
     }
   }
 
+  const exposePaintedAreasToLLM = () => {
+    console.log('[MemoryPalace] Exposing painted areas to LLM for creation mode')
+    
+    if (paintedGroupsRef.current.size === 0) {
+      console.log('[MemoryPalace] No painted areas to expose')
+      return
+    }
+    
+    // Group painted areas by proximity to create contiguous objects/doors
+    const paintedAreas = Array.from(paintedGroupsRef.current.values())
+    const groups = groupContiguousPaintAreas(paintedAreas)
+    
+    console.log(`[MemoryPalace] Exposing ${groups.length} painted area groups to LLM`)
+    
+    // Convert groups to LLM-friendly format
+    const paintedAreaData = groups.map((group, index) => {
+      const groupData = createObjectFromPaintGroup(group, index + 1, paintModeType)
+      
+      return {
+        id: `painted_area_${index + 1}`,
+        name: groupData.name,
+        information: groupData.information,
+        position: groupData.position,
+        dimensions: groupData.dimensions,
+        paintedType: paintModeType, // 'objects' or 'doors'
+        strokeCount: group.length,
+        canvasCenter: groupData.canvasCenter,
+        worldPosition: groupData.position
+      }
+    })
+    
+    // Make painted area data globally available for LLM context
+    window.memoryPalacePaintedAreas = paintedAreaData
+    
+    console.log('[MemoryPalace] Painted area data exposed globally:', paintedAreaData)
+    
+    // Don't clear painted groups yet - let LLM process them first
+    // paintedGroupsRef.current.clear()
+  }
+
   const processPaintedAreasIntoObjects = () => {
     console.log('[MemoryPalace] Processing painted areas into objects/doors, mode:', paintModeType)
     
@@ -189,25 +238,31 @@ const MemoryPalace = forwardRef(({
     groups.forEach((group, index) => {
       const groupData = createObjectFromPaintGroup(group, index + 1, paintModeType)
       
-      if (paintModeType === 'doors') {
+      // Use AI properties if available, otherwise use defaults
+      const finalName = aiObjectProperties?.name || groupData.name
+      const finalInformation = aiObjectProperties?.information || aiObjectProperties?.description || groupData.information
+      const finalType = aiObjectProperties?.type || (paintModeType === 'doors' ? 'door' : 'object')
+      
+      if (finalType === 'door' || paintModeType === 'doors') {
         // Create painted door with proper type structure
         const paintedDoorParams = {
-          name: groupData.name,
+          name: finalName,
           type: 'door',
-          description: groupData.information,
-          information: groupData.information,
+          description: finalInformation,
+          information: finalInformation,
           position: groupData.position,
-          targetRoomId: '', // Will need to be configured later
+          targetRoomId: aiObjectProperties?.targetRoomId || '', // Will need to be configured later
           isPaintedDoor: true,
           paintData: {
             areas: group,
             canvasPosition: groupData.canvasCenter,
             color: 'rgba(0, 0, 255, 0.9)', // Blue for doors
-            dimensions: groupData.dimensions
+            dimensions: groupData.dimensions,
+            aiGenerated: !!aiObjectProperties
           }
         }
         
-        console.log('[MemoryPalace] Created painted door params:', paintedDoorParams)
+        console.log('[MemoryPalace] Created painted door params with AI properties:', paintedDoorParams)
         
         // Notify parent about painted door creation
         if (onPaintedObjectCreated) {
@@ -217,20 +272,21 @@ const MemoryPalace = forwardRef(({
       } else {
         // Create painted object with proper type structure
         const paintedObjectParams = {
-          name: groupData.name,
+          name: finalName,
           type: 'object',
-          information: groupData.information,
+          information: finalInformation,
           position: groupData.position,
           isPaintedObject: true,
           paintData: {
             areas: group,
             canvasPosition: groupData.canvasCenter,
             color: 'rgba(255, 0, 0, 0.9)', // Red for objects
-            dimensions: groupData.dimensions
+            dimensions: groupData.dimensions,
+            aiGenerated: !!aiObjectProperties
           }
         }
         
-        console.log('[MemoryPalace] Created painted object params:', paintedObjectParams)
+        console.log('[MemoryPalace] Created painted object params with AI properties:', paintedObjectParams)
         
         // Notify parent about painted object creation
         if (onPaintedObjectCreated) {
@@ -352,7 +408,9 @@ const MemoryPalace = forwardRef(({
       paintModeEnabled,
       hasContext: !!paintContextRef.current,
       hasCamera: !!cameraRef.current,
-      hasSkyboxSphere: !!skyboxSphereRef.current
+      hasSkyboxSphere: !!skyboxSphereRef.current,
+      creationModeActive,
+      aiObjectProperties
     })
     
     if (!paintModeEnabledRef.current || !paintContextRef.current || !cameraRef.current) return
@@ -393,15 +451,42 @@ const MemoryPalace = forwardRef(({
         // Paint with brush (50% smaller size)
         const brushSize = 25 // Reduced from 50 to 25 for smaller brush
         
-        // Use different paint colors based on paint mode type
-        const paintColor = paintModeType === 'doors' 
+        // Determine paint color based on AI properties or current paint mode type
+        let paintColor
+        let effectiveType = paintModeType
+        
+        // If in creation mode and AI has determined a type, use that
+        if (creationModeActive && aiObjectProperties?.type) {
+          effectiveType = aiObjectProperties.type === 'door' ? 'doors' : 'objects'
+          console.log('[MemoryPalace] AI determined type:', aiObjectProperties.type, 'effective paint type:', effectiveType)
+          
+          // Notify parent about paint type change if it differs from current
+          if (effectiveType !== paintModeType && onPaintTypeChange) {
+            onPaintTypeChange(effectiveType)
+          }
+        }
+        
+        // Set paint color based on effective type
+        paintColor = effectiveType === 'doors' 
           ? 'rgba(0, 0, 255, 0.9)'  // Blue for doors
           : 'rgba(255, 0, 0, 0.9)'  // Red for objects
+        
+        // Add visual feedback for AI-driven changes
+        if (creationModeActive && aiObjectProperties?.type) {
+          // Add slight glow effect for AI-determined paint
+          context.shadowColor = paintColor
+          context.shadowBlur = 10
+        } else {
+          context.shadowBlur = 0
+        }
         
         context.fillStyle = paintColor
         context.beginPath()
         context.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2)
         context.fill()
+        
+        // Reset shadow for next paint stroke
+        context.shadowBlur = 0
         
         // Store painted area info for later grouping (simplified)
         const paintedArea = {
@@ -410,7 +495,12 @@ const MemoryPalace = forwardRef(({
           size: brushSize,
           color: paintColor,
           worldPosition: intersectionPoint.clone(),
-          metadata: { name: `Painted Object ${paintedGroupsRef.current.size + 1}`, info: 'Created with paint tool' }
+          metadata: { 
+            name: aiObjectProperties?.name || `Painted Object ${paintedGroupsRef.current.size + 1}`, 
+            info: aiObjectProperties?.information || aiObjectProperties?.description || 'Created with paint tool',
+            aiGenerated: !!aiObjectProperties
+          },
+          effectiveType: effectiveType
         }
         
         paintedGroupsRef.current.set(paintedArea.id, paintedArea)
@@ -420,7 +510,7 @@ const MemoryPalace = forwardRef(({
           paintTextureRef.current.needsUpdate = true
         }
         
-        console.log('[MemoryPalace] Painted area created:', paintedArea)
+        console.log('[MemoryPalace] Painted area created with AI integration:', paintedArea)
       }
     }
   }
@@ -480,12 +570,12 @@ const MemoryPalace = forwardRef(({
     console.log('[MemoryPalace] Updating skybox for room:', room?.name || 'default')
 
     // Skip texture loading if wireframe is enabled
-    if (wireframeEnabled) {
-      console.log('[MemoryPalace] Wireframe enabled, skipping room texture loading')
-      return
-    }
+    // if (wireframeEnabled) {
+    //   console.log('[MemoryPalace] Wireframe enabled, skipping room texture loading')
+    //   return
+    // }
 
-    if (room?.imageUrl) {
+    if (!wireframeEnabled && room?.imageUrl) {
       // Load room-specific texture
       console.log('[MemoryPalace] Loading room texture:', room.imageUrl)
       const textureLoader = new THREE.TextureLoader()
@@ -565,7 +655,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0xffd700,
         transparent: true,
-        opacity: 0.0, // Invisible hit area
+        opacity: wireframeEnabled ? 1.0 : 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -584,7 +674,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
-        opacity: 0.0, // Invisible hit area
+        opacity: wireframeEnabled ? 1.0 : 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -1703,73 +1793,133 @@ const MemoryPalace = forwardRef(({
       }
     }
 
-    const handleCreationModeClick = (event) => {
-      // Calculate mouse position in normalized device coordinates (-1 to +1)
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+  const handleCreationModeClick = (event) => {
+    // Calculate mouse position in normalized device coordinates (-1 to +1)
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
 
-      // Update the picking ray with the camera and mouse position
-      raycaster.setFromCamera(mouse, camera)
+    // Update the picking ray with the camera and mouse position
+    raycaster.setFromCamera(mouse, camera)
 
-      // Calculate objects intersecting the picking ray
-      const intersects = raycaster.intersectObject(sphere)
+    // Calculate objects intersecting the picking ray
+    const intersects = raycaster.intersectObject(sphere)
 
-      if (intersects.length > 0) {
-        const intersectionPoint = intersects[0].point
-        console.log('[MemoryPalace] Creation mode triggered at point:', intersectionPoint)
-        
-        // Position object/door slightly outside the sphere surface (like prototype)
-        const positionMultiplier = 1.02
-        const creationPosition = {
-          x: intersectionPoint.x * positionMultiplier,
-          y: intersectionPoint.y * positionMultiplier,
-          z: intersectionPoint.z * positionMultiplier
-        }
-        
-        // Add visual feedback for creation mode
-        const creationIndicator = new THREE.SphereGeometry(3, 8, 6)
-        const creationMaterial = new THREE.MeshBasicMaterial({ 
-          color: 0xff6600, 
-          transparent: true, 
-          opacity: 0.8 
-        })
-        const creationMesh = new THREE.Mesh(creationIndicator, creationMaterial)
-        creationMesh.position.copy(intersectionPoint)
-        scene.add(creationMesh)
-        
-        // Pulsing animation for creation indicator
-        let pulseDirection = 1
-        const pulseAnimation = () => {
-          if (creationMesh.parent) {
-            const scale = creationMesh.scale.x + (pulseDirection * 0.02)
-            if (scale > 1.3) pulseDirection = -1
-            if (scale < 0.7) pulseDirection = 1
-            creationMesh.scale.setScalar(scale)
-            requestAnimationFrame(pulseAnimation)
-          }
-        }
-        pulseAnimation()
-        
-        // Notify parent component about creation mode
-        if (onCreationModeTriggered) {
-          onCreationModeTriggered({
-            position: creationPosition,
-            screenPosition: { x: event.clientX, y: event.clientY },
-            worldPosition: intersectionPoint,
-            timestamp: Date.now()
-          })
-        }
-        
-        // Remove creation indicator after 5 seconds (or when creation is complete)
-        setTimeout(() => {
-          if (creationMesh.parent) {
-            scene.remove(creationMesh)
-            creationIndicator.dispose()
-            creationMaterial.dispose()
-          }
-        }, 5000)
+    if (intersects.length > 0) {
+      const intersectionPoint = intersects[0].point
+      const uv = intersects[0].uv
+      console.log('[MemoryPalace] Creation mode triggered at point:', intersectionPoint)
+      
+      // Position object/door slightly outside the sphere surface (like prototype)
+      const positionMultiplier = 1.02
+      const creationPosition = {
+        x: intersectionPoint.x * positionMultiplier,
+        y: intersectionPoint.y * positionMultiplier,
+        z: intersectionPoint.z * positionMultiplier
       }
+      
+      // Initialize paint canvas if not already done
+      initializePaintCanvas()
+      
+      // Enable paint mode and create initial mark at tapped position
+      if (!paintModeEnabledRef.current) {
+        console.log('[MemoryPalace] Auto-enabling paint mode and creating initial mark')
+        
+        // Create initial paint mark at the tapped position
+        if (uv && paintContextRef.current && paintCanvasRef.current) {
+          const canvas = paintCanvasRef.current
+          const context = paintContextRef.current
+          
+          // Convert UV coordinates to canvas coordinates
+          let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width
+          let canvasY = (1.0 - uv.y) * canvas.height
+          
+          // Create initial mark with default object color (red)
+          const brushSize = 25
+          const initialColor = 'rgba(255, 0, 0, 0.9)' // Red for objects (default)
+          
+          context.fillStyle = initialColor
+          context.beginPath()
+          context.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2)
+          context.fill()
+          
+          // Store initial painted area
+          const initialPaintedArea = {
+            id: Date.now() + Math.random(),
+            center: { x: canvasX, y: canvasY },
+            size: brushSize,
+            color: initialColor,
+            worldPosition: intersectionPoint.clone(),
+            metadata: { 
+              name: `Object ${paintedGroupsRef.current.size + 1}`, 
+              info: 'Created with creation mode',
+              aiGenerated: false
+            },
+            effectiveType: 'objects',
+            isInitialMark: true
+          }
+          
+          paintedGroupsRef.current.set(initialPaintedArea.id, initialPaintedArea)
+          
+          // Update texture
+          if (paintTextureRef.current) {
+            paintTextureRef.current.needsUpdate = true
+          }
+          
+          console.log('[MemoryPalace] Created initial paint mark:', initialPaintedArea)
+        }
+        
+        // Enable paint mode through parent
+        if (onPaintTypeChange) {
+          // This will trigger paint mode activation in the parent
+          console.log('[MemoryPalace] Requesting paint mode activation')
+        }
+      }
+      
+      // Add visual feedback for creation mode
+      const creationIndicator = new THREE.SphereGeometry(3, 8, 6)
+      const creationMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff6600, 
+        transparent: true, 
+        opacity: 0.8 
+      })
+      const creationMesh = new THREE.Mesh(creationIndicator, creationMaterial)
+      creationMesh.position.copy(intersectionPoint)
+      scene.add(creationMesh)
+      
+      // Pulsing animation for creation indicator
+      let pulseDirection = 1
+      const pulseAnimation = () => {
+        if (creationMesh.parent) {
+          const scale = creationMesh.scale.x + (pulseDirection * 0.02)
+          if (scale > 1.3) pulseDirection = -1
+          if (scale < 0.7) pulseDirection = 1
+          creationMesh.scale.setScalar(scale)
+          requestAnimationFrame(pulseAnimation)
+        }
+      }
+      pulseAnimation()
+      
+      // Notify parent component about creation mode
+      if (onCreationModeTriggered) {
+        onCreationModeTriggered({
+          position: creationPosition,
+          screenPosition: { x: event.clientX, y: event.clientY },
+          worldPosition: intersectionPoint,
+          timestamp: Date.now(),
+          initialPaintMark: true // Flag to indicate initial paint mark was created
+        })
+      }
+      
+      // Remove creation indicator after 15 seconds (extended for paint workflow)
+      setTimeout(() => {
+        if (creationMesh.parent) {
+          scene.remove(creationMesh)
+          creationIndicator.dispose()
+          creationMaterial.dispose()
+        }
+      }, 15000)
     }
+  }
 
     // Touch event handlers
     const handleTouchStart = (event) => {

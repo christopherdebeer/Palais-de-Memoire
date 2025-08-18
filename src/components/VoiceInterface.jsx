@@ -8,7 +8,7 @@ import SettingsManager from '../services/SettingsManager.js'
 const settingsManager = new SettingsManager()
 
 
-const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeningChange, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition }) => {
+const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeningChange, onCaptionToggle, captionsEnabled, memoryPalaceCore, currentPalaceState, isCreationMode, pendingCreationPosition, onAiObjectPropertiesUpdate }) => {
   const [isListening, setIsListening] = useState(false)
   const [isSupported, setIsSupported] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -222,10 +222,18 @@ const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeni
         // First check if memoryPalaceCore is initialized and running
         const isCoreReady = memoryPalaceCore && memoryPalaceCore.isInitialized && memoryPalaceCore.isRunning;
         
+        // Get painted area data if in creation mode
+        let paintedAreaData = null
+        if (isCreationMode && window.memoryPalacePaintedAreas) {
+          paintedAreaData = window.memoryPalacePaintedAreas
+          console.log('[VoiceInterface] Including painted area data in context:', paintedAreaData)
+        }
+        
         const context = {
           isCoreReady,
           isCreationMode: isCreationMode || false,
           creationPosition: pendingCreationPosition || null,
+          paintedAreaData: paintedAreaData,
           ...memoryPalaceCore.getCurrentState()
         }
         
@@ -277,6 +285,24 @@ const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeni
           if (responseText) {
             console.log(`[VoiceInterface] responseText ${responseText}`)
             
+          }
+          
+          // Extract AI object properties for paint mode integration
+          if (isCreationMode && toolCalls.length > 0 && onAiObjectPropertiesUpdate) {
+            for (const toolCall of toolCalls) {
+              // Check if this is an object/door creation tool call
+              if (toolCall.name === 'add_object' || toolCall.name === 'create_door') {
+                const aiProperties = {
+                  name: toolCall.input.name,
+                  information: toolCall.input.info || toolCall.input.information || toolCall.input.description,
+                  type: toolCall.name === 'create_door' ? 'door' : 'object',
+                  targetRoomId: toolCall.input.targetRoomId || ''
+                }
+                
+                console.log('[VoiceInterface] Extracted AI object properties:', aiProperties)
+                onAiObjectPropertiesUpdate(aiProperties)
+              }
+            }
           }
           
           // Handle tool calls as commands
