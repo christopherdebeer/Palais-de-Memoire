@@ -137,6 +137,7 @@ vi.mock('../core/MemoryPalaceCore.js', () => ({
     on: vi.fn(), // Mock event emitter methods
     off: vi.fn(),
     emit: vi.fn(),
+    getAllRooms: vi.fn().mockReturnValue([]), // Add missing getAllRooms method
     getCurrentState: vi.fn().mockReturnValue({
       objects: [],
       rooms: [],
@@ -159,6 +160,7 @@ const createMockCore = () => ({
   on: vi.fn(),
   off: vi.fn(),
   emit: vi.fn(),
+  getAllRooms: vi.fn().mockReturnValue([]), // Add missing getAllRooms method
   getCurrentState: vi.fn().mockReturnValue({
     objects: [],
     rooms: [],
