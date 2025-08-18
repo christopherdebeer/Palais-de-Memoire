@@ -180,6 +180,35 @@ const MemoryPalace = forwardRef(({
     }
   }
 
+  // Cleanup function to reduce memory usage by removing detailed stroke data from stored objects
+  const cleanupStrokeData = (objects = []) => {
+    console.log('[MemoryPalace] Cleaning up stroke data from objects to reduce memory usage')
+    let cleanupCount = 0
+    
+    objects.forEach(obj => {
+      if (obj.paintData && obj.paintData.areas && Array.isArray(obj.paintData.areas)) {
+        // Replace detailed stroke data with summary statistics
+        const areas = obj.paintData.areas
+        const summary = {
+          strokeCount: areas.length,
+          totalArea: areas.reduce((sum, area) => sum + (area.size * area.size || 0), 0),
+          averageStrokeSize: areas.length > 0 ? areas.reduce((sum, area) => sum + (area.size || 0), 0) / areas.length : 0
+        }
+        
+        // Remove detailed stroke data and replace with summary
+        delete obj.paintData.areas
+        obj.paintData.strokeSummary = summary
+        obj.paintData.cleaned = true
+        cleanupCount++
+        
+        console.log(`[MemoryPalace] Cleaned stroke data for object ${obj.id || obj.name}: ${areas.length} strokes → summary`)
+      }
+    })
+    
+    console.log(`[MemoryPalace] Stroke cleanup complete: ${cleanupCount} objects processed`)
+    return cleanupCount
+  }
+
   const exposePaintedAreasToLLM = () => {
     console.log('[MemoryPalace] Exposing painted areas to LLM for creation mode')
     
@@ -254,11 +283,14 @@ const MemoryPalace = forwardRef(({
           targetRoomId: aiObjectProperties?.targetRoomId || '', // Will need to be configured later
           isPaintedDoor: true,
           paintData: {
-            areas: group,
+            // Store only essential data after object creation - remove detailed stroke data
+            dimensions: groupData.dimensions,
             canvasPosition: groupData.canvasCenter,
             color: 'rgba(0, 0, 255, 0.9)', // Blue for doors
-            dimensions: groupData.dimensions,
-            aiGenerated: !!aiObjectProperties
+            aiGenerated: !!aiObjectProperties,
+            // Note: areas with full stroke data removed to reduce serialization overhead
+            strokeCount: group.length,
+            totalArea: group.reduce((sum, area) => sum + (area.size * area.size), 0)
           }
         }
         
@@ -278,11 +310,14 @@ const MemoryPalace = forwardRef(({
           position: groupData.position,
           isPaintedObject: true,
           paintData: {
-            areas: group,
+            // Store only essential data after object creation - remove detailed stroke data
+            dimensions: groupData.dimensions,
             canvasPosition: groupData.canvasCenter,
             color: 'rgba(255, 0, 0, 0.9)', // Red for objects
-            dimensions: groupData.dimensions,
-            aiGenerated: !!aiObjectProperties
+            aiGenerated: !!aiObjectProperties,
+            // Note: areas with full stroke data removed to reduce serialization overhead
+            strokeCount: group.length,
+            totalArea: group.reduce((sum, area) => sum + (area.size * area.size), 0)
           }
         }
         
@@ -296,9 +331,9 @@ const MemoryPalace = forwardRef(({
       }
     })
     
-    // Clear painted groups after processing
+    // Clear painted groups after processing to free memory and reduce serialization overhead
     paintedGroupsRef.current.clear()
-    console.log('[MemoryPalace] Painted groups cleared after processing')
+    console.log('[MemoryPalace] Painted groups cleared after processing - stroke data cleanup complete')
   }
 
   const groupContiguousPaintAreas = (paintedAreas) => {
@@ -1271,7 +1306,8 @@ const MemoryPalace = forwardRef(({
         cleanupNipple()
       }
     },
-    updateCameraFov: updateCameraFov
+    updateCameraFov: updateCameraFov,
+    cleanupStrokeData: cleanupStrokeData
   }))
 
   useEffect(() => {
