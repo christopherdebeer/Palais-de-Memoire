@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faTimes, faEdit, faTrash, faArrowsAlt, faEye, faMapMarkerAlt } from '@fortawesome/free-solid-svg-icons'
+import { faTimes, faEdit, faTrash, faArrowsAlt, faEye, faMapMarkerAlt, faDoorOpen, faCube } from '@fortawesome/free-solid-svg-icons'
+import { isDoorObject, isMemoryObject } from '../types/index.ts'
 
 const ObjectInspector = ({ 
   isOpen, 
@@ -9,16 +10,25 @@ const ObjectInspector = ({
   onEdit, 
   onDelete, 
   onMove,
-  isProcessing = false 
+  isProcessing = false,
+  availableRooms = []
 }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editInfo, setEditInfo] = useState('')
+  const [editTargetRoomId, setEditTargetRoomId] = useState('')
 
   useEffect(() => {
     if (object) {
       setEditName(object.name || '')
       setEditInfo(object.information || object.info || '')
+      
+      // Handle door-specific properties
+      if (isDoorObject(object)) {
+        setEditTargetRoomId(object.targetRoomId || '')
+      } else {
+        setEditTargetRoomId('')
+      }
     }
   }, [object])
 
@@ -28,11 +38,19 @@ const ObjectInspector = ({
 
   const handleSaveEdit = () => {
     if (onEdit && editName.trim() && editInfo.trim()) {
-      onEdit({
+      const updatedObject = {
         id: object.id,
         name: editName.trim(),
         information: editInfo.trim()
-      })
+      }
+      
+      // Add door-specific properties if this is a door
+      if (isDoorObject(object)) {
+        updatedObject.targetRoomId = editTargetRoomId
+        updatedObject.description = editInfo.trim()
+      }
+      
+      onEdit(updatedObject)
       setIsEditing(false)
     }
   }
@@ -41,6 +59,11 @@ const ObjectInspector = ({
     setIsEditing(false)
     setEditName(object?.name || '')
     setEditInfo(object?.information || object?.info || '')
+    
+    // Reset door-specific fields
+    if (isDoorObject(object)) {
+      setEditTargetRoomId(object.targetRoomId || '')
+    }
   }
 
   const handleDelete = () => {
@@ -102,31 +125,63 @@ const ObjectInspector = ({
           {isEditing ? (
             // Edit Mode
             <div className="object-edit-form">
+              {/* Object Type Indicator */}
+              <div className="object-type-indicator">
+                <FontAwesomeIcon icon={isDoorObject(object) ? faDoorOpen : faCube} />
+                <span>{isDoorObject(object) ? 'Door' : 'Memory Object'}</span>
+              </div>
+
               <div className="form-group">
-                <label htmlFor="edit-name">Object Name</label>
+                <label htmlFor="edit-name">{isDoorObject(object) ? 'Door Name' : 'Object Name'}</label>
                 <input
                   id="edit-name"
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   className="object-input"
-                  placeholder="Enter object name..."
+                  placeholder={isDoorObject(object) ? "Enter door name..." : "Enter object name..."}
                   disabled={isProcessing}
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="edit-info">Memory Information</label>
+                <label htmlFor="edit-info">{isDoorObject(object) ? 'Door Description' : 'Memory Information'}</label>
                 <textarea
                   id="edit-info"
                   value={editInfo}
                   onChange={(e) => setEditInfo(e.target.value)}
                   className="object-textarea"
-                  placeholder="Enter memory information..."
+                  placeholder={isDoorObject(object) ? "Enter door description..." : "Enter memory information..."}
                   rows={4}
                   disabled={isProcessing}
                 />
               </div>
+
+              {/* Door-specific fields */}
+              {isDoorObject(object) && (
+                <div className="form-group">
+                  <label htmlFor="edit-target-room">Target Room</label>
+                  <select
+                    id="edit-target-room"
+                    value={editTargetRoomId}
+                    onChange={(e) => setEditTargetRoomId(e.target.value)}
+                    className="object-select"
+                    disabled={isProcessing}
+                  >
+                    <option value="">Select a room...</option>
+                    {availableRooms.map(room => (
+                      <option key={room.id} value={room.id}>
+                        {room.name}
+                      </option>
+                    ))}
+                  </select>
+                  {!editTargetRoomId && (
+                    <small className="field-hint">
+                      Select a target room to make this door functional
+                    </small>
+                  )}
+                </div>
+              )}
 
               <div className="edit-actions">
                 <button
@@ -148,6 +203,12 @@ const ObjectInspector = ({
           ) : (
             // View Mode
             <div className="object-details">
+              {/* Object Type Indicator */}
+              <div className="object-type-indicator">
+                <FontAwesomeIcon icon={isDoorObject(object) ? faDoorOpen : faCube} />
+                <span>{isDoorObject(object) ? 'Door' : 'Memory Object'}</span>
+              </div>
+
               <div className="object-info">
                 <h4 className="object-name">{object.name}</h4>
                 <p className="object-description">{object.information || object.info}</p>
@@ -162,6 +223,26 @@ const ObjectInspector = ({
                   <FontAwesomeIcon icon={faMapMarkerAlt} />
                   <span>Distance: {getDistanceFromCenter(object.position)}</span>
                 </div>
+                
+                {/* Door-specific metadata */}
+                {isDoorObject(object) && (
+                  <>
+                    <div className="metadata-item">
+                      <FontAwesomeIcon icon={faDoorOpen} />
+                      <span>Target Room: {
+                        object.targetRoomId 
+                          ? (availableRooms.find(r => r.id === object.targetRoomId)?.name || 'Unknown Room')
+                          : 'Not configured'
+                      }</span>
+                    </div>
+                    {object.needsConfiguration && (
+                      <div className="metadata-item warning">
+                        <span>⚠️ Door needs configuration</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                
                 {object.createdAt && (
                   <div className="metadata-item">
                     <span>Created: {new Date(object.createdAt).toLocaleDateString()}</span>
@@ -174,7 +255,7 @@ const ObjectInspector = ({
                   className="action-btn edit-btn"
                   onClick={handleEdit}
                   disabled={isProcessing}
-                  title="Edit object"
+                  title={isDoorObject(object) ? "Edit door" : "Edit object"}
                 >
                   <FontAwesomeIcon icon={faEdit} />
                   Edit
@@ -184,7 +265,7 @@ const ObjectInspector = ({
                   className="action-btn move-btn"
                   onClick={handleMove}
                   disabled={isProcessing}
-                  title="Move object"
+                  title={isDoorObject(object) ? "Move door" : "Move object"}
                 >
                   <FontAwesomeIcon icon={faArrowsAlt} />
                   Move
@@ -194,7 +275,7 @@ const ObjectInspector = ({
                   className="action-btn delete-btn danger-btn"
                   onClick={handleDelete}
                   disabled={isProcessing}
-                  title="Delete object"
+                  title={isDoorObject(object) ? "Delete door" : "Delete object"}
                 >
                   <FontAwesomeIcon icon={faTrash} />
                   Delete

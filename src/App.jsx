@@ -889,17 +889,27 @@ function App({core}) {
     try {
       setIsProcessingObjectAction(true)
       
-      // Update object through core
-      await memoryPalaceCore.updateObject(updatedObject.id, {
+      // Prepare update parameters based on object type
+      const updateParams = {
         name: updatedObject.name,
         information: updatedObject.information
-      })
+      }
+      
+      // Add door-specific properties if this is a door
+      if (updatedObject.targetRoomId !== undefined) {
+        updateParams.targetRoomId = updatedObject.targetRoomId
+        updateParams.description = updatedObject.description || updatedObject.information
+      }
+      
+      // Update object through core
+      await memoryPalaceCore.updateObject(updatedObject.id, updateParams)
       
       // Update local state
       setSelectedObject(updatedObject)
       updatePalaceState(memoryPalaceCore)
       
-      handleCaptionUpdate(`Object "${updatedObject.name}" updated successfully`, 'synthesis')
+      const objectType = updatedObject.targetRoomId !== undefined ? 'door' : 'object'
+      handleCaptionUpdate(`${objectType.charAt(0).toUpperCase() + objectType.slice(1)} "${updatedObject.name}" updated successfully`, 'synthesis')
       
     } catch (error) {
       console.error('[App] Error updating object:', error)
@@ -1147,6 +1157,7 @@ function App({core}) {
         object={selectedObject}
         onClose={handleObjectInspectorClose}
         onEdit={handleObjectEdit}
+        availableRooms={memoryPalaceCore?.getAllRooms() || []}
         onDelete={handleObjectDelete}
         onMove={handleObjectMove}
         isProcessing={isProcessingObjectAction}

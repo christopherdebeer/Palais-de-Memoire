@@ -585,7 +585,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
-        opacity: 0.0, // Invisible hit area
+        opacity: 1.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
