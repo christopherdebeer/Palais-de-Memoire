@@ -119,8 +119,7 @@ const MemoryPalace = forwardRef(({
       const paintMaterial = new THREE.MeshBasicMaterial({
         map: paintTextureRef.current, // Use actual paint texture for painting
         transparent: true,
-        opacity: 1.0, // Full opacity 
-        //side: THREE.BackSide, // Only render inside faces since we're viewing from center
+        opacity: 0.6,
         depthTest: false,
         depthWrite: false
       })
@@ -566,7 +565,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0xffd700,
         transparent: true,
-        opacity: 1.0, // Invisible hit area
+        opacity: 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
@@ -585,7 +584,7 @@ const MemoryPalace = forwardRef(({
       markerMaterial = new THREE.MeshBasicMaterial({
         color: 0x4dabf7,
         transparent: true,
-        opacity: 1.0, // Invisible hit area
+        opacity: 0.0, // Invisible hit area
         depthTest: false,
         depthWrite: false,
         wireframe: true,
