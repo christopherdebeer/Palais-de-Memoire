@@ -71,6 +71,8 @@ export class SimpleParticleManager {
     const colors    = new Float32Array(count * 3)
     const sizes     = new Float32Array(count)
     const life      = new Float32Array(count * 2) // current, max
+    const velocity  = new Float32Array(count * 3) // vx, vy, vz
+    const motion    = new Float32Array(count * 4) // phase, frequency, amplitude, orbit_radius
 
     // Random color variations for better visibility
     const colorPalette = [
@@ -85,6 +87,7 @@ export class SimpleParticleManager {
     // Seed initial data with random selection
     for (let i = 0; i < count; i++) {
       const i3 = i * 3
+      const i4 = i * 4
       const pos = shuffled[i]
 
       positions[i3 + 0] = pos.x
@@ -102,12 +105,24 @@ export class SimpleParticleManager {
 
       life[i * 2 + 0] = Math.random() * (lifetime[1] - lifetime[0]) // current
       life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
+
+      // Initialize firefly-like movement parameters
+      velocity[i3 + 0] = (Math.random() - 0.5) * 2.0 // Random initial velocity
+      velocity[i3 + 1] = (Math.random() - 0.5) * 1.0
+      velocity[i3 + 2] = (Math.random() - 0.5) * 2.0
+
+      motion[i4 + 0] = Math.random() * Math.PI * 2 // Random phase
+      motion[i4 + 1] = 0.5 + Math.random() * 1.5   // Random frequency (0.5-2.0)
+      motion[i4 + 2] = 2 + Math.random() * 8       // Random amplitude (2-10)
+      motion[i4 + 3] = 5 + Math.random() * 15      // Random orbit radius (5-20)
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3))
     geometry.setAttribute('size',     new THREE.BufferAttribute(sizes, 1))
     geometry.setAttribute('life',     new THREE.BufferAttribute(life, 2))
+    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocity, 3))
+    geometry.setAttribute('motion',   new THREE.BufferAttribute(motion, 4))
     geometry.computeBoundingSphere()
 
     // Randomly select blending mode for this particle system to ensure visibility
@@ -155,20 +170,23 @@ export class SimpleParticleManager {
       const geo = ps.geometry
       const life = geo.getAttribute('life').array
       const pos  = geo.getAttribute('position').array
+      const vel  = geo.getAttribute('velocity').array
+      const mot  = geo.getAttribute('motion').array
 
       const { count, region, anchor, lifetime } = ps.userData
       const { shape, width, height, depth } = region
 
-      // Simple particle lifecycle - just respawn when expired
+      // Firefly-like particle movement and lifecycle
       for (let i = 0; i < count; i++) {
         const li = i * 2
+        const i3 = i * 3
+        const i4 = i * 4
         let cur = life[li]
         const max = life[li + 1]
 
         cur += dt
         if (cur >= max) {
-          // Respawn at new random position
-          const i3 = i * 3
+          // Respawn at new random position with new movement parameters
           const p = (shape === 'sphere')
             ? this._randInSphere(Math.min(width ?? 100, height ?? 100) * 0.5)
             : this._randInBox(width ?? 100, height ?? 100, (depth ?? Math.min(width ?? 60, height ?? 60)))
@@ -177,6 +195,16 @@ export class SimpleParticleManager {
           pos[i3 + 1] = anchor.y + p.y
           pos[i3 + 2] = anchor.z + p.z
 
+          // Reset movement parameters for variety
+          vel[i3 + 0] = (Math.random() - 0.5) * 2.0
+          vel[i3 + 1] = (Math.random() - 0.5) * 1.0
+          vel[i3 + 2] = (Math.random() - 0.5) * 2.0
+          
+          mot[i4 + 0] = Math.random() * Math.PI * 2 // New phase
+          mot[i4 + 1] = 0.5 + Math.random() * 1.5   // New frequency
+          mot[i4 + 2] = 2 + Math.random() * 8       // New amplitude
+          mot[i4 + 3] = 5 + Math.random() * 15      // New orbit radius
+
           // Reset lifetime
           const minL = lifetime?.[0] ?? 2.0
           const maxL = lifetime?.[1] ?? 5.0
@@ -184,11 +212,47 @@ export class SimpleParticleManager {
           life[li + 1] = minL + Math.random() * (maxL - minL)
         } else {
           life[li] = cur
+          
+          // Organic firefly movement: combination of sine wave motion and gradual drift
+          const phase = mot[i4 + 0] + cur * mot[i4 + 1]
+          const amplitude = mot[i4 + 2]
+          const orbitalRadius = mot[i4 + 3]
+          
+          // Apply organic swirling motion using sine waves
+          const swirl_x = Math.sin(phase) * amplitude * dt
+          const swirl_y = Math.cos(phase * 1.3) * amplitude * 0.7 * dt  // Different frequency for Y
+          const swirl_z = Math.sin(phase * 0.8) * amplitude * 0.5 * dt  // Subtle Z movement
+          
+          // Add orbital motion around anchor point
+          const distFromCenter = Math.sqrt(
+            Math.pow(pos[i3 + 0] - anchor.x, 2) + 
+            Math.pow(pos[i3 + 2] - anchor.z, 2)
+          )
+          
+          if (distFromCenter > orbitalRadius) {
+            // Gently pull back toward center if too far
+            const pullStrength = 0.5 * dt
+            vel[i3 + 0] += (anchor.x - pos[i3 + 0]) * pullStrength / distFromCenter
+            vel[i3 + 2] += (anchor.z - pos[i3 + 2]) * pullStrength / distFromCenter
+          }
+          
+          // Apply damping to prevent runaway velocity
+          const damping = 0.98
+          vel[i3 + 0] = (vel[i3 + 0] + swirl_x) * damping
+          vel[i3 + 1] = (vel[i3 + 1] + swirl_y) * damping  
+          vel[i3 + 2] = (vel[i3 + 2] + swirl_z) * damping
+          
+          // Update positions based on velocity
+          pos[i3 + 0] += vel[i3 + 0] * dt
+          pos[i3 + 1] += vel[i3 + 1] * dt
+          pos[i3 + 2] += vel[i3 + 2] * dt
         }
       }
 
       geo.attributes.position.needsUpdate = true
       geo.attributes.life.needsUpdate = true
+      geo.attributes.velocity.needsUpdate = true
+      geo.attributes.motion.needsUpdate = true
     })
   }
 
