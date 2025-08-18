@@ -191,13 +191,14 @@ const MemoryPalace = forwardRef(({
       const groupData = createObjectFromPaintGroup(group, index + 1, paintModeType)
       
       if (paintModeType === 'doors') {
-        // Create painted door
-        const paintedDoor = {
-          id: `painted_door_${Date.now()}_${index}`,
-          type: 'door',
+        // Create painted door with proper type structure
+        const paintedDoorParams = {
           name: groupData.name,
+          type: 'door',
           description: groupData.information,
+          information: groupData.information,
           position: groupData.position,
+          targetRoomId: '', // Will need to be configured later
           isPaintedDoor: true,
           paintData: {
             areas: group,
@@ -207,19 +208,18 @@ const MemoryPalace = forwardRef(({
           }
         }
         
-        console.log('[MemoryPalace] Created painted door:', paintedDoor)
+        console.log('[MemoryPalace] Created painted door params:', paintedDoorParams)
         
         // Notify parent about painted door creation
         if (onPaintedObjectCreated) {
           console.log('[MemoryPalace] Notifying parent about painted door creation')
-          onPaintedObjectCreated(paintedDoor)
+          onPaintedObjectCreated(paintedDoorParams)
         }
       } else {
-        // Create painted object (original logic)
-        const paintedObject = {
-          id: `painted_object_${Date.now()}_${index}`,
-          type: 'object',
+        // Create painted object with proper type structure
+        const paintedObjectParams = {
           name: groupData.name,
+          type: 'object',
           information: groupData.information,
           position: groupData.position,
           isPaintedObject: true,
@@ -231,12 +231,12 @@ const MemoryPalace = forwardRef(({
           }
         }
         
-        console.log('[MemoryPalace] Created painted object:', paintedObject)
+        console.log('[MemoryPalace] Created painted object params:', paintedObjectParams)
         
         // Notify parent about painted object creation
         if (onPaintedObjectCreated) {
           console.log('[MemoryPalace] Notifying parent about painted object creation')
-          onPaintedObjectCreated(paintedObject)
+          onPaintedObjectCreated(paintedObjectParams)
         }
       }
     })
@@ -529,7 +529,6 @@ const MemoryPalace = forwardRef(({
   // Object rendering functions
   const createObjectMarker = (obj) => {
     if (!sceneRef.current) return null
-
     console.log(`[MemoryPalace] 🏗️ SCENE: createObjectMarker called`, {
       objectId: obj.id,
       objectName: obj.name,
@@ -638,11 +637,27 @@ const MemoryPalace = forwardRef(({
     
     // Create particle system for this marker
     if (particleManagerRef.current) {
+      const width = Math.max(obj.paintData?.dimensions?.width, 50)
+      const height = Math.max(obj.paintData?.dimensions?.height, 50)
       console.log(`[MemoryPalace] ✨ SCENE: creating particle system for marker`, {
         objectId: obj.id,
-        markerPosition: marker.position
+        markerPosition: marker.position,
+        width,
+        height,
       })
-      const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id)
+      
+      
+      
+      const particleSystem = particleManagerRef.current.createParticleSystem(marker.position, isDoor, obj.id, {
+        width,
+        height,
+        shape: "circle",
+        density: 0.15,
+        swirlSpeed: 0.7,
+        swirlTightness: 0.55,
+        twinkleSpeed: 1.6,
+        twinkleIntensity: 0.55
+      })
       sceneRef.current.add(particleSystem)
       
       // Store particle system reference
@@ -794,13 +809,13 @@ const MemoryPalace = forwardRef(({
       }
       
       // Animate object markers (subtle pulsing)
-      objectMarkersRef.current.forEach(marker => {
-        if (marker.userData.originalScale) {
-          const time = Date.now() * 0.001
-          const scale = 1.0 + Math.sin(time * 2) * 0.1 // Gentle pulsing
-          marker.scale.copy(marker.userData.originalScale).multiplyScalar(scale)
-        }
-      })
+      // objectMarkersRef.current.forEach(marker => {
+      //   if (marker.userData.originalScale) {
+      //     const time = Date.now() * 0.001
+      //     const scale = 1.0 + Math.sin(time * 2) * 0.1 // Gentle pulsing
+      //     marker.scale.copy(marker.userData.originalScale).multiplyScalar(scale)
+      //   }
+      // })
       
       // Animate off-screen indicators
       animateOffScreenIndicators()
@@ -1512,7 +1527,7 @@ const MemoryPalace = forwardRef(({
         event.preventDefault()
         event.stopPropagation()
         console.log('[MemoryPalace] DEBUG: Paint mode - prevented defaults and stopped propagation')
-        return false
+        // return false
       }
       
       // Prevent context menu on right click

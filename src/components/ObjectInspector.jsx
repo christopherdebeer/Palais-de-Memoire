@@ -68,7 +68,13 @@ const ObjectInspector = ({
     return `${distance.toFixed(1)}m`
   }
 
-  if (!isOpen || !object) return null
+  if (!isOpen || !object) return null;
+
+  console.log(`[ObjectInspector] Rendering object inspector for object:`, {
+    objectId: object.id,
+    objectName: object.name,
+    timestamp: new Date().toISOString()
+  }, object)
 
   return (
     <>

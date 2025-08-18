@@ -8,7 +8,7 @@ import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
 import Minimap from './components/Minimap'
-import { EventTypes } from './core/types.ts'
+import { EventTypes } from './types/index.ts'
 import MobileMotionController from './utils/MobileMotionController.js'
 import SettingsManager from './services/SettingsManager.js'
 
@@ -1019,36 +1019,38 @@ function App({core}) {
     
     try {
       if (paintedItem.type === 'door') {
-        console.log('[App] Creating painted door - needs room configuration')
+        console.log('[App] Creating painted door using new TypeScript-aware method')
         
-        // For now, create a basic door object that can be configured later
-        // TODO: In the future, this could trigger a modal for room creation
-        const addedObject = await memoryPalaceCore.addObject(
-          paintedItem.name,
-          paintedItem.description + ' (Click to configure destination)',
-          paintedItem.position,
-          { 
-            type: 'door',
-            isPaintedDoor: true, 
-            paintData: paintedItem.paintData,
-            needsConfiguration: true
-          }
-        )
+        // Use the new createObject method with proper TypeScript parameters
+        const createParams = {
+          name: paintedItem.name,
+          type: 'door',
+          description: paintedItem.description || paintedItem.information,
+          information: (paintedItem.description || paintedItem.information) + ' (Click to configure destination)',
+          position: paintedItem.position,
+          targetRoomId: paintedItem.targetRoomId || '',
+          isPaintedDoor: true,
+          paintData: paintedItem.paintData
+        }
+        
+        const addedObject = await memoryPalaceCore.createObject(createParams)
         
         console.log('[App] Painted door added to memory palace:', addedObject)
         handleCaptionUpdate(`Painted door "${paintedItem.name}" created successfully`, 'synthesis')
       } else {
-        // Handle regular painted object
-        const addedObject = await memoryPalaceCore.addObject(
-          paintedItem.name,
-          paintedItem.information,
-          paintedItem.position,
-          { 
-            type: 'object',
-            isPaintedObject: true, 
-            paintData: paintedItem.paintData 
-          }
-        )
+        console.log('[App] Creating painted object using new TypeScript-aware method')
+        
+        // Use the new createObject method with proper TypeScript parameters
+        const createParams = {
+          name: paintedItem.name,
+          type: 'object',
+          information: paintedItem.information,
+          position: paintedItem.position,
+          isPaintedObject: true,
+          paintData: paintedItem.paintData
+        }
+        
+        const addedObject = await memoryPalaceCore.createObject(createParams)
         
         console.log('[App] Painted object added to memory palace:', addedObject)
         handleCaptionUpdate(`Painted object "${paintedItem.name}" created successfully`, 'synthesis')
