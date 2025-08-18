@@ -51,7 +51,7 @@ function App({core}) {
   const [isProcessingObjectAction, setIsProcessingObjectAction] = useState(false)
   
   // Minimap state
-  const [showMinimap, setShowMinimap] = useState(true)
+  const [showMinimap, setShowMinimap] = useState(false)
   const [minimapCollapsed, setMinimapCollapsed] = useState(true) // Start collapsed by default
   const [minimapPosition, setMinimapPosition] = useState({ x: 20, y: 20 }) // Default position
   const [cameraRotation, setCameraRotation] = useState({ yaw: 0, pitch: 0 })
