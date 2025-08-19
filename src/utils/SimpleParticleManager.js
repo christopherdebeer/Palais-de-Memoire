@@ -18,7 +18,7 @@ export class SimpleParticleManager {
       THREE.AdditiveBlending,    // Bright particles for dark backgrounds
       //THREE.SubtractiveBlending, // Dark particles for bright backgrounds
       //THREE.MultiplyBlending,    // Overlay effect
-      THREE.NormalBlending       // Standard blending
+      //THREE.NormalBlending       // Standard blending
     ]
   }
 
@@ -39,7 +39,7 @@ export class SimpleParticleManager {
       height,
       depth = Math.min(width ?? 6, height ?? 6),
       shape = (width && height ? 'box' : 'sphere'),
-      particleCount = Math.floor(Math.random() * 20) + 20, // Random 20-40 particles
+      particleCount = Math.floor(Math.random() * 20) + 60, // Random 20-40 particles
       size = Math.random() * 4 + 8, // Random size 8-12
       lifetime = [2, 5],
       opacity = Math.random() * 0.2 + 0.6 // Random opacity 0.6-0.8
@@ -82,7 +82,8 @@ export class SimpleParticleManager {
       new THREE.Color(0xff6b6b), // Red
       new THREE.Color(0x51cf66), // Green
       new THREE.Color(0xff8cc8), // Pink
-      new THREE.Color(0xffd43b)  // Yellow
+      new THREE.Color(0xffd43b),  // Yellow
+      new THREE.Color(0xffffff)  // White
     ]
 
     // Seed initial data with random selection
@@ -102,19 +103,19 @@ export class SimpleParticleManager {
       colors[i3 + 1] = baseColor.g * cv
       colors[i3 + 2] = baseColor.b * cv
 
-      sizes[i] = size * (0.8 + Math.random() * 0.4)
+      sizes[i] = size * (0.8 + Math.random() * 1.0)
       alphas[i] = 1.0 // Start fully opaque
 
       life[i * 2 + 0] = Math.random() * (lifetime[1] - lifetime[0]) // current
       life[i * 2 + 1] = lifetime[0] + Math.random() * (lifetime[1] - lifetime[0]) // max
 
       // Initialize firefly-like movement parameters (2x base speed)
-      velocity[i3 + 0] = (Math.random() - 0.5) * 8.0 // Random initial velocity (2x)
-      velocity[i3 + 1] = (Math.random() - 0.5) * 4.0 // (2x)
-      velocity[i3 + 2] = (Math.random() - 0.5) * 8.0 // (2x)
+      velocity[i3 + 0] = (Math.random() - 0.5) * 81.0 // Random initial velocity (2x)
+      velocity[i3 + 1] = (Math.random() - 0.5) * 40.0 // (2x)
+      velocity[i3 + 2] = (Math.random() - 0.5) * 81.0 // (2x)
 
       motion[i4 + 0] = Math.random() * Math.PI * 2 // Random phase
-      motion[i4 + 1] = 0.5 + Math.random() * 1.5   // Random frequency (0.5-2.0)
+      motion[i4 + 1] = 0.5 + Math.random() * 11.5   // Random frequency (0.5-2.0)
       motion[i4 + 2] = 2 + Math.random() * 18       // Random amplitude (2-20)
       motion[i4 + 3] = 5 + Math.random() * 35      // Random orbit radius (5-40)
     }
@@ -226,14 +227,14 @@ export class SimpleParticleManager {
           pos[i3 + 2] = anchor.z + p.z
 
           // Reset movement parameters for variety (2x base speed)
-          vel[i3 + 0] = (Math.random() - 0.5) * 4.0 // (2x)
-          vel[i3 + 1] = (Math.random() - 0.5) * 2.0 // (2x)
-          vel[i3 + 2] = (Math.random() - 0.5) * 4.0 // (2x)
+          vel[i3 + 0] = (Math.random() - 0.5) * 40.0 // (2x)
+          vel[i3 + 1] = (Math.random() - 0.5) * 20.0 // (2x)
+          vel[i3 + 2] = (Math.random() - 0.5) * 40.0 // (2x)
           
           mot[i4 + 0] = Math.random() * Math.PI * 2 // New phase
-          mot[i4 + 1] = 0.5 + Math.random() * 1.5   // New frequency
-          mot[i4 + 2] = 2 + Math.random() * 8       // New amplitude
-          mot[i4 + 3] = 5 + Math.random() * 15      // New orbit radius
+          mot[i4 + 1] = 10.5 + Math.random() * 11.5   // New frequency
+          mot[i4 + 2] = 12 + Math.random() * 18       // New amplitude
+          mot[i4 + 3] = 15 + Math.random() * 25      // New orbit radius
 
           // Reset lifetime and alpha
           const minL = lifetime?.[0] ?? 2.0
@@ -247,7 +248,7 @@ export class SimpleParticleManager {
           // Calculate fade in/out based on lifecycle
           const ageRatio = cur / max
           const fadeInTime = 0.15  // First 15% of life
-          const fadeOutTime = 0.25 // Last 25% of life
+          const fadeOutTime = 0.15 // Last 25% of life
           
           if (ageRatio < fadeInTime) {
             // Fade in
@@ -268,7 +269,7 @@ export class SimpleParticleManager {
           
           // Apply organic swirling motion using sine waves
           const swirl_x = Math.sin(phase) * amplitude * dt
-          const swirl_y = Math.cos(phase * 1.3) * amplitude * 0.7 * dt  // Different frequency for Y
+          const swirl_y = Math.cos(phase * 11.3) * amplitude * 1.7 * dt  // Different frequency for Y
           const swirl_z = Math.sin(phase * 0.8) * amplitude * 0.5 * dt  // Subtle Z movement
           
           // Add orbital motion around anchor point
