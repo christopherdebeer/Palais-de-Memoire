@@ -4,6 +4,7 @@
  */
 
 import replicateAPI from '../services/ReplicateAPI.js'
+import { ObjectType } from '../types/index.ts'
 
 export class MemoryPalaceToolManager {
   constructor(memoryPalaceCore, voiceInterface = null) {
@@ -76,11 +77,20 @@ export class MemoryPalaceToolManager {
 
       let doorPosition = position
       let doorDescription = description || `Door to ${targetRoomName}`
+      let paintData = null
       
-      // Log dimension information if provided
+      // Create paintData for dimensions if provided
       if (dimensions) {
         console.log(`[createDoor] Creating door with dimensions:`, dimensions)
-        doorDescription += ` (${dimensions.width}×${dimensions.height} world units)`
+        paintData = {
+          areas: [],
+          canvasPosition: { x: 0, y: 0 },
+          color: '#ffffff',
+          dimensions: {
+            width: dimensions.width,
+            height: dimensions.height
+          }
+        }
       }
       
       // Handle object conversion scenario
@@ -118,6 +128,7 @@ export class MemoryPalaceToolManager {
         description: doorDescription,
         bidirectional: true,
         position: doorPosition,
+        paintData: paintData,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -153,7 +164,8 @@ export class MemoryPalaceToolManager {
       await this.core.saveState()
       
       const conversionNote = objectId ? ' (converted from existing object)' : ''
-      return `Successfully created door "${doorDescription}"${conversionNote} leading to the new room "${targetRoomName}". A return door has been automatically placed in the new room.`
+      const dimensionNote = dimensions ? ` (${dimensions.width}×${dimensions.height} units)` : ''
+      return `Successfully created door "${doorDescription}"${conversionNote}${dimensionNote} leading to the new room "${targetRoomName}". A return door has been automatically placed in the new room.`
       
     } catch (error) {
       return `Failed to create door: ${error.message}`
@@ -228,14 +240,35 @@ export class MemoryPalaceToolManager {
         return `Position is required for spatial object creation`
       }
 
-      // Log dimension information if provided
+      let paintData = null
+      
+      // Create paintData for dimensions if provided
       if (dimensions) {
         console.log(`[addObjectAtPosition] Creating object with dimensions:`, dimensions)
-        info += ` (Size: ${dimensions.width}×${dimensions.height} world units)`
+        paintData = {
+          areas: [],
+          canvasPosition: { x: 0, y: 0 },
+          color: '#ffffff',
+          dimensions: {
+            width: dimensions.width,
+            height: dimensions.height
+          }
+        }
       }
       
-      const object = await this.core.addObject(name, info, position)
-      return `Successfully created object "${name}" at the clicked location with info: ${info}`
+      // Create object using comprehensive parameters
+      const objectParams = {
+        name: name,
+        type: ObjectType.OBJECT,
+        information: info,
+        position: position,
+        isPaintedObject: !!dimensions,
+        paintData: paintData
+      }
+      
+      const object = await this.core.createObject(objectParams)
+      const dimensionNote = dimensions ? ` (${dimensions.width}×${dimensions.height} units)` : ''
+      return `Successfully created object "${name}"${dimensionNote} at the clicked location with info: ${info}`
     } catch (error) {
       return `Failed to create object "${name}" at position: ${error.message}`
     }
