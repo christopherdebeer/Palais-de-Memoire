@@ -29,8 +29,6 @@ export class MemoryPalaceToolManager {
       }
 
       switch (toolName) {
-        case 'create_room':
-          return await this.createRoom(input)
         case 'edit_room':
           return await this.editRoom(input)
         case 'go_to_room':
@@ -47,8 +45,8 @@ export class MemoryPalaceToolManager {
           return await this.regenerateRoomImage(input)
         case 'add_object_at_position':
           return await this.addObjectAtPosition(input)
-        case 'create_door_at_position':
-          return await this.createDoorAtPosition(input)
+        case 'create_door':
+          return await this.createDoor(input)
         case 'narrate':
           return await this.narrateText(input)
         default:
@@ -61,14 +59,98 @@ export class MemoryPalaceToolManager {
   }
 
   /**
-   * Create a new room
+   * Create a door (unified tool for room/door creation)
+   * Handles both object conversion and new door creation
+   * Automatically creates target room and bidirectional connections
    */
-  async createRoom({ name, description }) {
+  async createDoor({ description, targetRoomName, targetRoomDescription, position, objectId }) {
     try {
-      const room = await this.core.createRoom(name, description)
-      return `Successfully created room "${name}" with description: ${description}. You are now in the new room.`
+      const currentRoom = this.core.getCurrentRoom()
+      if (!currentRoom) {
+        return `No current room to create door from. Please create a room first.`
+      }
+
+      if (!targetRoomName || !targetRoomDescription) {
+        return `Target room name and description are required for door creation`
+      }
+
+      let doorPosition = position
+      let doorDescription = description || `Door to ${targetRoomName}`
+      
+      // Handle object conversion scenario
+      if (objectId) {
+        const existingObject = this.core.state.objects.get(objectId)
+        if (!existingObject) {
+          return `Object with ID "${objectId}" not found`
+        }
+        
+        if (existingObject.roomId !== currentRoom.id) {
+          return `Cannot convert object from different room`
+        }
+        
+        // Use existing object's position and remove it
+        doorPosition = existingObject.position
+        doorDescription = description || `${existingObject.name} (converted to door)`
+        
+        await this.core.deleteObject(objectId)
+      }
+      
+      // Validate position for new door creation
+      if (!doorPosition) {
+        return `Position is required for door creation (either through objectId or position parameter)`
+      }
+
+      // Create the target room
+      const newRoom = await this.core.createRoom(targetRoomName, targetRoomDescription)
+      
+      // Create forward connection from current room to new room
+      const forwardConnection = {
+        id: this.core.generateId(),
+        roomId: currentRoom.id,
+        userId: this.core.state.user.id,
+        targetRoomId: newRoom.id,
+        description: doorDescription,
+        bidirectional: true,
+        position: doorPosition,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      
+      this.core.state.connections.set(forwardConnection.id, forwardConnection)
+      
+      // Create return door in the new room - place at user's "feet" on sphere surface
+      // When entering a new room, the user should see the return door at ground level, facing them
+      // Calculate position as normalized vector on sphere surface (radius 500)
+      const direction = { x: 1, y: -0.9, z: 0 } // Forward and down (ground level)
+      const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z)
+      const sphereRadius = 500
+      
+      const returnPosition = {
+        x: (direction.x / magnitude) * sphereRadius,  // Normalized to sphere surface
+        y: (direction.y / magnitude) * sphereRadius,  // Ground level relative to sphere
+        z: (direction.z / magnitude) * sphereRadius   // Center horizontally
+      }
+      
+      const returnConnection = {
+        id: this.core.generateId(),
+        roomId: newRoom.id,
+        userId: this.core.state.user.id,
+        targetRoomId: currentRoom.id,
+        description: `Return to ${currentRoom.name}`,
+        bidirectional: true,
+        position: returnPosition,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      
+      this.core.state.connections.set(returnConnection.id, returnConnection)
+      await this.core.saveState()
+      
+      const conversionNote = objectId ? ' (converted from existing object)' : ''
+      return `Successfully created door "${doorDescription}"${conversionNote} leading to the new room "${targetRoomName}". A return door has been automatically placed in the new room.`
+      
     } catch (error) {
-      return `Failed to create room "${name}": ${error.message}`
+      return `Failed to create door: ${error.message}`
     }
   }
 
@@ -147,74 +229,6 @@ export class MemoryPalaceToolManager {
     }
   }
 
-  /**
-   * Create door at specific position (for creation mode)
-   */
-  async createDoorAtPosition({ description, targetRoomName, targetRoomDescription, position }) {
-    try {
-      const currentRoom = this.core.getCurrentRoom()
-      if (!currentRoom) {
-        return `No current room to create door from. Please create a room first.`
-      }
-
-      if (!position) {
-        return `Position is required for spatial door creation`
-      }
-
-      // Create a new connected room if target room details provided
-      if (targetRoomName && targetRoomDescription) {
-        const newRoom = await this.core.createRoom(targetRoomName, targetRoomDescription)
-        
-        // Create forward connection from current room to new room
-        const forwardConnection = {
-          id: this.core.generateId(),
-          roomId: currentRoom.id,
-          userId: this.core.state.user.id,
-          targetRoomId: newRoom.id,
-          description: description || `Door to ${targetRoomName}`,
-          bidirectional: true,
-          position,
-          createdAt: new Date().toISOString()
-        }
-        
-        this.core.state.connections.set(forwardConnection.id, forwardConnection)
-        await this.core.saveState()
-        
-        // Create return door in the new room - place at user's "feet" on sphere surface
-        // When entering a new room, the user should see the return door at ground level, facing them
-        // Calculate position as normalized vector on sphere surface (radius 500)
-        const direction = { x: 1, y: -0.9, z: 0 } // Forward and down (ground level)
-        const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z)
-        const sphereRadius = 500
-        
-        const returnPosition = {
-          x: (direction.x / magnitude) * sphereRadius,  // Normalized to sphere surface
-          y: (direction.y / magnitude) * sphereRadius,  // Ground level relative to sphere
-          z: (direction.z / magnitude) * sphereRadius   // Center horizontally
-        }
-        
-        const returnConnection = {
-          id: this.core.generateId(),
-          roomId: newRoom.id,
-          userId: this.core.state.user.id,
-          targetRoomId: currentRoom.id,
-          description: `Return to ${currentRoom.name}`,
-          bidirectional: true,
-          position: returnPosition,
-          createdAt: new Date().toISOString()
-        }
-        
-        this.core.state.connections.set(returnConnection.id, returnConnection)
-        await this.core.saveState()
-        
-        return `Successfully created door "${description || `Door to ${targetRoomName}`}" at the clicked location, leading to the new room "${targetRoomName}". A return door has been automatically placed in the new room.`
-      } else {
-        return `Target room name and description are required for door creation`
-      }
-    } catch (error) {
-      return `Failed to create door at position: ${error.message}`
-    }
-  }
 
   /**
    * Remove object from current room
@@ -371,18 +385,6 @@ export class MemoryPalaceToolManager {
   static getToolDefinitions() {
     return [
       {
-        name: 'create_room',
-        description: 'Create a new memory room in the palace',
-        input_schema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Name of the new room' },
-            description: { type: 'string', description: 'Detailed description of the room for image generation and memory association' }
-          },
-          required: ['name', 'description']
-        }
-      },
-      {
         name: 'edit_room',
         description: 'Modify the description of the current room',
         input_schema: {
@@ -465,8 +467,8 @@ export class MemoryPalaceToolManager {
         }
       },
       {
-        name: 'create_door_at_position',
-        description: 'Create a door/connection at a specific spatial position (used when user double-clicks skybox)',
+        name: 'create_door',
+        description: 'Create a door/connection that leads to a new room. Can convert an existing object to a door OR create a new door at a position. Automatically creates the target room and bidirectional connections.',
         input_schema: {
           type: 'object',
           properties: {
@@ -475,16 +477,17 @@ export class MemoryPalaceToolManager {
             targetRoomDescription: { type: 'string', description: 'Description of the new room to create' },
             position: {
               type: 'object',
-              description: 'Spatial position coordinates',
+              description: 'Spatial position coordinates (required if not converting existing object)',
               properties: {
                 x: { type: 'number' },
                 y: { type: 'number' },
                 z: { type: 'number' }
               },
               required: ['x', 'y', 'z']
-            }
+            },
+            objectId: { type: 'string', description: 'ID of existing object to convert to door (alternative to position)' }
           },
-          required: ['description', 'targetRoomName', 'targetRoomDescription', 'position']
+          required: ['targetRoomName', 'targetRoomDescription']
         }
       },
       {
