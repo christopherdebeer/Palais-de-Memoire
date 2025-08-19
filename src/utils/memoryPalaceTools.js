@@ -63,7 +63,7 @@ export class MemoryPalaceToolManager {
    * Handles both object conversion and new door creation
    * Automatically creates target room and bidirectional connections
    */
-  async createDoor({ description, targetRoomName, targetRoomDescription, position, objectId }) {
+  async createDoor({ description, targetRoomName, targetRoomDescription, position, dimensions, objectId }) {
     try {
       const currentRoom = this.core.getCurrentRoom()
       if (!currentRoom) {
@@ -76,6 +76,12 @@ export class MemoryPalaceToolManager {
 
       let doorPosition = position
       let doorDescription = description || `Door to ${targetRoomName}`
+      
+      // Log dimension information if provided
+      if (dimensions) {
+        console.log(`[createDoor] Creating door with dimensions:`, dimensions)
+        doorDescription += ` (${dimensions.width}×${dimensions.height} world units)`
+      }
       
       // Handle object conversion scenario
       if (objectId) {
@@ -211,7 +217,7 @@ export class MemoryPalaceToolManager {
   /**
    * Add object at specific position (for creation mode)
    */
-  async addObjectAtPosition({ name, info, position }) {
+  async addObjectAtPosition({ name, info, position, dimensions }) {
     try {
       const currentRoom = this.core.getCurrentRoom()
       if (!currentRoom) {
@@ -222,6 +228,12 @@ export class MemoryPalaceToolManager {
         return `Position is required for spatial object creation`
       }
 
+      // Log dimension information if provided
+      if (dimensions) {
+        console.log(`[addObjectAtPosition] Creating object with dimensions:`, dimensions)
+        info += ` (Size: ${dimensions.width}×${dimensions.height} world units)`
+      }
+      
       const object = await this.core.addObject(name, info, position)
       return `Successfully created object "${name}" at the clicked location with info: ${info}`
     } catch (error) {
@@ -461,6 +473,15 @@ export class MemoryPalaceToolManager {
                 z: { type: 'number' }
               },
               required: ['x', 'y', 'z']
+            },
+            dimensions: {
+              type: 'object',
+              description: 'Optional object dimensions from painted areas',
+              properties: {
+                width: { type: 'number', description: 'Width in world units' },
+                height: { type: 'number', description: 'Height in world units' }
+              },
+              required: ['width', 'height']
             }
           },
           required: ['name', 'info', 'position']
@@ -484,6 +505,15 @@ export class MemoryPalaceToolManager {
                 z: { type: 'number' }
               },
               required: ['x', 'y', 'z']
+            },
+            dimensions: {
+              type: 'object',
+              description: 'Optional door dimensions from painted areas',
+              properties: {
+                width: { type: 'number', description: 'Width in world units' },
+                height: { type: 'number', description: 'Height in world units' }
+              },
+              required: ['width', 'height']
             },
             objectId: { type: 'string', description: 'ID of existing object to convert to door (alternative to position)' }
           },

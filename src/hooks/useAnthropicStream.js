@@ -117,7 +117,8 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null, voiceI
           contextPrompt += `  Type: ${area.paintedType || 'objects'}\n`
         })
         contextPrompt += `IMPORTANT: Consider these painted dimensions when creating objects - the user has visually indicated their intended size and placement.\n`
-        contextPrompt += `Use the painted area dimensions to inform your object creation decisions and ensure objects match the user's visual intentions.\n`
+        contextPrompt += `When using add_object_at_position or create_door tools, include the dimensions parameter with the painted area's width and height values.\n`
+        contextPrompt += `Example: dimensions: { width: 150, height: 200 } based on the painted area data above.\n`
       }
       
       contextPrompt += `\n`
@@ -151,14 +152,14 @@ export const useAnthropicStream = (onAddMessage, memoryPalaceCore = null, voiceI
 
     contextPrompt += `
 MEMORY PALACE TOOLS AVAILABLE:
-- create_door: Create a door/connection that leads to a new room (automatically creates room and bidirectional connections)
+- create_door: Create a door/connection that leads to a new room (automatically creates room and bidirectional connections). Accepts optional dimensions parameter.
 - edit_room: Modify current room's description  
 - go_to_room: Navigate to another existing room by name
 - add_object: Add a memory object to the current room
 - remove_object: Remove an object from the current room
 - list_rooms: Show all available rooms with current room marked
 - get_room_info: Get detailed info about current room and its objects
-- add_object_at_position: Add memory object at specific spatial coordinates (for creation mode)
+- add_object_at_position: Add memory object at specific spatial coordinates (for creation mode). Accepts optional dimensions parameter.
 - narrate: Speak text aloud with speech synthesis and closed captions
 
 CRITICAL NARRATION INSTRUCTIONS:
