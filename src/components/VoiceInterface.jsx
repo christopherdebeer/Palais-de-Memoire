@@ -17,7 +17,6 @@ const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeni
   const [showTextInput, setShowTextInput] = useState(false)
   const [conversationHistory, setConversationHistory] = useState([])
   const recognitionRef = useRef(null)
-  const captionTimeoutRef = useRef(null)
   
   // Initialize Anthropic streaming hook with memory palace core and voice interface
   // Ensure we only pass the core if it's properly initialized
@@ -164,9 +163,6 @@ const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeni
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.abort()
-      }
-      if (captionTimeoutRef.current) {
-        clearTimeout(captionTimeoutRef.current)
       }
       settingsManager.removeEventListener(handleSettingsChange)
     }

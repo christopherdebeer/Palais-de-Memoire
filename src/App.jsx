@@ -37,7 +37,6 @@ function App({core}) {
   
   const [memoryPalaceCore, setMemoryPalaceCore] = useState(core)
   const [currentPalaceState, setCurrentPalaceState] = useState(null)
-  const coreInitializationRef = useRef(false)
   const [actionModalOpen, setActionModalOpen] = useState(false)
   const [currentAction, setCurrentAction] = useState(null)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
@@ -63,16 +62,13 @@ function App({core}) {
   const [motionController, setMotionController] = useState(null)
   
   const memoryPalaceRef = useRef()
-  const captionTimeoutRef = useRef(null)
-  
-  // Cancellation ref for preventing state updates after unmount - MUST be at top level
-  const isCancelledRef = useRef(false)
+
 
   useEffect(() => {
+    let isCancelled = false
+
     console.log('[App] useEffect triggered, checking initialization state:', {
       isLoading,
-      coreInitializationRef: coreInitializationRef.current,
-      isCancelled: isCancelledRef.current,
       memoryPalaceCore: !!memoryPalaceCore
     })
     
@@ -85,13 +81,12 @@ function App({core}) {
     window.addEventListener('resize', checkMobile)
     
     // Initialize Memory Palace Core - prevent multiple initializations
-    const initializeCore = async (isCancelledParam = isCancelledRef) => {
-      if (coreInitializationRef.current) {
-        console.log('[App] Core initialization already in progress, skipping...')
+    const initializeCore = async () => {
+      if (memoryPalaceCore.isInitialized) {
+        console.log('[App] Core already initialized, skipping...')
         return
       }
-      
-      coreInitializationRef.current = true
+
       console.log('[App] Initializing Memory Palace Core...')
       console.log('[App] Core state before initialization:', {
         memoryPalaceCore: !!memoryPalaceCore,
@@ -195,30 +190,28 @@ function App({core}) {
             isInitialized: memoryPalaceCore?.isInitialized,
             isRunning: memoryPalaceCore?.isRunning
           })
-          
+
           // Check if component was unmounted during initialization
-          if (isCancelledParam.current) {
+          if (isCancelled) {
             console.log('[App] Component unmounted during initialization, aborting state updates')
             return
           }
-          
+
           // Update state and store core reference
           setMemoryPalaceCore(memoryPalaceCore)
-          
+
           console.log('[App] State updated - core:', !!memoryPalaceCore, 'initialized: true')
-          
+
           // Initial state update
           updatePalaceState(memoryPalaceCore)
-          
+
           console.log('[App] ❇️ Memory Palace Core initialized successfully')
-          
+
         } else {
           console.error('[App] Failed to initialize Memory Palace Core')
-          coreInitializationRef.current = false
         }
       } catch (error) {
         console.error('[App] Error initializing Memory Palace Core:', error)
-        coreInitializationRef.current = false
       }
     }
     
@@ -239,20 +232,20 @@ function App({core}) {
       )
       
       try {
-        await Promise.race([initializeCore(isCancelledRef), initTimeout])
+        await Promise.race([initializeCore(), initTimeout])
         console.log('[App] Core initialization completed successfully')
-        if (!isCancelledRef.current) {
+        if (!isCancelled) {
           console.log('[App] Setting loading to false after successful initialization')
           setIsLoading(false)
         }
       } catch (error) {
         console.error('[App] Core initialization failed or timed out:', error)
         console.log('[App] Attempting emergency fallback - setting loading to false immediately')
-        
+
         // Emergency fallback - just show the UI even if core isn't fully ready
-        if (!isCancelledRef.current) {
+        if (!isCancelled) {
           setIsLoading(false)
-          
+
           if (error.message.includes('timeout')) {
             console.warn('[App] Using emergency mode due to timeout')
             // Show simple alert instead of caption since caption system might not be ready
@@ -266,23 +259,29 @@ function App({core}) {
     }
     
     initWithTimeout()
-    
+
     return () => {
-      // Mark as cancelled to prevent state updates
-      // isCancelledRef.current = true
-      
+      isCancelled = true
       window.removeEventListener('resize', checkMobile)
-      if (captionTimeoutRef.current) {
-        clearTimeout(captionTimeoutRef.current)
-      }
       // // Clean up memory palace core
       // if (memoryPalaceCore) {
       //   memoryPalaceCore.dispose()
       // }
-      // // Reset initialization ref to allow re-initialization on remount
-      // coreInitializationRef.current = false
+      // // Reset initialization state on unmount if needed
     }
-  }, [memoryPalaceCore])
+  }, [])
+
+  // Auto-hide captions after a delay
+  useEffect(() => {
+    if (!captionText) return
+    const hideDelay = captionMode === 'synthesis' ? 6000 : 4000
+    const timeoutId = setTimeout(() => {
+      console.log('[App] Auto-hiding caption')
+      setCaptionText('')
+      setCaptionMode(null)
+    }, hideDelay)
+    return () => clearTimeout(timeoutId)
+  }, [captionText, captionMode])
 
   // Helper function to update palace state
   const updatePalaceState = (core) => {
@@ -755,41 +754,24 @@ function App({core}) {
     }
   }
 
-  const handleCaptionUpdate = (text, mode, disableTimeout) => {
-    // console.log('[App] Caption update:', { text, mode, captionsEnabled })
-    
+  const handleCaptionUpdate = (text, mode) => {
     if (!captionsEnabled) {
       console.log('[App] Captions disabled - not showing')
       return
     }
-    
-    if (captionTimeoutRef.current) {
-      clearTimeout(captionTimeoutRef.current)
-    }
-    
+
     setCaptionText(text)
     setCaptionMode(mode)
-    
-    // Auto-hide after 4 seconds for recognition, longer for synthesis
-    const hideDelay = mode === 'synthesis' ? 6000 : 4000
-    if (!disableTimeout) captionTimeoutRef.current = setTimeout(() => {
-      console.log('[App] Auto-hiding caption')
-      setCaptionText('')
-      setCaptionMode(null)
-    }, hideDelay)
   }
 
   const handleCaptionToggle = (enabled) => {
     setCaptionsEnabled(enabled)
     localStorage.setItem('memoryCaptionsEnabled', JSON.stringify(enabled))
-    
+
     // Hide captions immediately if disabled
     if (!enabled) {
       setCaptionText('')
       setCaptionMode(null)
-      if (captionTimeoutRef.current) {
-        clearTimeout(captionTimeoutRef.current)
-      }
     }
   }
 
@@ -798,7 +780,6 @@ function App({core}) {
     console.log('[App] Current state check:', {
       memoryPalaceCore: !!memoryPalaceCore,
       coreInitialized: memoryPalaceCore.isInitialized,
-      coreInitializationRef: coreInitializationRef.current,
       memoryPalaceCoreInitialized: memoryPalaceCore?.isInitialized,
       memoryPalaceCoreRunning: memoryPalaceCore?.isRunning
     })
@@ -809,7 +790,6 @@ function App({core}) {
       console.warn('[App] Debug info:', {
         memoryPalaceCore: !!memoryPalaceCore,
         coreInitialized: memoryPalaceCore.isInitialized,
-        coreInitializationRef: coreInitializationRef.current,
         memoryPalaceCoreState: memoryPalaceCore ? {
           isInitialized: memoryPalaceCore.isInitialized,
           isRunning: memoryPalaceCore.isRunning,
