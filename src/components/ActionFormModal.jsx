@@ -24,8 +24,6 @@ const ActionFormModal = ({
 
   const getDefaultFormData = (action, state) => {
     switch (action) {
-      case 'create_room':
-        return { name: '', description: '' }
       case 'edit_room':
         return { description: state?.currentRoom?.description || '' }
       case 'go_to_room':
@@ -41,14 +39,6 @@ const ActionFormModal = ({
 
   const getActionConfig = (action) => {
     const configs = {
-      create_room: {
-        title: 'Create New Room',
-        description: 'Create a new room in your memory palace',
-        fields: [
-          { key: 'name', label: 'Room Name', type: 'text', required: true, placeholder: 'Enter room name...' },
-          { key: 'description', label: 'Room Description', type: 'textarea', required: true, placeholder: 'Describe the room in detail for image generation...' }
-        ]
-      },
       edit_room: {
         title: 'Edit Current Room',
         description: 'Update the description of your current room',

@@ -394,10 +394,9 @@ function App({core}) {
     }
     
     // Handle form-based actions
-    const formActions = ['create-room', 'edit-room', 'go-to-room', 'add-object', 'remove-object']
+    const formActions = ['edit-room', 'go-to-room', 'add-object', 'remove-object']
     if (formActions.includes(command)) {
       const actionMap = {
-        'create-room': 'create_room',
         'edit-room': 'edit_room', 
         'go-to-room': 'go_to_room',
         'add-object': 'add_object',
@@ -567,22 +566,7 @@ function App({core}) {
     try {
       // Handle different command types with actual core operations
       switch (command.type.toLowerCase()) {
-        case 'create_room':
-          console.log('[App] Processing CREATE_ROOM command:', command.parameters)
-          if (command.parameters.name && command.parameters.description) {
-            const room = await memoryPalaceCore.createRoom(
-              command.parameters.name,
-              command.parameters.description
-            )
-            console.log('[App] Room created successfully:', room)
-            updatePalaceState(memoryPalaceCore)
-            
-            // Exit creation mode if this was triggered by creation mode
-            if (isCreationMode) {
-              handleCreationModeComplete()
-            }
-          }
-          break
+        // create_room is now handled only through the create_door tool
         
         case 'add_object':
           console.log('[App] Processing ADD_OBJECT command:', command.parameters)
@@ -696,7 +680,7 @@ function App({core}) {
             lowercaseType: command.type.toLowerCase(),
             parameters: command.parameters,
             availableCommands: [
-              'create_room', 'add_object', 'remove_object', 'go_to_room', 
+              'create_door', 'add_object', 'remove_object', 'go_to_room', 
               'edit_room', 'list_rooms', 'get_room_info', 'response', 'fallback'
             ]
           })
