@@ -18,7 +18,8 @@ const MemoryPalace = forwardRef(({
   currentRoom = null,
   objects = [],
   creationModeActive = false,
-  aiObjectProperties = null
+  aiObjectProperties = null,
+  hasPaintedAreas = false
 }, ref) => {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
@@ -40,17 +41,21 @@ const MemoryPalace = forwardRef(({
   const paintTextureRef = useRef(null)
   const paintContextRef = useRef(null)
   const [paintedGroups, setPaintedGroups] = useState(new Map()) // Store painted object groups
-  const paintModeEnabledRef = useRef(paintModeEnabled) // Ref for current paint mode state
-  const paintInitializedRef = useRef(false) // Prevent double initialization in strict mode
+  // Simplified paint state management - reduce refs where possible
+  const [paintInitialized, setPaintInitialized] = useState(false)
+  const [paintState, setPaintState] = useState({
+    enabled: paintModeEnabled,
+    hasAreas: false
+  })
   
   // Camera rotation state - needs to be accessible across all functions
   const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
 
   // Paint mode functions
   const initializePaintCanvas = () => {
-    if (paintCanvasRef.current || paintInitializedRef.current) return // Already initialized or initializing
+    if (paintCanvasRef.current || paintInitialized) return // Already initialized or initializing
     
-    paintInitializedRef.current = true // Prevent double initialization
+    setPaintInitialized(true) // Prevent double initialization
     console.log('[MemoryPalace] Initializing paint canvas system')
     
     // Create canvas for painting - high resolution for detail
@@ -149,13 +154,10 @@ const MemoryPalace = forwardRef(({
     
     console.log('[MemoryPalace] Disabling paint mode')
     
-    // In creation mode, make painted areas available to LLM instead of directly creating objects
-    if (creationModeActive) {
-      console.log('[MemoryPalace] Creation mode active - making painted areas available to LLM')
+    // Don't automatically create objects anymore - wait for explicit confirmation
+    // Just expose painted areas to LLM for context
+    if (paintedGroups.size > 0) {
       exposePaintedAreasToLLM()
-    } else {
-      // Normal paint mode - process painted areas into objects directly
-      processPaintedAreasIntoObjects()
     }
     
     // Remove paint sphere overlay
@@ -248,8 +250,76 @@ const MemoryPalace = forwardRef(({
     
     console.log('[MemoryPalace] Painted area data passed through callback:', paintedAreaData)
     
-    // Don't clear painted groups yet - let LLM process them first
+    // Don't clear painted groups yet - wait for explicit cancel/confirm
     // setPaintedGroups(new Map())
+  }
+
+  // New explicit confirmation method
+  const confirmPaintedAreas = () => {
+    console.log('[MemoryPalace] Confirming painted areas - creating objects')
+    
+    if (creationModeActive) {
+      console.log('[MemoryPalace] Creation mode active - making painted areas available to LLM')
+      exposePaintedAreasToLLM()
+    } else {
+      // Normal paint mode - process painted areas into objects directly
+      processPaintedAreasIntoObjects()
+    }
+    
+    // Clear painted groups after processing
+    setPaintedGroups(new Map())
+    clearPaintCanvas()
+  }
+
+  // New explicit cancel method
+  const clearPaintedAreas = () => {
+    console.log('[MemoryPalace] Clearing painted areas without creating objects')
+    
+    // Clear painted groups
+    setPaintedGroups(new Map())
+    clearPaintCanvas()
+    
+    // Notify parent that painted areas were cleared
+    if (onPaintedAreasChange) {
+      onPaintedAreasChange([])
+    }
+  }
+
+  // Helper to clear the paint canvas
+  const clearPaintCanvas = () => {
+    if (paintCanvasRef.current && paintContextRef.current) {
+      const context = paintContextRef.current
+      const canvas = paintCanvasRef.current
+      
+      // Clear the canvas
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      
+      // Redraw the subtle grid pattern
+      context.globalAlpha = 0.1
+      context.strokeStyle = '#00ffff'
+      context.lineWidth = 1
+      
+      const gridSize = 50
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        context.beginPath()
+        context.moveTo(x, 0)
+        context.lineTo(x, canvas.height)
+        context.stroke()
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        context.beginPath()
+        context.moveTo(0, y)
+        context.lineTo(canvas.width, y)
+        context.stroke()
+      }
+      
+      context.globalAlpha = 1.0
+      
+      // Update texture
+      if (paintTextureRef.current) {
+        paintTextureRef.current.needsUpdate = true
+      }
+    }
   }
 
   const processPaintedAreasIntoObjects = () => {
@@ -482,7 +552,7 @@ const MemoryPalace = forwardRef(({
       aiObjectProperties
     })
     
-    if (!paintModeEnabledRef.current || !paintContextRef.current || !cameraRef.current) return
+    if (!paintModeEnabled || !paintContextRef.current || !cameraRef.current) return
     
     // Calculate mouse position in normalized device coordinates
     const mouse = new THREE.Vector2()
@@ -603,6 +673,8 @@ const MemoryPalace = forwardRef(({
         if (paintTextureRef.current) {
           paintTextureRef.current.needsUpdate = true
         }
+        
+        // Expose painted areas to parent for context
         exposePaintedAreasToLLM()
         console.log('[MemoryPalace] Painted area created with AI integration:', paintedArea)
       }
@@ -610,7 +682,7 @@ const MemoryPalace = forwardRef(({
   }
 
   const getPaintedObjectAt = (event) => {
-    if (!paintModeEnabledRef.current) return null
+    if (!paintModeEnabled) return null
     
     // Calculate mouse position and find painted object
     const mouse = new THREE.Vector2()
@@ -1382,7 +1454,9 @@ const MemoryPalace = forwardRef(({
       }
     },
     updateCameraFov: updateCameraFov,
-    cleanupStrokeData: cleanupStrokeData
+    cleanupStrokeData: cleanupStrokeData,
+    clearPaintedAreas: clearPaintedAreas,
+    confirmPaintedAreas: confirmPaintedAreas
   }))
 
   useEffect(() => {
@@ -1680,7 +1754,7 @@ const MemoryPalace = forwardRef(({
 
     const handleMouseMove = (event) => {
       if (isDragging) {
-        const currentPaintMode = paintModeEnabledRef.current
+        const currentPaintMode = paintModeEnabled
         // In paint mode, paint while dragging instead of rotating camera
         if (currentPaintMode) {
           console.log('[MemoryPalace] DEBUG: Paint mode mouse move - painting instead of camera rotation')
@@ -1785,7 +1859,7 @@ const MemoryPalace = forwardRef(({
 
     const handleClick = (event) => {
       if (!isDragging) {
-        const currentPaintMode = paintModeEnabledRef.current
+        const currentPaintMode = paintModeEnabled
         // Check if we're in paint mode - paint instead of other interactions
         if (currentPaintMode) {
           console.log('[MemoryPalace] Paint mode click detected')
@@ -1932,7 +2006,7 @@ const MemoryPalace = forwardRef(({
       initializePaintCanvas()
       
       // Enable paint mode and create initial mark at tapped position
-      if (!paintModeEnabledRef.current) {
+      if (!paintModeEnabled) {
         console.log('[MemoryPalace] Auto-enabling paint mode and creating initial mark')
         
         // Create initial paint mark at the tapped position
@@ -2070,7 +2144,7 @@ const MemoryPalace = forwardRef(({
     const handleTouchMove = (event) => {
       event.preventDefault()
       if (event.touches.length === 1 && isDragging) {
-        const currentPaintMode = paintModeEnabledRef.current
+        const currentPaintMode = paintModeEnabled
         // In paint mode, paint while dragging instead of rotating camera
         if (currentPaintMode) {
           console.log('[MemoryPalace] DEBUG: Paint mode touch move - painting instead of camera rotation')
@@ -2468,7 +2542,7 @@ const MemoryPalace = forwardRef(({
 
   // Handle paint mode toggle
   useEffect(() => {
-    paintModeEnabledRef.current = paintModeEnabled // Update ref when prop changes
+    setPaintState(prev => ({ ...prev, enabled: paintModeEnabled }))
     if (paintModeEnabled) {
       enablePaintMode()
     } else {

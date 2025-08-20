@@ -156,6 +156,46 @@
   box-shadow: 0 0 15px rgba(102, 126, 234, 0.4);
 }
 
+/* Paint cancel and confirm buttons */
+.paint-cancel-btn, .paint-confirm-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-full);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--color-white-30);
+  color: var(--color-white);
+  font-size: var(--font-size-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-base);
+  cursor: pointer;
+  margin-left: -0.25rem;
+}
+
+.paint-cancel-btn {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+  border-color: #ff6b6b;
+}
+
+.paint-cancel-btn:hover {
+  background: linear-gradient(135deg, #ff5252, #e53935);
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(255, 107, 107, 0.6);
+}
+
+.paint-confirm-btn {
+  background: linear-gradient(135deg, #4caf50, #388e3c);
+  border-color: #4caf50;
+}
+
+.paint-confirm-btn:hover {
+  background: linear-gradient(135deg, #43a047, #2e7d32);
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
+}
+
 .voice-toggle {
   padding: var(--space-sm);
   border-radius: var(--radius-full);

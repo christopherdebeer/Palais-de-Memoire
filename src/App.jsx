@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye, faPaintBrush } from '@fortawesome/free-solid-svg-icons'
+import { faBars, faCog, faTimes, faHome, faPlus, faList, faInfo, faEdit, faArrowRight, faTrash, faEye, faPaintBrush, faCheck, faBan } from '@fortawesome/free-solid-svg-icons'
 import MemoryPalace from './components/MemoryPalace'
 import VoiceInterface from './components/VoiceInterface'
 import voiceManager from './utils/VoiceManager.js'
@@ -24,6 +24,7 @@ function App({core}) {
   const [nippleEnabled, setNippleEnabled] = useState(false)
   const [paintModeEnabled, setPaintModeEnabled] = useState(false)
   const [paintModeType, setPaintModeType] = useState('objects') // 'objects' or 'doors'
+  const [hasPaintedAreas, setHasPaintedAreas] = useState(false) // Track if user has painted anything
   const [isListening, setIsListening] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -316,6 +317,9 @@ function App({core}) {
 
   const handlePaintModeToggle = (enabled) => {
     setPaintModeEnabled(enabled)
+    if (!enabled) {
+      setHasPaintedAreas(false) // Reset painted areas state when disabling paint mode
+    }
     console.log(`Paint mode ${enabled ? 'enabled' : 'disabled'}`)
   }
 
@@ -323,6 +327,28 @@ function App({core}) {
     const newType = paintModeType === 'objects' ? 'doors' : 'objects'
     setPaintModeType(newType)
     console.log(`Paint mode type changed to: ${newType}`)
+  }
+
+  const handlePaintModeCancel = () => {
+    // Cancel paint mode without creating objects
+    console.log('[App] Paint mode cancelled by user')
+    if (memoryPalaceRef.current && memoryPalaceRef.current.clearPaintedAreas) {
+      memoryPalaceRef.current.clearPaintedAreas()
+    }
+    setPaintModeEnabled(false)
+    setHasPaintedAreas(false)
+    handleCaptionUpdate('Paint mode cancelled - no objects created', 'synthesis')
+  }
+
+  const handlePaintModeConfirm = () => {
+    // Confirm and create objects from painted areas
+    console.log('[App] Paint mode confirmed by user - creating objects')
+    if (memoryPalaceRef.current && memoryPalaceRef.current.confirmPaintedAreas) {
+      memoryPalaceRef.current.confirmPaintedAreas()
+    }
+    setPaintModeEnabled(false)
+    setHasPaintedAreas(false)
+    handleCaptionUpdate('Creating objects from painted areas...', 'synthesis')
   }
 
   const handleMenuToggle = () => {
@@ -1028,6 +1054,8 @@ function App({core}) {
   const handlePaintedAreasChange = (paintedAreasData) => {
     console.log('[App] Painted areas changed:', paintedAreasData)
     setPaintedAreas(paintedAreasData)
+    // Update hasPaintedAreas state based on whether there are any painted areas
+    setHasPaintedAreas(paintedAreasData && paintedAreasData.length > 0)
   }
 
   // Painted object/door creation handler
@@ -1100,6 +1128,7 @@ function App({core}) {
         onObjectSelected={handleObjectSelected}
         onPaintedObjectCreated={handlePaintedObjectCreated}
         onPaintedAreasChange={handlePaintedAreasChange}
+        hasPaintedAreas={hasPaintedAreas}
         onPaintTypeChange={handlePaintTypeChange}
         selectedObjectId={selectedObject?.id}
         cameraRotation={cameraRotation}
@@ -1360,14 +1389,36 @@ function App({core}) {
             <FontAwesomeIcon icon={faPaintBrush} />
           </button>
           {paintModeEnabled && (
-            <button 
-              className={`paint-type-toggle ${paintModeType === 'doors' ? 'doors' : 'objects'}`}
-              onClick={handlePaintModeTypeToggle}
-              aria-label={`Switch to paint ${paintModeType === 'objects' ? 'doors' : 'objects'}`}
-              title={`Current: ${paintModeType}. Click to switch to ${paintModeType === 'objects' ? 'doors' : 'objects'}`}
-            >
-              <FontAwesomeIcon icon={paintModeType === 'objects' ? faHome : faArrowRight} />
-            </button>
+            <>
+              <button 
+                className={`paint-type-toggle ${paintModeType === 'doors' ? 'doors' : 'objects'}`}
+                onClick={handlePaintModeTypeToggle}
+                aria-label={`Switch to paint ${paintModeType === 'objects' ? 'doors' : 'objects'}`}
+                title={`Current: ${paintModeType}. Click to switch to ${paintModeType === 'objects' ? 'doors' : 'objects'}`}
+              >
+                <FontAwesomeIcon icon={paintModeType === 'objects' ? faHome : faArrowRight} />
+              </button>
+              {hasPaintedAreas && (
+                <>
+                  <button 
+                    className="paint-cancel-btn"
+                    onClick={handlePaintModeCancel}
+                    aria-label="Cancel paint mode without creating objects"
+                    title="Cancel - exit paint mode without creating objects"
+                  >
+                    <FontAwesomeIcon icon={faBan} />
+                  </button>
+                  <button 
+                    className="paint-confirm-btn"
+                    onClick={handlePaintModeConfirm}
+                    aria-label="Confirm and create objects from painted areas"
+                    title="Confirm - create objects from painted areas"
+                  >
+                    <FontAwesomeIcon icon={faCheck} />
+                  </button>
+                </>
+              )}
+            </>
           )}
           <button 
             className="menu-toggle"
