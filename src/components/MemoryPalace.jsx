@@ -1017,7 +1017,7 @@ const MemoryPalace = forwardRef(({
       // })
       
       // Animate off-screen indicators
-      animateOffScreenIndicators()
+      animateObjectIndicators()
       
       animationFrameRef.current = requestAnimationFrame(animate)
     }
@@ -1033,24 +1033,25 @@ const MemoryPalace = forwardRef(({
   }
 
   // Off-screen indicator functions
-  const createOffScreenIndicator = (obj, direction) => {
+  const createObjectIndicator = (obj, direction, isInView) => {
     if (!sceneRef.current || !cameraRef.current) return null
 
-    console.log(`[MemoryPalace] 🎯 Creating off-screen indicator for object:`, {
+    console.log(`[MemoryPalace] 🎯 Creating object indicator:`, {
       objectId: obj.id,
       objectName: obj.name,
+      isInView: isInView,
       direction: direction
     })
 
     // Create arrow geometry pointing in the direction of the object
-    const arrowGeometry = new THREE.ConeGeometry(0.08, 0.4, 4) // Half the previous size
+    const arrowGeometry = new THREE.ConeGeometry(0.08, 0.4, 4)
     // Align cone's forward axis (+Z) with look direction
     arrowGeometry.rotateX(Math.PI / 2)
     const isDoor = obj.targetRoomId !== undefined
     
     // Use same color scheme as object markers
     const arrowMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff, // isDoor ? 0xffd700 : 0x4dabf7,
+      color: 0xffffff,
       transparent: true,
       opacity: 0.0,
       depthTest: false,
@@ -1059,39 +1060,54 @@ const MemoryPalace = forwardRef(({
 
     const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial)
     
-    // Position arrow at a fixed distance from camera in screen space
     const camera = cameraRef.current
-    const fixedDistance = 8 // Fixed distance from camera
+    const fixedDistance = 8
     
     // Calculate direction from camera to object in camera space
     const objectWorldPos = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
     const directionFromCamera = objectWorldPos.clone().sub(camera.position).normalize()
     
-    // Convert to screen space to find edge position
-    const tempVector = directionFromCamera.clone()
-    tempVector.project(camera)
+    let indicatorPosition
     
-    // Find closest edge position instead of simple clamping
-    const margin = 0.85 // Keep indicators within 85% of screen edge
-    const absX = Math.abs(tempVector.x)
-    const absY = Math.abs(tempVector.y)
-    
-    // Determine which edge is closest and position on that edge
-    if (absX > absY) {
-      // Object is more to the left/right - position on vertical edges
-      tempVector.x = tempVector.x > 0 ? margin : -margin
-      tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+    if (isInView) {
+      // Object is in view - position indicator at object center
+      const tempVector = directionFromCamera.clone()
+      tempVector.project(camera)
+      
+      // Keep original screen position (don't clamp to edges)
+      tempVector.z = 0.1
+      
+      // Convert back to world space at fixed distance
+      tempVector.unproject(camera)
+      const indicatorDirection = tempVector.sub(camera.position).normalize()
+      indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
     } else {
-      // Object is more up/down - position on horizontal edges  
-      tempVector.y = tempVector.y > 0 ? margin : -margin
-      tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+      // Object is out of view - clamp to screen edges
+      const tempVector = directionFromCamera.clone()
+      tempVector.project(camera)
+      
+      // Find closest edge position
+      const margin = 0.85
+      const absX = Math.abs(tempVector.x)
+      const absY = Math.abs(tempVector.y)
+      
+      // Determine which edge is closest and position on that edge
+      if (absX > absY) {
+        // Object is more to the left/right - position on vertical edges
+        tempVector.x = tempVector.x > 0 ? margin : -margin
+        tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+      } else {
+        // Object is more up/down - position on horizontal edges  
+        tempVector.y = tempVector.y > 0 ? margin : -margin
+        tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+      }
+      tempVector.z = 0.1
+      
+      // Convert back to world space at fixed distance
+      tempVector.unproject(camera)
+      const indicatorDirection = tempVector.sub(camera.position).normalize()
+      indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
     }
-    tempVector.z = 0.1 // Near the camera
-    
-    // Convert back to world space at fixed distance
-    tempVector.unproject(camera)
-    const indicatorDirection = tempVector.sub(camera.position).normalize()
-    const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
     
     arrow.position.copy(indicatorPosition)
 
@@ -1103,7 +1119,12 @@ const MemoryPalace = forwardRef(({
     if (directionFromCamera.dot(cameraForward) < 0) {
       // Object is behind camera; use projected indicator direction so arrow
       // points from screen edge toward the object
-      directionToObject = indicatorDirection.clone().negate()
+      const tempDir = directionFromCamera.clone()
+      tempDir.project(camera)
+      if (!isInView) {
+        // Only adjust direction for out-of-view objects
+        directionToObject = camera.position.clone().sub(indicatorPosition).normalize().negate()
+      }
     }
     arrow.quaternion.setFromUnitVectors(forward, directionToObject)
     
@@ -1116,11 +1137,10 @@ const MemoryPalace = forwardRef(({
     canvas.width = 128
     canvas.height = 64
     
-    context.fillStyle = 'white'; // isDoor ? '#ffd700' : '#4dabf7'
+    context.fillStyle = 'white'
     context.font = 'bold 10px Arial'
     context.textAlign = 'center'
     context.fillText(obj.name, 64, 20)
-    // context.fillText(distanceText, 64, 40)
     
     const texture = new THREE.CanvasTexture(canvas)
     const spriteMaterial = new THREE.SpriteMaterial({ 
@@ -1130,10 +1150,11 @@ const MemoryPalace = forwardRef(({
       depthTest: false
     })
     const sprite = new THREE.Sprite(spriteMaterial)
-    sprite.scale.set(0.75, 0.375, 1) // Half the previous size
+    sprite.scale.set(0.75, 0.375, 1)
     
     // Position sprite slightly behind arrow
-    const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
+    const spriteDirection = camera.position.clone().sub(indicatorPosition).normalize()
+    const spriteOffset = spriteDirection.multiplyScalar(-0.5)
     sprite.position.copy(indicatorPosition.clone().add(spriteOffset))
     
     // Store references
@@ -1158,7 +1179,7 @@ const MemoryPalace = forwardRef(({
     return { arrow, sprite }
   }
 
-  const updateOffScreenIndicators = (objects) => {
+  const updateObjectIndicators = (objects) => {
     if (!sceneRef.current || !cameraRef.current) return
 
     const camera = cameraRef.current
@@ -1185,26 +1206,24 @@ const MemoryPalace = forwardRef(({
     })
     currentIndicators.clear()
 
-    // Check each object for visibility
+    // Create indicators for ALL objects, positioning based on visibility
     objects.forEach(obj => {
       if (!obj.position) return
 
       const objectPosition = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
+      const isInView = frustum.containsPoint(objectPosition)
       
-      // Check if object is outside camera frustum
-      if (!frustum.containsPoint(objectPosition)) {
-        // Calculate direction from camera to object
-        const direction = objectPosition.clone().sub(camera.position)
-        
-        // Create indicator
-        const indicator = createOffScreenIndicator(obj, direction)
-        if (indicator) {
-          currentIndicators.set(obj.id, indicator)
-        }
+      // Calculate direction from camera to object
+      const direction = objectPosition.clone().sub(camera.position)
+      
+      // Create indicator (positioned at center if in view, at edge if not)
+      const indicator = createObjectIndicator(obj, direction, isInView)
+      if (indicator) {
+        currentIndicators.set(obj.id, indicator)
       }
     })
 
-    console.log(`[MemoryPalace] 🎯 Updated off-screen indicators:`, {
+    console.log(`[MemoryPalace] 🎯 Updated object indicators:`, {
       totalObjects: objects.length,
       indicatorsCreated: currentIndicators.size,
       timestamp: new Date().toISOString(),
@@ -1213,46 +1232,58 @@ const MemoryPalace = forwardRef(({
     })
   }
 
-  const animateOffScreenIndicators = () => {
+  const animateObjectIndicators = () => {
     const currentIndicators = offScreenIndicatorsRef.current
-    const time = Date.now() * 0.001
     const camera = cameraRef.current
 
     if (!camera) return
 
     currentIndicators.forEach((indicator, objectId) => {
       if (indicator.arrow && indicator.sprite) {
-        // Update positions to maintain screen-edge placement as camera moves
+        // Update positions to maintain proper placement as camera moves
         const obj = indicator.arrow.userData.objectData
         const objectWorldPos = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z)
         const directionFromCamera = objectWorldPos.clone().sub(camera.position).normalize()
         
-        // Convert to screen space to find edge position
+        // Check if object is in view to determine positioning
+        const frustum = new THREE.Frustum()
+        const cameraMatrix = new THREE.Matrix4()
+        cameraMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+        frustum.setFromProjectionMatrix(cameraMatrix)
+        const isInView = frustum.containsPoint(objectWorldPos)
+        
         const tempVector = directionFromCamera.clone()
         tempVector.project(camera)
         
-        // Find closest edge position instead of simple clamping
-        const margin = 0.85
-        const absX = Math.abs(tempVector.x)
-        const absY = Math.abs(tempVector.y)
+        let indicatorPosition
         
-        // Determine which edge is closest and position on that edge
-        if (absX > absY) {
-          // Object is more to the left/right - position on vertical edges
-          tempVector.x = tempVector.x > 0 ? margin : -margin
-          tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+        if (isInView) {
+          // Object is in view - position at object center
+          tempVector.z = 0.1
+          tempVector.unproject(camera)
+          const indicatorDirection = tempVector.sub(camera.position).normalize()
+          const fixedDistance = 8
+          indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
         } else {
-          // Object is more up/down - position on horizontal edges  
-          tempVector.y = tempVector.y > 0 ? margin : -margin
-          tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+          // Object is out of view - clamp to screen edges
+          const margin = 0.85
+          const absX = Math.abs(tempVector.x)
+          const absY = Math.abs(tempVector.y)
+          
+          if (absX > absY) {
+            tempVector.x = tempVector.x > 0 ? margin : -margin
+            tempVector.y = Math.max(-margin, Math.min(margin, tempVector.y))
+          } else {
+            tempVector.y = tempVector.y > 0 ? margin : -margin
+            tempVector.x = Math.max(-margin, Math.min(margin, tempVector.x))
+          }
+          tempVector.z = 0.1
+          
+          tempVector.unproject(camera)
+          const indicatorDirection = tempVector.sub(camera.position).normalize()
+          const fixedDistance = 8
+          indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
         }
-        tempVector.z = 0.1
-        
-        // Convert back to world space at fixed distance
-        tempVector.unproject(camera)
-        const indicatorDirection = tempVector.sub(camera.position).normalize()
-        const fixedDistance = 8
-        const indicatorPosition = camera.position.clone().add(indicatorDirection.multiplyScalar(fixedDistance))
         
         // Update arrow position and rotation
         indicator.arrow.position.copy(indicatorPosition)
@@ -1261,25 +1292,17 @@ const MemoryPalace = forwardRef(({
         const cameraForward = new THREE.Vector3()
         camera.getWorldDirection(cameraForward)
         if (directionFromCamera.dot(cameraForward) < 0) {
-          // Object is behind camera; use projected indicator direction so arrow
-          // points from screen edge toward the object
-          directionToObject = indicatorDirection.clone().negate()
+          directionToObject = tempVector.sub(camera.position).normalize().negate()
         }
         indicator.arrow.quaternion.setFromUnitVectors(forward, directionToObject)
         
         // Update sprite position
-        const spriteOffset = indicatorDirection.clone().multiplyScalar(-0.5)
+        const spriteOffset = tempVector.sub(camera.position).normalize().multiplyScalar(-0.5)
         indicator.sprite.position.copy(indicatorPosition.clone().add(spriteOffset))
         
-        // Gentle pulsing animation
-        const pulse = 0.8 + Math.sin(time * 3) * 0.2
-        indicator.arrow.material.opacity = indicator.arrow.userData.originalOpacity * pulse
-        indicator.sprite.material.opacity = 0.9 * pulse
-
-        // Subtle floating motion (much smaller now)
-        const float = Math.sin(time * 2 + objectId.length) * 0.05
-        indicator.arrow.position.add(new THREE.Vector3(0, float, 0))
-        indicator.sprite.position.add(new THREE.Vector3(0, float, 0))
+        // Simple static opacity (no pulsing/floating animations)
+        indicator.arrow.material.opacity = indicator.arrow.userData.originalOpacity || 0.8
+        indicator.sprite.material.opacity = 0.9
       }
     })
   }
@@ -2500,7 +2523,7 @@ const MemoryPalace = forwardRef(({
       updateObjectMarkers(objects)
       
       // Update off-screen indicators when objects change
-      updateOffScreenIndicators(objects)
+      updateObjectIndicators(objects)
       
       console.log(`[MemoryPalace] ✅ SCENE: scene re-render completed with objects`, {
         finalObjectCount: objects.length,
