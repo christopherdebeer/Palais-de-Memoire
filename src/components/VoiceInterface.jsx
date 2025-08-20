@@ -286,12 +286,12 @@ const VoiceInterface = ({ enabled, speakResponse, isMobile, onCommand, onListeni
             console.log(`[VoiceInterface] responseText ${responseText}`)
             
           }
-          
+    
           // Extract AI object properties for paint mode integration
           if (isCreationMode && toolCalls.length > 0 && onAiObjectPropertiesUpdate) {
             for (const toolCall of toolCalls) {
               // Check if this is an object/door creation tool call
-              if (toolCall.name === 'add_object' || toolCall.name === 'create_door') {
+              if (toolCall.name === 'add_object_at_position' || toolCall.name === 'create_door') {
                 const aiProperties = {
                   name: toolCall.input.name,
                   information: toolCall.input.info || toolCall.input.information || toolCall.input.description,

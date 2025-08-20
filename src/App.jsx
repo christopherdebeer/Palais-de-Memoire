@@ -854,16 +854,9 @@ function App({core}) {
   }
 
   const handleAiObjectPropertiesUpdate = (properties) => {
-    console.log('[App] AI object properties updated:', properties)
-    setAiObjectProperties(properties)
-    
-    // Update paint type if AI has determined the type
-    if (properties?.type) {
-      const paintType = properties.type === 'door' ? 'doors' : 'objects'
-      if (paintType !== paintModeType) {
-        handlePaintTypeChange(paintType)
-      }
-    }
+    console.log('[App] handleAiObjectPropertiesUpdate:', properties)
+    setPaintModeEnabled(false)
+    setIsCreationMode(false)
   }
 
   // Object interaction handlers
