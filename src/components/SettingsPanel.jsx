@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash, faPlay, faSpinner, faCamera } from '@fortawesome/free-solid-svg-icons'
+import { faCog, faTimes, faGamepad, faKey, faBrain, faImage, faSave, faDownload, faUpload, faTrash, faPlay, faSpinner, faCamera, faChevronDown, faChevronUp, faExclamationTriangle } from '@fortawesome/free-solid-svg-icons'
 import { faBorderAll } from '@fortawesome/free-solid-svg-icons'
 import SettingsManager from '../services/SettingsManager.js'
+import { clearState } from '../utils/stateUtils.js'
 
 // Create settings manager instance
 const settingsManager = new SettingsManager()
@@ -24,6 +25,7 @@ const SettingsPanel = ({
   const [testingVoice, setTestingVoice] = useState(null)
   const [testResult, setTestResult] = useState(null) // 'success', 'error', or null
   const [testMessage, setTestMessage] = useState('')
+  const [expandedSections, setExpandedSections] = useState(new Set(['api'])) // Only API section expanded by default
 
   // Load settings on mount
   useEffect(() => {
@@ -180,6 +182,44 @@ const SettingsPanel = ({
     }
   }
 
+  const handleClearMemoryPalace = () => {
+    if (window.confirm('Delete all memory palace data? This will permanently remove all rooms, objects, connections, and conversation history. This cannot be undone.')) {
+      clearState()
+      window.location.reload() // Reload to reset the application state
+    }
+  }
+
+  const toggleSection = (sectionId) => {
+    setExpandedSections(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(sectionId)) {
+        newSet.delete(sectionId)
+      } else {
+        newSet.add(sectionId)
+      }
+      return newSet
+    })
+  }
+
+  const renderSectionHeader = (sectionId, icon, title, badge = null) => {
+    const isExpanded = expandedSections.has(sectionId)
+    return (
+      <h4 
+        onClick={() => toggleSection(sectionId)}
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        className="collapsible-header"
+      >
+        <FontAwesomeIcon icon={icon} />
+        {title}
+        {badge}
+        <FontAwesomeIcon 
+          icon={isExpanded ? faChevronUp : faChevronDown} 
+          className="section-toggle"
+        />
+      </h4>
+    )
+  }
+
   const handleExportSettings = () => {
     settingsManager.exportSettings()
   }
@@ -214,12 +254,15 @@ const SettingsPanel = ({
           <div className="settings-content">
             {/* API Configuration */}
             <div className="setting-group">
-              <h4>
-                <FontAwesomeIcon icon={faKey} />
-                API Configuration
-                {!apiConfigured && <span className="status-badge error">Not Configured</span>}
-                {apiConfigured && <span className="status-badge success">Configured</span>}
-              </h4>
+              {renderSectionHeader(
+                'api',
+                faKey,
+                'API Configuration',
+                !apiConfigured ? <span className="status-badge error">Not Configured</span> : <span className="status-badge success">Configured</span>
+              )}
+              
+              {expandedSections.has('api') && (
+              <div>
               
               <div className="setting-item">
                 <div className="setting-info">
@@ -258,14 +301,16 @@ const SettingsPanel = ({
                   ))}
                 </div>
               )}
+              </div>
+              )}
             </div>
 
             {/* AI Settings */}
             <div className="setting-group">
-              <h4>
-                <FontAwesomeIcon icon={faBrain} />
-                AI & Voice Settings
-              </h4>
+              {renderSectionHeader('ai', faBrain, 'AI & Voice Settings')}
+              
+              {expandedSections.has('ai') && (
+              <div>
 
               <div className="setting-item">
                 <div className="setting-info">
@@ -427,14 +472,16 @@ const SettingsPanel = ({
                   </div>
                 )}
               </div>
+              </div>
+              )}
             </div>
 
             {/* Image Generation */}
             <div className="setting-group">
-              <h4>
-                <FontAwesomeIcon icon={faImage} />
-                Image Generation
-              </h4>
+              {renderSectionHeader('image', faImage, 'Image Generation')}
+              
+              {expandedSections.has('image') && (
+              <div>
 
               <div className="setting-item">
                 <div className="setting-info">
@@ -450,14 +497,16 @@ const SettingsPanel = ({
                   placeholder="e.g., Professional architectural photography, soft lighting..."
                 />
               </div>
+              </div>
+              )}
             </div>
 
             {/* 3D Rendering */}
             <div className="setting-group">
-              <h4>
-                <FontAwesomeIcon icon={faBorderAll} />
-                3D Rendering
-              </h4>
+              {renderSectionHeader('rendering', faBorderAll, '3D Rendering')}
+              
+              {expandedSections.has('rendering') && (
+              <div>
               
               <div className="setting-item">
                 <div className="setting-info">
@@ -505,14 +554,16 @@ const SettingsPanel = ({
                   <span className="toggle-slider"></span>
                 </button>
               </div>
+              </div>
+              )}
             </div>
 
             {/* Camera Settings */}
             <div className="setting-group">
-              <h4>
-                <FontAwesomeIcon icon={faCamera} />
-                Camera Settings
-              </h4>
+              {renderSectionHeader('camera', faCamera, 'Camera Settings')}
+              
+              {expandedSections.has('camera') && (
+              <div>
               
               <div className="setting-item">
                 <div className="setting-info">
@@ -589,14 +640,16 @@ const SettingsPanel = ({
                   className="range-input"
                 />
               </div>
+              </div>
+              )}
             </div>
 
             {/* Controls */}
             <div className="setting-group">
-              <h4>
-                <FontAwesomeIcon icon={faGamepad} />
-                Controls
-              </h4>
+              {renderSectionHeader('controls', faGamepad, 'Controls')}
+              
+              {expandedSections.has('controls') && (
+              <div>
               
               <div className="setting-item">
                 <div className="setting-info">
@@ -627,11 +680,16 @@ const SettingsPanel = ({
                   <span className="toggle-slider"></span>
                 </button>
               </div>
+              </div>
+              )}
             </div>
 
             {/* Settings Actions */}
             <div className="setting-group">
-              <h4>Settings Management</h4>
+              {renderSectionHeader('management', faCog, 'Settings Management')}
+              
+              {expandedSections.has('management') && (
+              <div>
               
               <div className="settings-actions">
                 <button 
@@ -669,7 +727,14 @@ const SettingsPanel = ({
                   <FontAwesomeIcon icon={faTrash} />
                   Reset to Defaults
                 </button>
+
+                <button className="danger-btn" onClick={handleClearMemoryPalace}>
+                  <FontAwesomeIcon icon={faExclamationTriangle} />
+                  Clear Memory Palace
+                </button>
               </div>
+              </div>
+              )}
             </div>
           </div>
         </div>
