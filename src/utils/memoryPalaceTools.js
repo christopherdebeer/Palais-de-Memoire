@@ -156,6 +156,12 @@ export class MemoryPalaceToolManager {
         description: `Return to ${currentRoom.name}`,
         bidirectional: true,
         position: returnPosition,
+        paintData: {
+          dimensions: {
+            width: 50,
+            height: 100,
+          }
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

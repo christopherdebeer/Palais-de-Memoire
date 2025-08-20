@@ -704,7 +704,7 @@ const MemoryPalace = forwardRef(({
       })
     } else {
       // For objects, check if painted and use dimensions from paint data
-      if (isPainted && obj.paintData?.dimensions) {
+      if (obj.paintData?.dimensions) {
         const width = Math.max(obj.paintData.dimensions.width, 50)
         const height = Math.max(obj.paintData.dimensions.height, 50)
         markerGeometry = new THREE.PlaneGeometry(width, height)
