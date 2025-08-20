@@ -126,27 +126,27 @@ function App({core}) {
             console.log('[App] Room changed:', roomChangeData)
             updatePalaceState(core)
             
-            // Play TTS and show captions for new room description
-            if (roomChangeData.currentRoom?.description) {
-              const roomName = roomChangeData.currentRoom.name
-              const roomDescription = roomChangeData.currentRoom.description
-              const ttsText = `Entering ${roomName}. ${roomDescription}`
+            // // Play TTS and show captions for new room description
+            // if (roomChangeData.currentRoom?.description) {
+            //   const roomName = roomChangeData.currentRoom.name
+            //   const roomDescription = roomChangeData.currentRoom.description
+            //   const ttsText = `Entering ${roomName}. ${roomDescription}`
               
-              console.log('[App] Playing room TTS:', ttsText)
+            //   console.log('[App] Playing room TTS:', ttsText)
               
-              // Show captions
-              handleCaptionUpdate(`Entering: ${roomName}`, 'synthesis')
+            //   // Show captions
+            //   handleCaptionUpdate(`Entering: ${roomName}`, 'synthesis')
               
-              // Play TTS
-              if (window.speechSynthesis) {
-                window.speechSynthesis.cancel()
-                const utterance = new SpeechSynthesisUtterance(ttsText)
-                utterance.rate = 0.9
-                utterance.pitch = 1.0
-                utterance.volume = 0.8
-                window.speechSynthesis.speak(utterance)
-              }
-            }
+            //   // Play TTS
+            //   if (window.speechSynthesis) {
+            //     window.speechSynthesis.cancel()
+            //     const utterance = new SpeechSynthesisUtterance(ttsText)
+            //     utterance.rate = 0.9
+            //     utterance.pitch = 1.0
+            //     utterance.volume = 0.8
+            //     window.speechSynthesis.speak(utterance)
+            //   }
+            // }
           }));
           
           // Add error event listener

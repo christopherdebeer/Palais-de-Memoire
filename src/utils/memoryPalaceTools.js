@@ -4,7 +4,7 @@
  */
 
 import replicateAPI from '../services/ReplicateAPI.js'
-import { ObjectType } from '../types/index.ts'
+import { ObjectType, EventTypes } from '../types/index.ts'
 
 export class MemoryPalaceToolManager {
   constructor(memoryPalaceCore, voiceInterface = null) {
@@ -168,6 +168,13 @@ export class MemoryPalaceToolManager {
       
       this.core.state.connections.set(returnConnection.id, returnConnection)
       await this.core.saveState()
+      
+      // Emit ROOM_CHANGED event to trigger UI update for the new door
+      this.core.emit(EventTypes.ROOM_CHANGED, {
+        previousRoomId: currentRoom.id,
+        currentRoomId: currentRoom.id,
+        currentRoom: currentRoom
+      })
       
       const conversionNote = objectId ? ' (converted from existing object)' : ''
       const dimensionNote = dimensions ? ` (${dimensions.width}×${dimensions.height} units)` : ''
