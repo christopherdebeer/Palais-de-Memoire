@@ -392,11 +392,15 @@ const MemoryPalace = forwardRef(({
     const centerX = group.reduce((sum, area) => sum + area.center.x, 0) / group.length
     const centerY = group.reduce((sum, area) => sum + area.center.y, 0) / group.length
     
+    // For latitude-adjusted areas, use the already adjusted sizes
+    // Fall back to a consistent size if areas don't have proper size information
+    const getAreaSize = (area) => area.size || 25;
+    
     // Calculate bounding box of painted areas to determine geometry size
-    const minX = Math.min(...group.map(area => area.center.x - area.size))
-    const maxX = Math.max(...group.map(area => area.center.x + area.size))
-    const minY = Math.min(...group.map(area => area.center.y - area.size))
-    const maxY = Math.max(...group.map(area => area.center.y + area.size))
+    const minX = Math.min(...group.map(area => area.center.x - getAreaSize(area)))
+    const maxX = Math.max(...group.map(area => area.center.x + getAreaSize(area)))
+    const minY = Math.min(...group.map(area => area.center.y - getAreaSize(area)))
+    const maxY = Math.max(...group.map(area => area.center.y + getAreaSize(area)))
     
     const paintedWidth = maxX - minX
     const paintedHeight = maxY - minY
@@ -440,6 +444,33 @@ const MemoryPalace = forwardRef(({
     console.log('[MemoryPalace] Created object data with dimensions:', objectData)
     return objectData
   }
+
+  // Helper function to convert canvas Y-coordinate to latitude in radians
+  const canvasYToLatitude = (canvasY, canvasHeight) => {
+    // Normalize Y to range [0, 1] where 0 = top (North pole), 1 = bottom (South pole)
+    const normalizedY = canvasY / canvasHeight;
+    // Convert to latitude: π/2 at top, -π/2 at bottom
+    const latitude = (Math.PI / 2) - (normalizedY * Math.PI);
+    return latitude;
+  };
+
+  // Helper function to calculate brush size adjusted for latitude
+  const calculateLatitudeAdjustedBrushSize = (baseBrushSize, canvasY, canvasHeight) => {
+    const latitude = canvasYToLatitude(canvasY, canvasHeight);
+    const cosLat = Math.cos(latitude);
+    
+    // Prevent division by zero at poles and extreme scaling
+    const clampedCosLat = Math.max(0.1, Math.abs(cosLat));
+    
+    // Calculate width and height adjustments separately to account for equirectangular distortion
+    // Width needs to be adjusted more at poles (inversely proportional to cosine of latitude)
+    // Height remains relatively consistent across latitudes
+    return {
+      width: baseBrushSize / clampedCosLat, // Width stretches horizontally at poles
+      height: baseBrushSize, // Height remains constant
+      size: baseBrushSize * Math.sqrt(1/clampedCosLat), // Original area-based adjustment for backward compatibility
+    };
+  };
 
   const paintOnSkybox = (event) => {
     console.log('[MemoryPalace] DEBUG: paintOnSkybox called', {
@@ -486,8 +517,14 @@ const MemoryPalace = forwardRef(({
         let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width  // Apply 180° offset compensation
         let canvasY = (1.0 - uv.y) * canvas.height  // Flip Y-axis
         
-        // Paint with brush (50% smaller size)
-        const brushSize = 25 // Reduced from 50 to 25 for smaller brush
+        // Calculate latitude for this position
+        const latitude = canvasYToLatitude(canvasY, canvas.height);
+        
+        // Base brush size
+        const baseBrushSize = 25; // Reduced from 50 to 25 for smaller brush
+        
+        // Apply latitude adjustment to brush size to account for equirectangular distortion
+        const adjustedBrush = calculateLatitudeAdjustedBrushSize(baseBrushSize, canvasY, canvas.height);
         
         // Determine paint color based on AI properties or current paint mode type
         let paintColor
@@ -520,7 +557,17 @@ const MemoryPalace = forwardRef(({
         
         context.fillStyle = paintColor
         context.beginPath()
-        context.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2)
+        
+        // Use elliptical brush to correctly account for equirectangular projection distortion
+        context.save();
+        context.translate(canvasX, canvasY);
+        
+        // Use proper elliptical drawing with correct aspect ratio for the latitude
+        // This creates wider strokes near poles and more circular strokes at the equator
+        context.scale(adjustedBrush.width / adjustedBrush.height, 1);
+        context.arc(0, 0, adjustedBrush.height/2, 0, Math.PI * 2);
+        context.restore();
+        
         context.fill()
         
         // Reset shadow for next paint stroke
@@ -530,7 +577,12 @@ const MemoryPalace = forwardRef(({
         const paintedArea = {
           id: Date.now() + Math.random(),
           center: { x: canvasX, y: canvasY },
-          size: brushSize,
+          size: adjustedBrush.size,
+          width: adjustedBrush.width,
+          height: adjustedBrush.height,
+          baseSize: baseBrushSize,
+          latitude: latitude,
+          distortionFactor: 1 / Math.max(0.1, Math.abs(Math.cos(latitude))),
           color: paintColor,
           worldPosition: intersectionPoint.clone(),
           metadata: { 
@@ -576,21 +628,37 @@ const MemoryPalace = forwardRef(({
       const uv = intersects[0].uv
       if (uv) {
         const canvas = paintCanvasRef.current
-        let canvasX = uv.x * canvas.width
+        let canvasX = ((uv.x + 0.5) % 1.0) * canvas.width  // Apply 180° offset compensation, same as paintOnSkybox
         let canvasY = (1.0 - uv.y) * canvas.height
         
-        // Find closest painted area (simplified approach)
+        // Calculate latitude at this position for brush size comparison
+        const latitude = canvasYToLatitude(canvasY, canvas.height)
+        
+        // Find closest painted area with elliptical hit detection
         let closestArea = null
         let minDistance = Infinity
         
         paintedGroups.forEach((area) => {
-          const distance = Math.sqrt(
-            Math.pow(area.center.x - canvasX, 2) + 
-            Math.pow(area.center.y - canvasY, 2)
+          // Get horizontal and vertical distances separately
+          const dx = area.center.x - canvasX
+          const dy = area.center.y - canvasY
+          
+          // Use the stored width/height values for elliptical distance calculation
+          // If the area was created before our update, fall back to the size
+          const areaWidth = area.width || area.size || 25
+          const areaHeight = area.height || area.size || 25
+          
+          // Calculate normalized elliptical distance
+          // If we're within the ellipse defined by width and height, this will be < 1.0
+          const ellipticalDistance = Math.sqrt(
+            Math.pow(dx / areaWidth, 2) + 
+            Math.pow(dy / areaHeight, 2)
           )
           
-          if (distance < area.size && distance < minDistance) {
-            minDistance = distance
+          // A point is inside the ellipse if the elliptical distance is < 0.5
+          // (since width/height represent the full diameter, not radius)
+          if (ellipticalDistance < 0.5 && ellipticalDistance < minDistance) {
+            minDistance = ellipticalDistance
             closestArea = area
           }
         })
