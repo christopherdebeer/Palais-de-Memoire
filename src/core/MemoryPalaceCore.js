@@ -207,7 +207,7 @@ export class MemoryPalaceCore extends EventEmitter {
       this.generateRoomImage(roomId, updates.description)
     }
 
-    this.emit(EventTypes.ROOM_UPDATED, updatedRoom)
+    this.emit(EventTypes.ROOM_CHANGED, updatedRoom)
     return updatedRoom
   }
 

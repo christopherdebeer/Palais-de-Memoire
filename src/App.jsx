@@ -7,7 +7,6 @@ import voiceManager from './utils/VoiceManager.js'
 import SettingsPanel from './components/SettingsPanel'
 import ActionFormModal from './components/ActionFormModal'
 import ObjectInspector from './components/ObjectInspector'
-import Minimap from './components/Minimap'
 import { EventTypes } from './types/index.ts'
 import MobileMotionController from './utils/MobileMotionController.js'
 import SettingsManager from './services/SettingsManager.js'
@@ -368,13 +367,10 @@ function App({core}) {
         
         let result
         
-        if (memoryPalaceCore.roomManager) {
-          const MemoryPalaceToolManager = (await import('./utils/memoryPalaceTools.js')).default
-          const toolManager = new MemoryPalaceToolManager(memoryPalaceCore)
-          result = await toolManager.executeTool(toolName, {}, null)
-        } else {
-          result = 'Memory Palace not fully initialized'
-        }
+        const MemoryPalaceToolManager = (await import('./utils/memoryPalaceTools.js')).default
+        const toolManager = new MemoryPalaceToolManager(memoryPalaceCore)
+        result = await toolManager.executeTool(toolName, {}, null)
+        
         
         console.log('[App] Direct action result:', result)
         
@@ -1184,20 +1180,6 @@ function App({core}) {
         onMove={handleObjectMove}
         isProcessing={isProcessingObjectAction}
       />
-
-      {/* Minimap */}
-      {showMinimap && (
-        <Minimap
-          isVisible={showMinimap}
-          objects={currentPalaceState?.objects || []}
-          cameraRotation={cameraRotation}
-          onLookAt={handleMinimapLookAt}
-          onToggle={handleMinimapToggle}
-          isCollapsed={minimapCollapsed}
-          position={minimapPosition}
-          onPositionChange={setMinimapPosition}
-        />
-      )}
 
       {/* Action Form Modal */}
       <ActionFormModal
