@@ -1810,7 +1810,7 @@ const MemoryPalace = forwardRef(({
     }
 
     const handleMouseDown = (event) => {
-      const currentPaintMode = paintModeEnabledRef.current
+      const currentPaintMode = paintModeEnabled
       console.log('[MemoryPalace] DEBUG: Mouse down event', { button: event.button, paintModeEnabled: currentPaintMode })
       
       // In paint mode, prevent all default behaviors and stop propagation
@@ -2112,7 +2112,7 @@ const MemoryPalace = forwardRef(({
 
     // Touch event handlers
     const handleTouchStart = (event) => {
-      const currentPaintMode = paintModeEnabledRef.current
+      const currentPaintMode = paintModeEnabled
       console.log('[MemoryPalace] DEBUG: Touch start event', { touchCount: event.touches.length, paintModeEnabled: currentPaintMode })
       
       // In paint mode, prevent all defaults and stop propagation
