@@ -199,6 +199,7 @@ export function getCurrentRoomObjects(state: ApplicationState): MemoryPalaceObje
       userId: state.user.id,
       name: conn.description || 'Door',
       position: conn.position,
+      paintData: conn.paintData,
       objectCounter: 0,
       createdAt: conn.createdAt,
       updatedAt: conn.updatedAt,

@@ -551,7 +551,7 @@ const MemoryPalace = forwardRef(({
         if (paintTextureRef.current) {
           paintTextureRef.current.needsUpdate = true
         }
-        
+        exposePaintedAreasToLLM()
         console.log('[MemoryPalace] Painted area created with AI integration:', paintedArea)
       }
     }

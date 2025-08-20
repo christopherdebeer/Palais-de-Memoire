@@ -161,6 +161,7 @@ export interface Connection {
   targetRoomId: string;
   description?: string;
   position: Vector3;
+  paintData?: PaintData;
   createdAt: string;
   updatedAt: string;
 }

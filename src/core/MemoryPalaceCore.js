@@ -187,7 +187,8 @@ export class MemoryPalaceCore extends EventEmitter {
     // Generate room image if needed - AWAIT completion before returning
     if (!room.imageUrl && !options.skipImageGeneration) {
       console.log('[MemoryPalaceCore] Starting room image generation and awaiting completion...')
-      await this.generateRoomImage(room.id, description)
+      const imageUrl = await this.generateRoomImage(room.id, description);
+      room.imageUrl = imageUrl || room.imageUrl;
       console.log('[MemoryPalaceCore] Room image generation completed')
     }
 
@@ -269,7 +270,7 @@ export class MemoryPalaceCore extends EventEmitter {
           imageUrl: result.imageUrl,
           description
         })
-        return true
+        return result.imageUrl
       } else {
         this.emit(EventTypes.ERROR_OCCURRED, {
           type: 'image_generation_error',

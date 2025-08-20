@@ -31,7 +31,7 @@ export async function createRoom(state, name, description, options = {}) {
   // Save room
   state.rooms.set(roomId, room)
   state.user.roomCounter = roomCounter
-  state.user.currentRoomId = roomId
+  // state.user.currentRoomId = roomId
   
   await saveState(state)
   

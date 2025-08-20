@@ -84,8 +84,8 @@ export class MemoryPalaceToolManager {
         console.log(`[createDoor] Creating door with dimensions:`, dimensions)
         paintData = {
           areas: [],
-          canvasPosition: { x: 0, y: 0 },
-          color: '#ffffff',
+          canvasPosition: position,
+          color: '#00ffff',
           dimensions: {
             width: dimensions.width,
             height: dimensions.height

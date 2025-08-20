@@ -106,17 +106,17 @@ function App({core}) {
           // Store unsubscribe functions to prevent memory leaks
           const unsubscribers = [];
           
-          unsubscribers.push(core.on('room_created', (room) => {
+          unsubscribers.push(core.on(EventTypes.ROOM_CREATED, (room) => {
             console.log('[App] Room created:', room)
             updatePalaceState(core)
           }));
           
-          unsubscribers.push(core.on('object_created', (object) => {
+          unsubscribers.push(core.on(EventTypes.OBJECT_CREATED, (object) => {
             console.log('[App] Object created:', object)
             updatePalaceState(core)
           }));
           
-          unsubscribers.push(core.on('room_navigated', (room) => {
+          unsubscribers.push(core.on(EventTypes.STATE_CHANGED, (room) => {
             console.log('[App] Navigated to room:', room)
             updatePalaceState(core)
           }));
