@@ -747,6 +747,30 @@
   gap: var(--space-sm);
 }
 
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  cursor: pointer;
+  transition: var(--transition-base);
+  padding: var(--space-sm);
+  border-radius: var(--radius-base);
+  background: var(--color-white-10);
+  border: 1px solid var(--color-white-20);
+}
+
+.collapsible-header:hover {
+  background: var(--color-white-20);
+}
+
+.section-toggle {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  opacity: 0.7;
+  transition: var(--transition-base);
+}
+
 .status-badge {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
