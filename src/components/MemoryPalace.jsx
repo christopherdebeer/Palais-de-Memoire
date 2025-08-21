@@ -3,6 +3,8 @@ import * as THREE from 'three'
 import nipplejs from 'nipplejs'
 import SimpleParticleManager from '../utils/SimpleParticleManager'
 import SettingsManager from '../services/SettingsManager'
+import ThreeJSRenderer from './ThreeJSRenderer'
+import { usePaintMode, useObjectSelection, useMemoryPalaceState } from '../hooks'
 
 const MemoryPalace = forwardRef(({ 
   wireframeEnabled = false, 
@@ -20,135 +22,73 @@ const MemoryPalace = forwardRef(({
   creationModeActive = false,
   aiObjectProperties = null
 }, ref) => {
-  const mountRef = useRef(null)
+  // Core 3D scene refs - will be set by ThreeJSRenderer
   const sceneRef = useRef(null)
   const rendererRef = useRef(null)
   const cameraRef = useRef(null)
   const wireframeSphereRef = useRef(null)
-  const nippleManagerRef = useRef(null)
-  const nippleContainerRef = useRef(null)
   const skyboxSphereRef = useRef(null)
   const skyboxMaterialRef = useRef(null)
-  const particleManagerRef = useRef(null)
-  const objectMarkersRef = useRef(new Map())
-  const offScreenIndicatorsRef = useRef(new Map())
-  const animationFrameRef = useRef(null)
-  const settingsManagerRef = useRef(new SettingsManager())
   
-  // Paint mode refs
-  const paintCanvasRef = useRef(null)
-  const paintTextureRef = useRef(null)
-  const paintContextRef = useRef(null)
-  const [paintedGroups, setPaintedGroups] = useState(new Map()) // Store painted object groups
-  const paintModeEnabledRef = useRef(paintModeEnabled) // Ref for current paint mode state
-  const paintInitializedRef = useRef(false) // Prevent double initialization in strict mode
+  // Other component refs
+  const nippleManagerRef = useRef(null)
+  const nippleContainerRef = useRef(null)
+  const threeRendererRef = useRef(null)
   
-  // Camera rotation state - needs to be accessible across all functions
-  const cameraRotationRef = useRef({ yaw: 0, pitch: 0 })
+  // Initialize hooks
+  const memoryPalaceState = useMemoryPalaceState(cameraRef, sceneRef, rendererRef)
+  const {
+    cameraRotationRef,
+    animationFrameRef,
+    settingsManagerRef,
+    particleManagerRef,
+    updateCameraFov,
+    startAnimationLoop,
+    stopAnimationLoop,
+    cleanupState
+  } = memoryPalaceState
 
-  // Paint mode functions
-  const initializePaintCanvas = () => {
-    if (paintCanvasRef.current || paintInitializedRef.current) return // Already initialized or initializing
-    
-    paintInitializedRef.current = true // Prevent double initialization
-    console.log('[MemoryPalace] Initializing paint canvas system')
-    
-    // Create canvas for painting - high resolution for detail
-    const canvas = document.createElement('canvas')
-    canvas.width = 4096 // High resolution equirectangular
-    canvas.height = 2048
-    
-    const context = canvas.getContext('2d')
-    
-    // Initialize with subtle visible base pattern so we can see if the texture is rendering
-    // Start with very subtle transparent overlay
-    context.fillStyle = 'rgba(0, 0, 0, 0)' // Fully transparent base
-    context.fillRect(0, 0, canvas.width, canvas.height)
-    
-    // Add very subtle grid pattern to confirm texture visibility 
-    context.strokeStyle = 'rgba(255, 255, 255, 0.05)' // Very faint white lines
-    context.lineWidth = 2
-    
-    // Add sparse grid lines for debugging visibility
-    const gridSpacing = 200
-    for (let x = 0; x < canvas.width; x += gridSpacing) {
-      context.beginPath()
-      context.moveTo(x, 0)
-      context.lineTo(x, canvas.height)
-      context.stroke()
-    }
-    for (let y = 0; y < canvas.height; y += gridSpacing) {
-      context.beginPath()
-      context.moveTo(0, y)
-      context.lineTo(canvas.width, y)
-      context.stroke()
-    }
-    
-    // Store references
-    paintCanvasRef.current = canvas
-    paintContextRef.current = context
-    
-    // Create Three.js texture from canvas
-    const paintTexture = new THREE.CanvasTexture(canvas)
-    paintTexture.mapping = THREE.EquirectangularReflectionMapping
-    paintTexture.wrapS = THREE.RepeatWrapping
-    paintTexture.wrapT = THREE.ClampToEdgeWrapping
-    paintTexture.offset.x = 0.5 // Apply same 180° offset as all skybox textures for coordinate system alignment
-    paintTexture.needsUpdate = true
-    
-    paintTextureRef.current = paintTexture
-    
-    console.log('[MemoryPalace] Paint canvas system initialized with subtle grid pattern for visibility testing')
-  }
+  const paintMode = usePaintMode(
+    paintModeEnabled,
+    paintModeType,
+    skyboxMaterialRef,
+    sceneRef,
+    onPaintedObjectCreated,
+    onPaintedAreasChange
+  )
+  const {
+    paintCanvasRef,
+    paintTextureRef,
+    paintContextRef,
+    paintedGroups,
+    setPaintedGroups,
+    paintModeEnabledRef,
+    paintInitializedRef,
+    initializePaintCanvas,
+    enablePaintMode,
+    disablePaintMode,
+    createPaintedObjectGroup,
+    cleanupPaintMode
+  } = paintMode
 
-  const enablePaintMode = () => {
-    if (!skyboxMaterialRef.current || !skyboxSphereRef.current) return
-    
-    console.log('[MemoryPalace] Enabling paint mode')
-    
-    // Initialize paint canvas if not already done
-    initializePaintCanvas()
-    
-    // Create a separate paint sphere that overlays on the skybox
-    if (paintTextureRef.current && !skyboxSphereRef.current.userData.paintSphere) {
-      // Store original skybox state
-      if (!skyboxMaterialRef.current.userData.originalMap) {
-        skyboxMaterialRef.current.userData.originalMap = skyboxMaterialRef.current.map
-        skyboxMaterialRef.current.userData.originalTransparent = skyboxMaterialRef.current.transparent
-      }
-      
-      console.log('[MemoryPalace] Paint mode enabled - using actual paint canvas texture')
-      
-      // Create paint material with actual paint canvas texture
-      const paintMaterial = new THREE.MeshBasicMaterial({
-        map: paintTextureRef.current, // Use actual paint texture for painting
-        transparent: true,
-        opacity: 0.6,
-        depthTest: false,
-        depthWrite: false
-      })
-      
-      // Create paint sphere inside the skybox for inside viewing
-      const paintGeometry = new THREE.SphereGeometry(499, 60, 40) // Inside skybox (500)
-      paintGeometry.scale(-1, 1, 1)
-      
-      const paintSphere = new THREE.Mesh(paintGeometry, paintMaterial)
-      sceneRef.current.add(paintSphere)
-      
-      // Store reference for cleanup
-      skyboxSphereRef.current.userData.paintSphere = paintSphere
-      skyboxSphereRef.current.userData.paintMaterial = paintMaterial
-      skyboxSphereRef.current.userData.paintGeometry = paintGeometry
-      
-      console.log('[MemoryPalace] Paint overlay sphere created with actual paint canvas texture - should show subtle grid pattern')
-    }
-  }
+  const objectSelection = useObjectSelection(
+    sceneRef,
+    particleManagerRef,
+    selectedObjectId,
+    onObjectSelected
+  )
+  const {
+    objectMarkersRef,
+    offScreenIndicatorsRef,
+    updateObjectMarkers: updateObjectMarkersHook,
+    updateObjectIndicators: updateObjectIndicatorsHook,
+    cleanupObjectSelection
+  } = objectSelection
 
-  const disablePaintMode = () => {
-    if (!skyboxMaterialRef.current || !skyboxSphereRef.current) return
-    
-    console.log('[MemoryPalace] Disabling paint mode')
-    
+  // Paint mode functions are now handled by usePaintMode hook
+
+  // Extended paint mode functions that handle complex paint processing
+  const handlePaintModeDisable = () => {
     // In creation mode, make painted areas available to LLM instead of directly creating objects
     if (creationModeActive) {
       console.log('[MemoryPalace] Creation mode active - making painted areas available to LLM')
@@ -158,27 +98,8 @@ const MemoryPalace = forwardRef(({
       processPaintedAreasIntoObjects()
     }
     
-    // Remove paint sphere overlay
-    if (skyboxSphereRef.current.userData.paintSphere) {
-      const paintSphere = skyboxSphereRef.current.userData.paintSphere
-      const paintMaterial = skyboxSphereRef.current.userData.paintMaterial
-      const paintGeometry = skyboxSphereRef.current.userData.paintGeometry
-      
-      // Remove from scene
-      sceneRef.current.remove(paintSphere)
-      
-      // Dispose resources
-      if (paintGeometry) paintGeometry.dispose()
-      if (paintMaterial) paintMaterial.dispose()
-      // Note: Don't dispose paintTextureRef.current as it's managed separately
-      
-      // Clear references
-      skyboxSphereRef.current.userData.paintSphere = null
-      skyboxSphereRef.current.userData.paintMaterial = null
-      skyboxSphereRef.current.userData.paintGeometry = null
-      
-      console.log('[MemoryPalace] Paint overlay sphere removed')
-    }
+    // Use the hook's disable function
+    disablePaintMode()
   }
 
   // Cleanup function to reduce memory usage by removing detailed stroke data from stored objects
@@ -1381,14 +1302,7 @@ const MemoryPalace = forwardRef(({
     }
   }
 
-  // Update camera FOV dynamically
-  const updateCameraFov = (newFov) => {
-    if (cameraRef.current) {
-      cameraRef.current.fov = newFov
-      cameraRef.current.updateProjectionMatrix()
-      console.log('[MemoryPalace] Updated camera FOV to:', newFov)
-    }
-  }
+  // Camera FOV update is now handled by useMemoryPalaceState hook
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
@@ -2495,9 +2409,9 @@ const MemoryPalace = forwardRef(({
     if (paintModeEnabled) {
       enablePaintMode()
     } else {
-      disablePaintMode()
+      handlePaintModeDisable()
     }
-  }, [paintModeEnabled])
+  }, [paintModeEnabled, enablePaintMode, handlePaintModeDisable])
 
   // Handle room changes
   useEffect(() => {
@@ -2560,7 +2474,44 @@ const MemoryPalace = forwardRef(({
     }
   }, [])
 
-  return <div ref={mountRef} className="memory-palace-canvas" />
+  // Initialize components that depend on the 3D scene
+  const initialize3DSceneComponents = () => {
+    console.log('[MemoryPalace] Initializing 3D scene components after ThreeJSRenderer mount')
+    
+    // Initialize particle manager - this is handled by the useMemoryPalaceState hook
+    // particleManagerRef.current will be initialized automatically when accessed
+    
+    // Start animation loop using the hook
+    startAnimationLoop(() => {
+      // Custom render logic can go here
+      animateObjectIndicators()
+    })
+    
+    console.log('[MemoryPalace] 3D scene components initialized successfully')
+  }
+
+  // Handle ThreeJSRenderer mount callback
+  const handleThreeJSMount = (refs) => {
+    // Set up refs from ThreeJSRenderer
+    sceneRef.current = refs.scene
+    rendererRef.current = refs.renderer
+    cameraRef.current = refs.camera
+    wireframeSphereRef.current = refs.wireframeSphere
+    skyboxSphereRef.current = refs.skyboxSphere
+    skyboxMaterialRef.current = refs.skyboxMaterial
+
+    // Initialize components that depend on 3D scene
+    initialize3DSceneComponents()
+  }
+
+  return (
+    <ThreeJSRenderer
+      ref={threeRendererRef}
+      wireframeEnabled={wireframeEnabled}
+      currentRoom={currentRoom}
+      onMount={handleThreeJSMount}
+    />
+  )
 })
 
 MemoryPalace.displayName = 'MemoryPalace'
