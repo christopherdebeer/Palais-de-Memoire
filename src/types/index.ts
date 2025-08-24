@@ -81,7 +81,7 @@ export interface PaintedArea {
  */
 export interface BaseMemoryObject {
   id: string;
-  roomId: string;
+  roomId: string | null;
   userId?: string;
   name: string;
   position: Vector3;
@@ -174,6 +174,7 @@ export interface UserState {
   currentRoomId: string | null;
   objectCounter: number;
   roomCounter: number;
+  inventory: string[];
   settings?: Record<string, any>;
 }
 

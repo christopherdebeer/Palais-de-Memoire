@@ -38,6 +38,8 @@ export class MemoryPalaceToolManager {
           return await this.addObject(input)
         case 'remove_object':
           return await this.removeObject(input)
+        case 'pickup_object':
+          return await this.pickupObject(input)
         case 'list_rooms':
           return await this.listRooms()
         case 'get_room_info':
@@ -299,10 +301,10 @@ export class MemoryPalaceToolManager {
       }
 
       const objects = this.core.getCurrentRoomObjects()
-      const object = objects.find(obj => 
+      const object = objects.find(obj =>
         obj.name.toLowerCase().includes(name.toLowerCase())
       )
-      
+
       if (!object) {
         const availableObjects = objects.map(obj => obj.name).join(', ')
         return `Object "${name}" not found in current room. Available objects: ${availableObjects || 'none'}`
@@ -312,6 +314,35 @@ export class MemoryPalaceToolManager {
       return `Successfully removed object: ${object.name}`
     } catch (error) {
       return `Failed to remove object "${name}": ${error.message}`
+    }
+  }
+
+  /**
+   * Pick up an object from the current room and add it to the inventory
+   */
+  async pickupObject({ name }) {
+    try {
+      const currentRoom = this.core.getCurrentRoom()
+      if (!currentRoom) {
+        return `No current room to pick up object from`
+      }
+
+      const objects = this.core
+        .getCurrentRoomObjects()
+        .filter(obj => obj.type !== ObjectType.DOOR)
+      const object = objects.find(obj =>
+        obj.name.toLowerCase().includes(name.toLowerCase())
+      )
+
+      if (!object) {
+        const availableObjects = objects.map(obj => obj.name).join(', ')
+        return `Object "${name}" not found in current room. Available objects: ${availableObjects || 'none'}`
+      }
+
+      await this.core.addObjectToInventory(object.id)
+      return `Picked up object "${object.name}" and added to inventory`
+    } catch (error) {
+      return `Failed to pick up object "${name}": ${error.message}`
     }
   }
 
@@ -483,6 +514,17 @@ export class MemoryPalaceToolManager {
           type: 'object',
           properties: {
             name: { type: 'string', description: 'Name of the object to remove' }
+          },
+          required: ['name']
+        }
+      },
+      {
+        name: 'pickup_object',
+        description: 'Pick up an object from the current room and store it in the inventory',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Name of the object to pick up' }
           },
           required: ['name']
         }

@@ -97,6 +97,7 @@ export function ensureDefaultState(state) {
       currentRoomId: null,
       roomCounter: 0,
       objectCounter: 0,
+      inventory: [],
       settings: {}
     }
   }
@@ -104,6 +105,11 @@ export function ensureDefaultState(state) {
   // Ensure user has an ID
   if (!state.user.id) {
     state.user.id = generateId()
+  }
+
+  // Ensure inventory array exists
+  if (!Array.isArray(state.user.inventory)) {
+    state.user.inventory = []
   }
 
   // Initialize collections if not exist
