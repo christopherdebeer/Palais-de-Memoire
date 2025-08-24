@@ -4,6 +4,7 @@ import * as stateUtils from '../utils/stateUtils.js'
 import * as roomUtils from '../utils/roomUtils.js'
 import * as objectUtils from '../utils/objectUtils.ts'
 import * as imageGeneration from '../utils/imageGeneration.js'
+import * as inventoryUtils from '../utils/inventoryUtils.ts'
 
 /**
  * MemoryPalaceCore - Orchestrates the Memory Palace application
@@ -369,12 +370,23 @@ export class MemoryPalaceCore extends EventEmitter {
   async deleteObject(objectId) {
     const object = objectUtils.getObject(this.state, objectId)
     const success = await objectUtils.deleteObject(this.state, objectId)
-    
+
     if (success) {
       this.emit(EventTypes.OBJECT_DELETED, { objectId, object })
     }
-    
+
     return success
+  }
+
+  /**
+   * Add an object to the user's inventory
+   */
+  async addObjectToInventory(objectId) {
+    const object = await inventoryUtils.addToInventory(this.state, objectId)
+    if (object) {
+      this.emit(EventTypes.OBJECT_UPDATED, object)
+    }
+    return object
   }
 
   /**
